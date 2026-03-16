@@ -2,24 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { apiService } from '../services/apiService';
 
-export interface ChatMessage {
-    id: string;
-    space_id: string;
-    sender_id: string;
-    sender_type: 'staff' | 'client';
-    content: string;
-    extension: string;
-    payload?: any;
-    created_at: string;
-    sender?: {
-        full_name: string;
-        avatar_url?: string;
-    };
-    channel?: 'general' | 'internal';
-}
+import { Message } from '../types';
 
 export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -42,17 +28,14 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
         // 1. Fetch initial messages
         const fetchMessages = async () => {
             try {
-                // GET requests don't strictly need orgId in body, but can be useful for audit/RLS-bypass-checks if any.
-                // Our thin messaging GET currently only takes spaceId in URL.
-                const { data, error: fetchError } = await apiService.getMessages(spaceId);
+                const { data, error: fetchError } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .eq('space_id', spaceId)
+                    .order('created_at', { ascending: true });
 
                 if (fetchError) {
-                    // Handle Forbidden explicitly
-                    if (fetchError.message.includes('Forbidden') || fetchError.status === 403) {
-                        setError('FORBIDDEN');
-                    } else {
-                        throw fetchError;
-                    }
+                    throw fetchError;
                 } else {
                     setMessages(data || []);
                 }
@@ -78,7 +61,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
                     filter: `space_id=eq.${spaceId}`
                 },
                 (payload) => {
-                    const newMessage = payload.new as ChatMessage;
+                    const newMessage = payload.new as Message;
                     setMessages(prev => {
                         // Avoid duplicates (in case we already have it from optimistic update)
                         if (prev.find(m => m.id === newMessage.id)) return prev;
@@ -101,10 +84,10 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
 
     // Send message function
     const sendMessage = async (content: string, channel: 'general' | 'internal' = 'general'): Promise<boolean> => {
-        if (!spaceId || !orgId || !content.trim()) return false;
+        if (!spaceId || !content.trim()) return false;
 
         try {
-            const { data, error: sendError } = await apiService.sendMessage(spaceId, orgId, content, 'chat', {}, channel);
+            const { data, error: sendError } = await apiService.sendMessage(spaceId, content, 'chat', {}, channel, orgId || '');
             if (sendError) throw sendError;
 
             // Optimistic update - add to local state immediately
@@ -134,10 +117,11 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
             // Now send a chat message pointing to this file
             const { data, error: sendError } = await apiService.sendMessage(
                 spaceId,
-                effectiveOrgId,
                 `Shared a file: ${file.name}`,
                 'file',
-                { file_id: fileData.id, file_name: file.name, mime_type: file.type }
+                { file_id: fileData.id, file_name: file.name, mime_type: file.type },
+                'general',
+                effectiveOrgId
             );
 
             if (sendError) throw sendError;
@@ -154,6 +138,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
             setLoading(false);
         }
     };
+
 
     return {
         messages,

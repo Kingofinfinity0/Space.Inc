@@ -8,7 +8,14 @@ export function initializeFetchLogger() {
 
     window.fetch = async (...args: Parameters<typeof fetch>) => {
         const [resource, config] = args;
-        const url = typeof resource === 'string' ? resource : resource.url;
+        let url = '';
+        if (typeof resource === 'string') {
+            url = resource;
+        } else if (resource instanceof URL) {
+            url = resource.href;
+        } else {
+            url = (resource as Request).url;
+        }
         const method = config?.method || 'GET';
 
         console.log('🚨 FETCH CALL DETECTED:', {

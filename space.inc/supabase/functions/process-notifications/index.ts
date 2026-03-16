@@ -10,10 +10,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 
-const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders, getAuthContext, hydrateError, errorResponse } from 'shared/auth.ts'
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FRONTEND_URL = Deno.env.get("FRONTEND_URL") ?? "https://nexus-portal.inc";
@@ -35,45 +32,17 @@ serve(async (req: Request) => {
             Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
         );
 
-        // ── Step 1: Claim pending jobs atomically using FOR UPDATE SKIP LOCKED ──
-        // This is the critical SaaS pattern that prevents double-processing across
-        // horizontally scaled workers. If another worker has a row locked, we skip it.
-        const claimResult = await supabase.rpc("claim_notification_jobs", {
-            p_worker_id: workerId,
-            p_batch: BATCH_LIMIT
-        });
+        // ── Step 1: Claim pending events from space_events ──
+        // This worker now reacts directly to the event bus.
+        const { data: events, error: fetchError } = await supabase
+            .from("space_events")
+            .select("*")
+            .is("processed_at", null)
+            .limit(BATCH_LIMIT)
+            .order("created_at", { ascending: true });
 
-        // Fallback: if the RPC doesn't exist yet, use a simpler query
-        // In production, the RPC is preferred for atomicity
-        let jobs: any[] = [];
-
-        if (claimResult.error || !claimResult.data) {
-            // Graceful fallback: fetch pending jobs not currently locked
-            const { data: fallbackJobs, error: fetchError } = await supabase
-                .from("notification_queue")
-                .select("*")
-                .eq("status", "pending")
-                .lte("next_attempt_at", new Date().toISOString())
-                .is("locked_at", null)
-                .limit(BATCH_LIMIT);
-
-            if (fetchError) throw fetchError;
-            jobs = fallbackJobs ?? [];
-
-            // Mark them as processing + lock
-            if (jobs.length > 0) {
-                await supabase
-                    .from("notification_queue")
-                    .update({
-                        status: "processing",
-                        locked_at: new Date().toISOString(),
-                        locked_by: workerId
-                    })
-                    .in("id", jobs.map((j: any) => j.id));
-            }
-        } else {
-            jobs = claimResult.data ?? [];
-        }
+        if (fetchError) throw fetchError;
+        const jobs = events ?? [];
 
         if (!jobs || jobs.length === 0) {
             return new Response(JSON.stringify({ message: "No pending notifications.", worker: workerId }), {
@@ -91,13 +60,18 @@ serve(async (req: Request) => {
 
             try {
                 // ── Route by event_type ──────────────────────────────────────
-                if (job.event_type === "invitation_created") {
+                if (job.event_type === "message.created") {
+                    await handleMessageCreated(job, supabase);
+                    succeeded = true;
+                } else if (job.event_type === "space.created") {
+                    await handleSpaceCreated(job, supabase);
+                    succeeded = true;
+                } else if (job.event_type === "invitation.created") {
                     await handleInvitationCreated(job, supabase);
                     succeeded = true;
                 } else {
-                    // Generic: deliver in-app notifications to space members
-                    await handleGenericSpaceEvent(job, supabase);
-                    succeeded = true;
+                    console.warn(`[worker] Unhandled event type: ${job.event_type}`);
+                    succeeded = true; // Mark as done to avoid infinite loop
                 }
 
             } catch (jobErr: any) {
@@ -105,56 +79,20 @@ serve(async (req: Request) => {
                 console.error(`[worker:${workerId}] Job ${job.id} failed:`, lastError);
             }
 
-            // ── Update job status ────────────────────────────────────────
+            // ── Update event status ────────────────────────────────────────
             if (succeeded) {
                 await supabase
-                    .from("notification_queue")
+                    .from("space_events")
                     .update({
-                        status: "done",
-                        processed_at: new Date().toISOString(),
-                        locked_at: null,
-                        locked_by: null,
-                        last_error: null
+                        processed_at: new Date().toISOString()
                     })
                     .eq("id", job.id);
 
                 results.push({ id: job.id, status: "done", event: job.event_type });
             } else {
-                const newRetryCount = (job.retry_count ?? 0) + 1;
-
-                if (newRetryCount >= MAX_RETRY_COUNT) {
-                    // Dead-letter: give up after MAX_RETRY_COUNT attempts
-                    await supabase
-                        .from("notification_queue")
-                        .update({
-                            status: "failed",
-                            retry_count: newRetryCount,
-                            last_error: lastError,
-                            locked_at: null,
-                            locked_by: null
-                        })
-                        .eq("id", job.id);
-
-                    results.push({ id: job.id, status: "failed", event: job.event_type });
-                } else {
-                    // Exponential backoff: 2^retry_count minutes
-                    const backoffMs = Math.pow(2, newRetryCount) * 60 * 1000;
-                    const nextAttempt = new Date(Date.now() + backoffMs);
-
-                    await supabase
-                        .from("notification_queue")
-                        .update({
-                            status: "pending",
-                            retry_count: newRetryCount,
-                            next_attempt_at: nextAttempt.toISOString(),
-                            last_error: lastError,
-                            locked_at: null,
-                            locked_by: null
-                        })
-                        .eq("id", job.id);
-
-                    results.push({ id: job.id, status: "retry", event: job.event_type });
-                }
+                console.error(`[worker] Event ${job.id} failed: ${lastError}`);
+                // In production, we would increment a retry count on space_events
+                results.push({ id: job.id, status: "failed", event: job.event_type });
             }
         }
 
@@ -177,19 +115,45 @@ serve(async (req: Request) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HANDLER: invitation_created
-// Reads raw_token from payload (it lives ONLY in the queue — never in invitations table)
-// Sends invitation email via Resend
+// HANDLER: message.created
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleMessageCreated(job: any, supabase: any) {
+    const { message_id, channel } = job.payload ?? {};
+
+    // Fan out notifications to all members of the space (except the actor)
+    return await handleGenericSpaceEvent({
+        ...job,
+        entity_type: 'message',
+        entity_id: message_id,
+        initiator_id: job.actor_id
+    }, supabase);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HANDLER: space.created
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleSpaceCreated(job: any, supabase: any) {
+    // Notify organization members about new space
+    return await handleGenericSpaceEvent({
+        ...job,
+        entity_type: 'space',
+        entity_id: job.space_id,
+        initiator_id: job.actor_id
+    }, supabase);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HANDLER: invitation_created (Mapped to invitation.created)
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleInvitationCreated(job: any, _supabase: any) {
     const { email, role, raw_token, invite_id } = job.payload ?? {};
 
     if (!email || !raw_token) {
-        throw new Error("Missing email or raw_token in invitation_created payload");
+        throw new Error("Missing email or raw_token in invitation.created payload");
     }
 
     const inviteLink = `${FRONTEND_URL}/join?token=${raw_token}`;
-
+    // ... rest of previous email logic ...
     const emailBody = {
         from: "SpaceInc <noreply@nexus-portal.inc>",
         to: [email],
@@ -244,6 +208,7 @@ async function handleGenericSpaceEvent(job: any, supabase: any) {
     let recipientIds: string[] = [];
 
     if (job.space_id) {
+        // Find everyone in the space
         const { data: members } = await supabase
             .from("space_memberships")
             .select("profile_id")
@@ -252,7 +217,7 @@ async function handleGenericSpaceEvent(job: any, supabase: any) {
 
         recipientIds = (members ?? [])
             .map((m: any) => m.profile_id)
-            .filter((id: string) => id !== job.initiator_id);
+            .filter((id: string) => id !== (job.initiator_id || job.actor_id));
     } else if (job.organization_id) {
         // Org-level: notify org members
         const { data: orgMembers } = await supabase
@@ -263,7 +228,7 @@ async function handleGenericSpaceEvent(job: any, supabase: any) {
 
         recipientIds = (orgMembers ?? [])
             .map((m: any) => m.user_id)
-            .filter((id: string) => id !== job.initiator_id);
+            .filter((id: string) => id !== (job.initiator_id || job.actor_id));
     }
 
     const eventSeverity = job.event_type.includes("critical") ? "critical" : "general";
@@ -274,7 +239,7 @@ async function handleGenericSpaceEvent(job: any, supabase: any) {
             space_id: job.space_id,
             organization_id: job.organization_id,
             type: job.event_type,
-            message: `New ${job.entity_type}: ${job.payload?.content || job.payload?.title || ""}`,
+            message: `New ${job.entity_type || 'event'}: ${job.payload?.content || job.payload?.title || ""}`,
             event_severity: eventSeverity,
             entity_type: job.entity_type,
             entity_id: job.entity_id,
@@ -287,17 +252,21 @@ async function handleGenericSpaceEvent(job: any, supabase: any) {
             continue;
         }
 
-        // Realtime broadcast
-        const channel = supabase.channel(`notifications:${userId}`);
-        await channel.send({
-            type: "broadcast",
-            event: "new_notification",
-            payload: {
-                id: job.id,
-                title: job.event_type,
-                message: `New ${job.entity_type}: ${job.payload?.content || job.payload?.title || ""}`,
-                severity: eventSeverity
-            }
-        });
+        // Realtime broadcast (optional, can be moved to trigger if preferred)
+        try {
+            const channel = supabase.channel(`notifications:${userId}`);
+            await channel.send({
+                type: "broadcast",
+                event: "new_notification",
+                payload: {
+                    id: job.id,
+                    title: job.event_type,
+                    message: `New ${job.entity_type || 'event'}: ${job.payload?.content || job.payload?.title || ""}`,
+                    severity: eventSeverity
+                }
+            });
+        } catch (e) {
+            console.warn(`[worker] Realtime broadcast failed for ${userId}`);
+        }
     }
 }

@@ -1,109 +1,114 @@
-// tasks-api/index.ts
+// tasks-api/index.ts — THIN GATEWAY (Phase 4 Rewrite)
+// Pattern: CORS → getAuthContext → validate → RPC → respond
+// No direct DB access. All business logic lives in SQL functions.
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import { corsHeaders, getAuthContext } from 'shared/auth.ts'
-
-/**
- * tasks-api - GROUND ZERO RESET
- * Strictly follows the Standardized Guide.
- */
+import { corsHeaders, getAuthContext, hydrateError, errorResponse } from '../_shared/auth.ts'
 
 serve(async (req: Request) => {
-    // 1. Handle CORS preflight
+    // 1. CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
+    let supabaseClient: any
+
     try {
-        // 2. Extract Auth Context (Identity & RLS Client)
-        const { userId, supabase } = await getAuthContext(req);
+        // 2. Auth: validates JWT, creates RLS-scoped client
+        const { supabase } = await getAuthContext(req)
+        supabaseClient = supabase
 
-        // 3. Resolve Profile Context (Explicitly as per Guide)
-        const { data: profile, error: profError } = await supabase
-            .from('profiles')
-            .select('organization_id, role')
-            .eq('id', userId)
-            .single()
-
-        if (profError || !profile) {
-            throw new Error('Profile not found or access denied')
-        }
-
-        const { organization_id: orgId } = profile
         const url = new URL(req.url)
-        const spaceId = url.searchParams.get('spaceId')
 
-        // 4. Route Logic
+        // ── GET /tasks-api?space_id=X → List tasks via RPC ─────────────────────
         if (req.method === 'GET') {
-            let query = supabase.from('tasks').select('*').eq('organization_id', orgId)
-            if (spaceId) query = query.eq('space_id', spaceId)
+            const spaceId = url.searchParams.get('space_id')
 
-            const { data: tasks, error } = await query.order('due_date', { ascending: true })
+            const { data: tasks, error } = await supabase.rpc('list_tasks', {
+                p_space_id: spaceId ?? null
+            })
+
             if (error) throw error
+
             return new Response(JSON.stringify({ data: tasks }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
+        // ── POST /tasks-api → Create task via RPC ──────────────────────────────
         if (req.method === 'POST') {
-            const taskData = await req.json()
-            const { data: newTask, error } = await supabase.from('tasks').insert({
-                ...taskData,
-                organization_id: orgId,
-                created_by: userId
-            }).select().single()
+            const body = await req.json().catch(() => ({}))
+            const { space_id, title, description, due_date, priority, assignee_id, status } = body
+
+            // 3. Input validation
+            if (!space_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'space_id' }))
+            if (!title) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'title' }))
+
+            // 4. SQL RPC: handles client policy gate, org isolation, activity log
+            const { data: task, error } = await supabase.rpc('create_task', {
+                p_space_id: space_id,
+                p_title: title,
+                p_description: description ?? null,
+                p_due_date: due_date ?? null,
+                p_priority: priority ?? 'medium',
+                p_assignee_id: assignee_id ?? null,
+                p_status: status ?? 'Pending'
+            })
 
             if (error) throw error
-            return new Response(JSON.stringify({ data: newTask }), {
+
+            return new Response(JSON.stringify({ data: task }), {
                 status: 201,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
+        // ── PATCH /tasks-api → Update task via RPC ─────────────────────────────
         if (req.method === 'PATCH') {
-            const { id, ...updates } = await req.json()
-            if (!id) throw new Error('Task ID is required for updates')
+            const body = await req.json().catch(() => ({}))
+            const { task_id, ...updates } = body
 
-            const { data: updatedTask, error } = await supabase
-                .from('tasks')
-                .update(updates)
-                .eq('id', id)
-                .eq('organization_id', orgId)
-                .select()
-                .single()
+            if (!task_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'task_id' }))
+
+            const { data: task, error } = await supabase.rpc('update_task', {
+                p_task_id: task_id,
+                p_updates: updates
+            })
 
             if (error) throw error
-            return new Response(JSON.stringify({ data: updatedTask }), {
+
+            return new Response(JSON.stringify({ data: task }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
+        // ── DELETE /tasks-api?task_id=<uuid> → Delete task via RPC ─────────────────
         if (req.method === 'DELETE') {
-            const id = url.searchParams.get('id')
-            if (!id) throw new Error('Task ID is required for deletion')
+            const taskId = url.searchParams.get('task_id')
 
-            const { error } = await supabase
-                .from('tasks')
-                .delete()
-                .eq('id', id)
-                .eq('organization_id', orgId)
+            if (!taskId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'task_id' }))
+
+            const { error } = await supabase.rpc('delete_task', {
+                p_task_id: taskId
+            })
 
             if (error) throw error
+
             return new Response(JSON.stringify({ success: true }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
-        throw new Error(`Method ${req.method} not allowed`)
+        return errorResponse(await hydrateError(supabase, 'METHOD_NOT_ALLOWED', { method: req.method }))
 
     } catch (error: any) {
-        console.error('[tasks-api] Error:', error.message)
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: error.status || 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
+        console.error('[tasks-api] Error:', error)
+        const code = error.isStandard ? error.message
+            : (error.code && typeof error.code === 'string') ? error.code
+                : 'INTERNAL_ERROR'
+        const richError = await hydrateError(supabaseClient, code, { original_error: error.message || String(error) })
+        return errorResponse(richError)
     }
 })

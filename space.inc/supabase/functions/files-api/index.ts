@@ -1,26 +1,32 @@
-// files-api/index.ts — THIN GATEWAY with Storage (SaaS Hardening V2)
+// files-api/index.ts — THIN GATEWAY (Phase 4 Rewrite)
+// Pattern: CORS → getAuthContext → validate → RPC → storage (admin only) → respond
+// Storage admin client is ONLY used for signed URLs (Supabase Storage requires service role for signing)
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders, getAuthContext, hydrateError, errorResponse } from './auth.ts'
+import { corsHeaders, getAuthContext, hydrateError, errorResponse } from '../_shared/auth.ts'
+
+const STORAGE_BUCKET = 'space-files'
 
 serve(async (req: Request) => {
+    // 1. CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
-    let supabaseClient: any;
+    let supabaseClient: any
 
     try {
-        const { userId, supabase } = await getAuthContext(req)
-        supabaseClient = supabase;
+        // 2. Auth context — validates JWT, scopes all DB calls to caller's org via RLS
+        const { supabase } = await getAuthContext(req)
+        supabaseClient = supabase
 
-        // Service role client for storage operations only (signed URLs require admin)
+        // Service-role client: ONLY for storage signed URL operations
         const supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         )
 
-        // ── GET /files-api?spaceId=X → Fetch files ────────────────────────
+        // ── GET /files-api?spaceId=X → List files (RLS enforced) ──────────────
         if (req.method === 'GET') {
             const url = new URL(req.url)
             const spaceId = url.searchParams.get('spaceId')
@@ -31,209 +37,162 @@ serve(async (req: Request) => {
                 .is('deleted_at', null)
                 .order('created_at', { ascending: false })
 
-            if (spaceId) {
-                query = query.eq('space_id', spaceId)
-            }
+            if (spaceId) query = query.eq('space_id', spaceId)
 
             const { data, error } = await query
             if (error) throw error
+
             return new Response(JSON.stringify({ data }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
-        // ── POST /files-api → Action-based file operations ─────────────────
+        // ── POST /files-api → Action-based file operations via SQL RPCs ────────
         if (req.method === 'POST') {
             const payload = await req.json().catch(() => ({}))
-            const { action, spaceId, fileId, filename, contentType, checksum, fileSize, orgId } = payload
+            const { action, space_id, file_id, file_name, content_type, checksum, file_size } = payload
 
-            if (!orgId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'orgId' }))
+            // 3. Input validation: action is always required
+            if (!action) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'action' }))
 
             switch (action) {
+
+                // ── REQUEST_UPLOAD_VOUCHER ─────────────────────────────────────
                 case 'REQUEST_UPLOAD_VOUCHER': {
-                    if (!spaceId || !filename) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { fields: ['spaceId', 'filename'] }))
+                    if (!space_id || !file_name) {
+                        return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { fields: ['space_id', 'file_name'] }))
+                    }
 
-                    const { data: space, error: spaceErr } = await supabase
-                        .from('client_spaces')
-                        .select('id')
-                        .eq('id', spaceId)
-                        .eq('organization_id', orgId)
-                        .is('deleted_at', null)
-                        .single()
+                    // 4. SQL RPC handles: capability check, org scoping, pending file insert
+                    const { data: voucher, error: rpcError } = await supabase.rpc('request_upload_voucher', {
+                        p_space_id: space_id,
+                        p_filename: file_name,
+                        p_content_type: content_type || 'application/octet-stream',
+                        p_file_size: file_size ?? null,
+                        p_checksum: checksum ?? null
+                    })
 
-                    if (spaceErr || !space) return errorResponse(await hydrateError(supabase, 'PERMISSION_DENIED', { reason: 'Space not found or access denied' }))
+                    if (rpcError) throw rpcError
 
-                    const fileUuid = crypto.randomUUID()
-                    const storagePath = `${orgId}/${spaceId}/${fileUuid}/${filename}`
-
+                    // 5. External storage op (requires admin client — signed URLs need service role)
                     const { data: uploadData, error: uploadError } = await supabaseAdmin
                         .storage
-                        .from('space-files')
-                        .createSignedUploadUrl(storagePath)
+                        .from(STORAGE_BUCKET)
+                        .createSignedUploadUrl(voucher.storage_path)
 
                     if (uploadError) throw uploadError
 
-                    const { data: fileData, error: dbError } = await supabase
-                        .from('files')
-                        .insert([{
-                            display_name: filename,
-                            name: filename,
-                            storage_path: storagePath,
-                            space_id: spaceId,
-                            organization_id: orgId,
-                            mime_type: contentType || 'application/octet-stream',
-                            status: 'pending',
-                            uploaded_by: userId,
-                            checksum: checksum ?? null,
-                            file_size: fileSize ?? null
-                        }])
-                        .select()
-                        .single()
-
-                    if (dbError) throw dbError
-
                     return new Response(JSON.stringify({
-                        upload_url: uploadData.signedUrl,
-                        file_id: fileData.id,
-                        storage_path: storagePath
+                        data: {
+                            upload_url: uploadData.signedUrl,
+                            file_id: voucher.file_id,
+                            storage_path: voucher.storage_path
+                        }
                     }), {
                         status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })
                 }
 
+                // ── CONFIRM_UPLOAD ─────────────────────────────────────────────
                 case 'CONFIRM_UPLOAD': {
-                    if (!fileId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'fileId' }))
+                    if (!file_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'file_id' }))
 
-                    const { data: file, error: fetchErr } = await supabase
-                        .from('files')
-                        .select('id, storage_path, organization_id')
-                        .eq('id', fileId)
-                        .eq('organization_id', orgId)
-                        .single()
-
-                    if (fetchErr || !file) return errorResponse(await hydrateError(supabase, 'RESOURCE_NOT_FOUND', { reason: 'File not found or access denied' }))
-
-                    const { data, error } = await supabase
-                        .from('files')
-                        .update({ status: 'available', updated_at: new Date().toISOString() })
-                        .eq('id', fileId)
-                        .eq('organization_id', orgId)
-                        .select()
-                        .single()
-
-                    if (error) throw error
-
-                    await supabase.from('background_jobs').insert({
-                        organization_id: orgId,
-                        job_type: 'virus_scan',
-                        status: 'pending',
-                        payload: { file_id: fileId, storage_path: file.storage_path },
-                        idempotency_key: `virus_scan_${fileId}`
+                    // RPC: marks file available + enqueues virus scan job atomically
+                    const { data: file, error: rpcError } = await supabase.rpc('confirm_file_upload', {
+                        p_file_id: file_id
                     })
 
-                    return new Response(JSON.stringify({ data }), {
+                    if (rpcError) throw rpcError
+
+                    return new Response(JSON.stringify({ data: file }), {
                         status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })
                 }
 
+                // ── SIGN_URL ───────────────────────────────────────────────────
                 case 'SIGN_URL': {
-                    if (!fileId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'fileId' }))
+                    if (!file_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'file_id' }))
 
-                    const { data: file, error: fetchError } = await supabase
+                    // RLS-scoped read to verify the caller can actually access this file
+                    const { data: file, error: fetchErr } = await supabase
                         .from('files')
                         .select('storage_path')
-                        .eq('id', fileId)
-                        .eq('organization_id', orgId)
+                        .eq('id', file_id)
+                        .is('deleted_at', null)
                         .single()
 
-                    if (fetchError || !file) return errorResponse(await hydrateError(supabase, 'RESOURCE_NOT_FOUND', { reason: 'File not found' }))
+                    if (fetchErr || !file) return errorResponse(await hydrateError(supabase, 'RESOURCE_NOT_FOUND', { resource: 'file' }))
 
-                    const { data, error: signError } = await supabaseAdmin
+                    // Admin client required for signed download URL
+                    const { data: signedData, error: signErr } = await supabaseAdmin
                         .storage
-                        .from('space-files')
+                        .from(STORAGE_BUCKET)
                         .createSignedUrl(file.storage_path, 3600)
 
-                    if (signError) throw signError
-                    return new Response(JSON.stringify({ data }), {
+                    if (signErr) throw signErr
+
+                    return new Response(JSON.stringify({ data: signedData }), {
                         status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })
                 }
 
+                // ── SOFT_DELETE ────────────────────────────────────────────────
                 case 'SOFT_DELETE': {
-                    if (!fileId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'fileId' }))
+                    if (!file_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'file_id' }))
 
-                    const { data, error } = await supabase
-                        .from('files')
-                        .update({ status: 'deleted', deleted_at: new Date().toISOString() })
-                        .eq('id', fileId)
-                        .eq('organization_id', orgId)
-                        .select()
-                        .single()
+                    const { data: result, error: rpcError } = await supabase.rpc('soft_delete_file', {
+                        p_file_id: file_id
+                    })
 
-                    if (error) throw error
+                    if (rpcError) throw rpcError
 
-                    await supabase.rpc('write_audit_log' as any, {
-                        p_organization_id: orgId,
-                        p_actor_id: userId,
-                        p_action: 'file.soft_delete',
-                        p_resource_type: 'files',
-                        p_resource_id: fileId
-                    }).catch(() => { })
-
-                    return new Response(JSON.stringify({ data }), {
+                    return new Response(JSON.stringify({ data: result }), {
                         status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })
                 }
 
+                // ── RESTORE ────────────────────────────────────────────────────
                 case 'RESTORE': {
-                    if (!fileId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'fileId' }))
+                    if (!file_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'file_id' }))
 
-                    const { data, error } = await supabase
-                        .from('files')
-                        .update({ status: 'available', deleted_at: null, updated_at: new Date().toISOString() })
-                        .eq('id', fileId)
-                        .eq('organization_id', orgId)
-                        .select()
-                        .single()
+                    const { data: file, error: rpcError } = await supabase.rpc('restore_file', {
+                        p_file_id: file_id
+                    })
 
-                    if (error) throw error
-                    return new Response(JSON.stringify({ data }), {
+                    if (rpcError) throw rpcError
+
+                    return new Response(JSON.stringify({ data: file }), {
                         status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })
                 }
 
+                // ── HARD_DELETE ────────────────────────────────────────────────
                 case 'HARD_DELETE': {
-                    if (!fileId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'fileId' }))
+                    if (!file_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'file_id' }))
 
-                    const { data: file, error: fetchErr } = await supabase
-                        .from('files')
-                        .select('storage_path')
-                        .eq('id', fileId)
-                        .eq('organization_id', orgId)
-                        .single()
+                    // RPC: validates role (staff+), legal hold check, deletes DB row, returns storage_path
+                    const { data: result, error: rpcError } = await supabase.rpc('hard_delete_file', {
+                        p_file_id: file_id
+                    })
 
-                    if (fetchErr || !file) return errorResponse(await hydrateError(supabase, 'RESOURCE_NOT_FOUND', { reason: 'File not found' }))
+                    if (rpcError) throw rpcError
 
+                    // Remove from storage AFTER DB confirms deletion
                     const { error: storageErr } = await supabaseAdmin
                         .storage
-                        .from('space-files')
-                        .remove([file.storage_path])
+                        .from(STORAGE_BUCKET)
+                        .remove([result.storage_path])
 
-                    if (storageErr) throw storageErr
-
-                    const { error: dbErr } = await supabase
-                        .from('files')
-                        .delete()
-                        .eq('id', fileId)
-                        .eq('organization_id', orgId)
-
-                    if (dbErr) throw dbErr
+                    if (storageErr) {
+                        console.warn('[files-api] Storage remove failed, DB already deleted:', storageErr.message)
+                        // Don't throw — DB record is gone, orphaned file is acceptable vs rollback confusion
+                    }
 
                     return new Response(JSON.stringify({ success: true }), {
                         status: 200,
@@ -250,12 +209,9 @@ serve(async (req: Request) => {
 
     } catch (error: any) {
         console.error('[files-api] Error:', error)
-        let code = 'INTERNAL_ERROR'
-        if (error.isStandard) {
-            code = error.message
-        } else if (error.code && typeof error.code === 'string') {
-            code = error.code
-        }
+        const code = error.isStandard ? error.message
+            : (error.code && typeof error.code === 'string') ? error.code
+                : 'INTERNAL_ERROR'
         const richError = await hydrateError(supabaseClient, code, { original_error: error.message || String(error) })
         return errorResponse(richError)
     }

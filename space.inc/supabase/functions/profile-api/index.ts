@@ -1,76 +1,77 @@
-// profile-api/index.ts
+// profile-api/index.ts — THIN GATEWAY (Phase 4 Rewrite)
+// Profile reads/writes use native Supabase SDK (RLS enforces id = auth.uid() automatically).
+// No SQL RPC needed — PostgREST + RLS is the correct pattern for single-user resource access.
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import { corsHeaders, getAuthContext } from 'shared/auth.ts'
-
-/**
- * profile-api - GROUND ZERO RESET
- * Strictly follows the Standardized Guide.
- */
+import { corsHeaders, getAuthContext, hydrateError, errorResponse } from '../_shared/auth.ts'
 
 serve(async (req: Request) => {
-    // 1. Handle CORS preflight
+    // 1. CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
+    let supabaseClient: any
+
     try {
-        // 2. Extract Auth Context (Identity & RLS Client)
-        const { userId, supabase } = await getAuthContext(req);
+        // 2. Auth: validates JWT, creates RLS-scoped client
+        const { userId, supabase } = await getAuthContext(req)
+        supabaseClient = supabase
 
-        // 3. Resolve Profile Context (Explicitly as per Guide)
-        // Note: For profile-api, the context IS the resource being managed.
-        const { data: profile, error: profError } = await supabase
-            .from('profiles')
-            .select('*, organizations(*)')
-            .eq('id', userId)
-            .single()
-
-        if (profError || !profile) {
-            throw new Error('Profile not found or access denied')
-        }
-
-        // 4. Route Logic
+        // ── GET /profile-api → Fetch own profile + org ─────────────────────────
         if (req.method === 'GET') {
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('*, organizations(*)')
+                .eq('id', userId)
+                .single()
+
+            if (error || !profile) return errorResponse(await hydrateError(supabase, 'RESOURCE_NOT_FOUND', { resource: 'profile' }))
+
             return new Response(JSON.stringify({ data: profile }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
+        // ── PATCH /profile-api → Update own profile (field-filtered) ───────────
         if (req.method === 'PATCH') {
-            const updates = await req.json()
+            const updates = await req.json().catch(() => ({}))
 
-            // Filter allowed fields
-            const allowedFields = ['full_name', 'avatar_url', 'phone', 'is_active']
-            const filteredUpdates = Object.keys(updates)
-                .filter(key => allowedFields.includes(key))
-                .reduce((obj, key) => {
-                    obj[key] = updates[key]
-                    return obj
-                }, {} as any)
+            // Restrict to safe user-editable fields only — org_id, role, email silently dropped
+            const ALLOWED = ['full_name', 'avatar_url', 'phone']
+            const safe = Object.fromEntries(
+                Object.entries(updates).filter(([k]) => ALLOWED.includes(k))
+            )
 
-            const { data: updatedProfile, error } = await supabase
+            if (Object.keys(safe).length === 0) {
+                return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', {
+                    detail: `At least one of: ${ALLOWED.join(', ')} required`
+                }))
+            }
+
+            const { data: profile, error } = await supabase
                 .from('profiles')
-                .update({ ...filteredUpdates, updated_at: new Date().toISOString() })
+                .update({ ...safe, updated_at: new Date().toISOString() })
                 .eq('id', userId)
                 .select()
                 .single()
 
             if (error) throw error
-            return new Response(JSON.stringify({ data: updatedProfile }), {
+
+            return new Response(JSON.stringify({ data: profile }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
-        throw new Error(`Method ${req.method} not allowed`)
+        return errorResponse(await hydrateError(supabase, 'METHOD_NOT_ALLOWED', { method: req.method }))
 
     } catch (error: any) {
-        console.error('[profile-api] Error:', error.message)
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: error.status || 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
+        console.error('[profile-api] Error:', error)
+        const code = error.isStandard ? error.message
+            : (error.code && typeof error.code === 'string') ? error.code
+                : 'INTERNAL_ERROR'
+        const richError = await hydrateError(supabaseClient, code, { original_error: error.message || String(error) })
+        return errorResponse(richError)
     }
 })

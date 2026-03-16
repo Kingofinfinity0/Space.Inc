@@ -2,7 +2,7 @@
 // All business logic lives in DB SQL functions (create_space, update_space, archive_space).
 // This function: input validation → RPC call → standardized response.
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { corsHeaders, getAuthContext, hydrateError, errorResponse } from './auth.ts'
+import { corsHeaders, getAuthContext, hydrateError, errorResponse } from '../_shared/auth.ts'
 
 serve(async (req: Request) => {
     if (req.method === 'OPTIONS') {
@@ -20,7 +20,7 @@ serve(async (req: Request) => {
             const { data: spaces, error: spacesError } = await supabase.rpc('list_user_spaces')
 
             if (spacesError) throw spacesError
-            
+
             return new Response(JSON.stringify({ data: spaces }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -30,14 +30,15 @@ serve(async (req: Request) => {
         // ── POST /createspace-api → Create a new space via SQL RPC ─────────────
         if (req.method === 'POST') {
             const body = await req.json().catch(() => ({}))
-            const { name, description, modules } = body
+            const { name, description, modules, settings, metadata } = body
 
             if (!name) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'name' }))
 
             const { data: spaceId, error: rpcError } = await supabase.rpc('create_space', {
                 p_name: name.trim(),
                 p_description: description ?? null,
-                p_modules: modules ?? { messaging: true, meetings: true, files: true }
+                p_modules: modules ?? { messages: true, chat: true, upload: true, meetings: true },
+                p_metadata: metadata ?? {}
             })
 
             if (rpcError) throw rpcError

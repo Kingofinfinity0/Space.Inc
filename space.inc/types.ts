@@ -86,28 +86,31 @@ export interface Recording {
 
 export interface Message {
   id: string;
-  sender: string;
-  senderType: 'client' | 'staff';
+  sender_id?: string;
+  sender_type: 'client' | 'staff';
   content: string;
-  timestamp: string;
-  isUnread: boolean;
-  clientSpaceId: string;
+  channel?: 'general' | 'internal';
+  extension?: 'text' | 'file' | 'system';
+  payload?: any;
+  created_at: string;
+  is_unread?: boolean;
+  space_id: string;
+  sender?: {
+    full_name: string;
+  };
 }
 
 export interface StaffMember {
   id: string;
-  full_name?: string; // Standardize with DB
-  name?: string;      // Legacy compatibility
+  full_name: string;
   role: 'owner' | 'admin' | 'staff';
   email: string;
-  assignedSpaces?: number;
-  assigned_spaces?: Array<{
+  assigned_spaces: Array<{
     space_id: string;
     capabilities: string[];
   }>;
-  status: 'Active' | 'Pending Invite' | 'active' | 'pending';
-  inviteLink?: string;
-  is_active?: boolean;
+  status: 'active' | 'pending';
+  is_active: boolean;
 }
 
 export interface StaffSpaceCapability {
@@ -145,11 +148,10 @@ export interface Task {
   id: string;
   title: string;
   description?: string;
-  dueDate: string;
-  status: 'Pending' | 'In Progress' | 'Done' | 'pending' | 'in_progress' | 'done';
-  clientSpaceId?: string; // Legacy
-  space_id?: string;      // Standard
-  assigneeId: string;
+  due_date: string;
+  status: 'pending' | 'in_progress' | 'done';
+  space_id: string;
+  assignee_id: string;
   priority?: 'low' | 'medium' | 'high';
 }
 
@@ -158,8 +160,6 @@ export interface SpaceFile {
   name: string;
   display_name?: string;
   type: string;
-  uploadDate: string;
-  clientSpaceId?: string;
   space_id: string;
   organization_id: string;
   mime_type?: string;
@@ -175,3 +175,4 @@ export interface ChartData {
   name: string;
   value: number;
 }
+

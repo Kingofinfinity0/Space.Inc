@@ -14,7 +14,7 @@ This document serves as the master instruction list for integrating the Nexus Cl
 
 ### 1. Database Initialization
 **Action**: Run the contents of `supabase_schema.sql` in the Supabase SQL Editor.
-**Outcome**: This will create all necessary tables (`client_spaces`, `profiles`, `meetings`, `tasks`, `messages`, `files`) and set up Row Level Security (RLS) policies.
+**Outcome**: This will create all necessary tables (`spaces`, `profiles`, `meetings`, `tasks`, `messages`, `files`) and set up Row Level Security (RLS) policies.
 
 ### 2. Authentication Integration
 **Action**: Install Supabase client: `npm install @supabase/supabase-js`
@@ -30,14 +30,14 @@ This document serves as the master instruction list for integrating the Nexus Cl
 
 **Task - Client Auth**:
 - Clients should likely use "Magic Links".
-- When a `client_space` is created, optionally trigger an email to the client email address with a login link.
+- When a `space` is created, optionally trigger an email to the client email address with a login link.
 
 ### 3. Data Fetching Replacement
 **Action**: Go through `App.tsx` and replace `MOCK_DATA` states with `useEffect` hooks fetching from Supabase.
 
 | Mock State | Supabase Table | Query Logic |
 |Ref|Ref|Ref|
-| `clients` | `client_spaces` | `select(*).eq('organization_id', user.org_id)` |
+| `clients` | `spaces` | `select(*).eq('organization_id', user.org_id)` |
 | `messages` | `messages` | `select(*).eq('space_id', activeSpaceId)` |
 | `meetings` | `meetings` | `select(*).eq('organization_id', user.org_id)` |
 | `tasks` | `tasks` | `select(*).eq('assignee_id', user.id)` |

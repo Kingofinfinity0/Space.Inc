@@ -2,21 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { apiService } from '../services/apiService';
 
-export interface SpaceFile {
-    id: string;
-    organization_id: string;
-    space_id: string;
-    display_name: string; // New
-    name: string; // Legacy
-    storage_path: string;
-    mime_type: string;
-    file_size: number | null;
-    status: 'pending' | 'available' | 'scanning' | 'deleted';
-    uploaded_by: string;
-    deleted_at: string | null;
-    created_at: string;
-    is_global?: boolean;
-}
+import { SpaceFile } from '../types';
 
 export const useRealtimeFiles = (spaceId: string, showDeleted: boolean = false) => {
     const [files, setFiles] = useState<SpaceFile[]>([]);

@@ -1,6 +1,6 @@
 // privacy-api/index.ts
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders, getAuthContext, errorResponse } from '../_shared/auth.ts'
+import { corsHeaders, getAuthContext, hydrateError, errorResponse } from 'shared/auth.ts'
 
 Deno.serve(async (req: Request) => {
     if (req.method === 'OPTIONS') {
@@ -109,15 +109,15 @@ Deno.serve(async (req: Request) => {
                 results.data.profile = p
 
                 // Memberships
-                const { data: m } = await supabaseAdmin.from('space_memberships').select('*, client_spaces(*)').eq('user_id', queuedExport.user_id)
+                const { data: m } = await supabaseAdmin.from('space_memberships').select('*, spaces(*)').eq('profile_id', queuedExport.user_id)
                 results.data.memberships = m
 
                 // Messages
-                const { data: msgs } = await supabaseAdmin.from('messages').select('*').eq('user_id', queuedExport.user_id)
+                const { data: msgs } = await supabaseAdmin.from('messages').select('*').eq('sender_id', queuedExport.user_id)
                 results.data.messages = msgs
 
                 // Files (Metadata)
-                const { data: files } = await supabaseAdmin.from('space_files').select('*').eq('uploaded_by', queuedExport.user_id)
+                const { data: files } = await supabaseAdmin.from('files').select('*').eq('uploaded_by', queuedExport.user_id)
                 results.data.files = files
 
                 // Audit Logs

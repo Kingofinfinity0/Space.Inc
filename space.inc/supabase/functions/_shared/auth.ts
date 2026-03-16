@@ -58,7 +58,8 @@ export async function getAuthContext(req: Request) {
 
     const jwtPayload = parseJwt(token)
     if (!jwtPayload || !jwtPayload.sub) {
-        const err = new Error('AUTH_INVALID_TOKEN');
+        const isAnon = jwtPayload?.role === 'anon';
+        const err = new Error(isAnon ? 'AUTH_REQUIRED' : 'AUTH_INVALID_TOKEN');
         (err as any).isStandard = true;
         throw err;
     }
@@ -66,6 +67,9 @@ export async function getAuthContext(req: Request) {
     return {
         userId: jwtPayload.sub,
         email: jwtPayload.email,
+        orgId: jwtPayload.org_id,
+        role: jwtPayload.app_role || jwtPayload.role,
+        capabilities: jwtPayload.capabilities || [],
         supabase
     }
 }
@@ -74,11 +78,20 @@ export async function getAuthContext(req: Request) {
  * Hydrate a standard error code into a rich error object
  */
 export async function hydrateError(supabase: any, code: string, context?: any) {
-    const { data: errorDef } = await supabase
-        .from('error_codes')
-        .select('http_status, message, remediation')
-        .eq('code', code)
-        .single();
+    let errorDef = null;
+
+    if (supabase) {
+        try {
+            const { data } = await supabase
+                .from('error_codes')
+                .select('http_status, message, remediation')
+                .eq('code', code)
+                .single();
+            errorDef = data;
+        } catch (e) {
+            console.error('Error fetching error code from DB:', e);
+        }
+    }
 
     if (errorDef) {
         return {
@@ -90,11 +103,13 @@ export async function hydrateError(supabase: any, code: string, context?: any) {
         };
     }
 
-    // Standard Fallbacks if DB registry misses
+    // Standard Fallbacks if DB registry misses or DB client is uninitialized (e.g. auth failed)
     const fallbacks: Record<string, any> = {
-        'AUTH_MISSING_TOKEN': { status: 401, message: 'Authentication token is missing.' },
-        'AUTH_INVALID_TOKEN': { status: 401, message: 'Invalid token format.' },
+        'AUTH_MISSING_TOKEN': { status: 401, message: 'Authentication token is missing.', remediation: 'Please pass a valid JWT in the Authorization header.' },
+        'AUTH_REQUIRED': { status: 401, message: 'User authentication required.', remediation: 'An anonymous token was provided but a user session is required for this action.' },
+        'AUTH_INVALID_TOKEN': { status: 401, message: 'Invalid token format or token expired.', remediation: 'Please clear your session and log in again.' },
         'PERMISSION_DENIED': { status: 403, message: 'Permission denied.' },
+        'VAL_MISSING_FIELD': { status: 400, message: 'A required field is missing.' },
     };
 
     const fallback = fallbacks[code] || { status: 400, message: 'An unspecified error occurred.' };
@@ -103,6 +118,7 @@ export async function hydrateError(supabase: any, code: string, context?: any) {
         code,
         status: fallback.status,
         message: fallback.message,
+        remediation: fallback.remediation,
         context: { ...context }
     };
 }

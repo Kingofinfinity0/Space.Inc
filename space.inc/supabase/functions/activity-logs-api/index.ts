@@ -1,68 +1,50 @@
-// activity-logs-api/index.ts
+// activity-logs-api/index.ts — THIN GATEWAY (Phase 4 Rewrite)
+// All logic lives in list_activity_logs SQL RPC.
+// get_my_org_id_secure() inside the RPC handles org scoping — no profile fetch needed here.
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import { corsHeaders, getAuthContext } from 'shared/auth.ts'
-
-/**
- * activity-logs-api - GROUND ZERO RESET
- * Strictly follows the Standardized Guide.
- */
+import { corsHeaders, getAuthContext, hydrateError, errorResponse } from '../_shared/auth.ts'
 
 serve(async (req: Request) => {
-    // 1. Handle CORS preflight
+    // 1. CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
+    let supabaseClient: any
+
     try {
-        // 2. Extract Auth Context (Identity & RLS Client)
-        const { userId, supabase } = await getAuthContext(req);
+        // 2. Auth: validates JWT, creates RLS-scoped client
+        const { supabase } = await getAuthContext(req)
+        supabaseClient = supabase
 
-        // 3. Resolve Profile Context (Explicitly as per Guide)
-        const { data: profile, error: profError } = await supabase
-            .from('profiles')
-            .select('organization_id, role')
-            .eq('id', userId)
-            .single()
+        // ── GET /activity-logs-api?space_id=X&limit=N → List logs via RPC ───────
+        if (req.method === 'GET') {
+            const url = new URL(req.url)
+            const spaceId = url.searchParams.get('space_id')
+            const limit = parseInt(url.searchParams.get('limit') ?? '100', 10)
 
-        if (profError || !profile) {
-            throw new Error('Profile not found or access denied')
+            // 4. SQL RPC: org-scoped internally, joins profiles + spaces
+            const { data: logs, error } = await supabase.rpc('list_activity_logs', {
+                p_space_id: spaceId ?? null,
+                p_limit: limit
+            })
+
+            if (error) throw error
+
+            return new Response(JSON.stringify({ data: logs }), {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            })
         }
 
-        const { organization_id: orgId } = profile
-        const url = new URL(req.url)
-        const spaceId = url.searchParams.get('spaceId')
-
-        // 4. Route Logic
-        let query = supabase
-            .from('activity_logs')
-            .select(`
-                *,
-                profiles:user_id (full_name, avatar_url),
-                client_spaces:space_id (name)
-            `)
-            .eq('organization_id', orgId)
-            .order('created_at', { ascending: false })
-            .limit(100)
-
-        if (spaceId) {
-            query = query.eq('space_id', spaceId)
-        }
-
-        const { data: logs, error: logsError } = await query
-
-        if (logsError) throw logsError
-
-        return new Response(JSON.stringify({ data: logs }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
+        return errorResponse(await hydrateError(supabase, 'METHOD_NOT_ALLOWED', { method: req.method }))
 
     } catch (error: any) {
-        console.error('[activity-logs-api] Error:', error.message)
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: error.status || 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
+        console.error('[activity-logs-api] Error:', error)
+        const code = error.isStandard ? error.message
+            : (error.code && typeof error.code === 'string') ? error.code
+                : 'INTERNAL_ERROR'
+        const richError = await hydrateError(supabaseClient, code, { original_error: error.message || String(error) })
+        return errorResponse(richError)
     }
 })

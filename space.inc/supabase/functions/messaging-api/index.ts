@@ -1,53 +1,60 @@
-// messaging-api/index.ts — THIN GATEWAY (SaaS Hardening V2)
-// GET: fetch messages (scoped by org + space, RLS enforced at DB)
-// POST: send message via send_message() SQL RPC (rate limiting, org isolation inside SQL)
-// Alan's Rule: "If it must be atomic with DB write → SQL. If external network → Edge."
+// messaging-api/index.ts — THIN GATEWAY (Phase 4 Rewrite)
+// GET: list_messages RPC (previously was inline query)
+// POST: send_message RPC (unchanged — already correct)
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { corsHeaders, getAuthContext, hydrateError, errorResponse } from './auth.ts'
+import { corsHeaders, getAuthContext, hydrateError, errorResponse } from '../_shared/auth.ts'
 
 serve(async (req: Request) => {
+    // 1. CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
-    let supabaseClient: any;
+    let supabaseClient: any
 
     try {
+        // 2. Auth: validates JWT, creates RLS-scoped client
         const { supabase } = await getAuthContext(req)
-        supabaseClient = supabase;
+        supabaseClient = supabase
+
         const url = new URL(req.url)
-        const spaceId = url.searchParams.get('spaceId')
 
-        // ── GET /messaging-api?spaceId=X → Fetch messages ─────────────────
+        // ── GET /messaging-api?spaceId=X → List messages via RPC ──────────────
         if (req.method === 'GET') {
-            if (!spaceId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'spaceId' }))
+            const spaceId = url.searchParams.get('space_id')
+            const channel = url.searchParams.get('channel')
+            const before = url.searchParams.get('before')
+            const limit = parseInt(url.searchParams.get('limit') ?? '50', 10)
 
-            const { data: messages, error } = await supabase
-                .from('messages')
-                .select('*, sender:profiles!sender_id(full_name, avatar_url)')
-                .eq('space_id', spaceId)
-                .order('created_at', { ascending: true })
+            if (!spaceId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'space_id' }))
+
+            // 4. SQL RPC: scopes by org internally via get_my_org_id_secure()
+            const { data: messages, error } = await supabase.rpc('list_messages', {
+                p_space_id: spaceId,
+                p_channel: channel ?? null,
+                p_before: before ?? null,
+                p_limit: limit
+            })
 
             if (error) throw error
+
             return new Response(JSON.stringify({ data: messages }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
-        // ── POST /messaging-api → Send message via send_message() RPC ──────
+        // ── POST /messaging-api → Send message via RPC ─────────────────────────
         if (req.method === 'POST') {
             const body = await req.json().catch(() => ({}))
-            const { space_id, org_id, content, extension = 'chat', payload = {}, channel = 'general' } = body
+            const { space_id, content, extension = 'chat', payload = {}, channel = 'general' } = body
 
             if (!space_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'space_id' }))
-            if (!org_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'org_id' }))
             if (!content || typeof content !== 'string' || content.trim().length === 0) {
                 return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'content' }))
             }
 
             const { data: result, error: rpcError } = await supabase.rpc('send_message', {
-                p_org_id: org_id,
                 p_space_id: space_id,
                 p_content: content.trim(),
                 p_channel: channel,
@@ -71,20 +78,10 @@ serve(async (req: Request) => {
 
     } catch (error: any) {
         console.error('[messaging-api] Error:', error)
-        let code = 'INTERNAL_ERROR'
-        if (error.isStandard) {
-            code = error.message
-        } else if (error.code && typeof error.code === 'string') {
-            code = error.code
-        }
+        const code = error.isStandard ? error.message
+            : (error.code && typeof error.code === 'string') ? error.code
+                : 'INTERNAL_ERROR'
         const richError = await hydrateError(supabaseClient, code, { original_error: error.message || String(error) })
         return errorResponse(richError)
     }
 })
-
-function json(body: unknown, status: number): Response {
-    return new Response(JSON.stringify(body), {
-        status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-}

@@ -1,144 +1,124 @@
-// meetings-api/index.ts
+// meetings-api/index.ts — THIN GATEWAY (Phase 4 Rewrite)
+// Pattern: CORS → getAuthContext → validate → (Daily API if needed) → RPC → respond
+// Webhook route is unauthenticated by design (HMAC verified instead)
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import { corsHeaders, getAuthContext } from 'shared/auth.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders, getAuthContext, hydrateError, errorResponse } from '../_shared/auth.ts'
 
-/**
- * meetings-api - GROUND ZERO RESET
- * Strictly follows the Standardized Guide.
- */
-
-// Utility for HMAC verification (Specific to meetings-api)
+// HMAC verification for Daily.co webhooks
 async function verifyDailyWebhook(req: Request, secret: string): Promise<boolean> {
-    const signature = req.headers.get('X-Webhook-Signature');
-    const timestamp = req.headers.get('X-Webhook-Timestamp');
-    if (!signature || !timestamp || !secret) return false;
-
-    const rawBody = await req.clone().text();
-    const dataToVerify = `${timestamp}.${rawBody}`;
-
+    const signature = req.headers.get('X-Webhook-Signature')
+    const timestamp = req.headers.get('X-Webhook-Timestamp')
+    if (!signature || !timestamp || !secret) return false
+    const rawBody = await req.clone().text()
+    const dataToVerify = `${timestamp}.${rawBody}`
     try {
-        const encoder = new TextEncoder();
-        const keyData = encoder.encode(secret);
+        const encoder = new TextEncoder()
         const cryptoKey = await crypto.subtle.importKey(
-            'raw',
-            keyData,
-            { name: 'HMAC', hash: 'SHA-256' },
-            false,
-            ['verify']
-        );
-
-        const signatureBytes = new Uint8Array(
-            signature.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
-        );
-
-        return await crypto.subtle.verify(
-            'HMAC',
-            cryptoKey,
-            signatureBytes,
-            encoder.encode(dataToVerify)
-        );
-    } catch (err) {
-        console.error('Webhook verification error:', err);
-        return false;
+            'raw', encoder.encode(secret),
+            { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
+        )
+        const sigBytes = new Uint8Array(signature.match(/.{1,2}/g)!.map(b => parseInt(b, 16)))
+        return await crypto.subtle.verify('HMAC', cryptoKey, sigBytes, encoder.encode(dataToVerify))
+    } catch {
+        return false
     }
 }
 
 serve(async (req: Request) => {
-    // 1. Handle CORS preflight
+    // 1. CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
+
+    let supabaseClient: any
 
     try {
         const dailyApiKey = Deno.env.get('DAILY_API_KEY') ?? ''
         const webhookSecret = Deno.env.get('DAILY_WEBHOOK_SECRET') ?? ''
         const url = new URL(req.url)
 
-        // --- WEBHOOK HANDLING (UNAUTHENTICATED) ---
+        // ── WEBHOOK (UNAUTHENTICATED — HMAC secured) ──────────────────────────
         if (url.pathname.endsWith('/webhook')) {
-            console.log('[meetings-api] Handling webhook');
-            const body = await req.json();
-            const isValid = await verifyDailyWebhook(req, webhookSecret);
-            if (!isValid) throw new Error('Invalid webhook signature');
+            const body = await req.json()
+            if (!(await verifyDailyWebhook(req, webhookSecret))) {
+                return new Response(JSON.stringify({ error: 'Invalid webhook signature' }), {
+                    status: 401,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                })
+            }
 
-            const { type, payload } = body;
-            const meetingId = payload.room_name?.includes('meeting-') ? payload.room_name.split('-')[1] : null;
-
-            // Re-using service role for webhook updates (bypasses RLS)
             const supabaseAdmin = createClient(
                 Deno.env.get('SUPABASE_URL') ?? '',
                 Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
             )
 
+            const { type, payload } = body
+            const roomName = payload?.room_name ?? ''
+            const meetingId = roomName.includes('meeting-') ? roomName.split('meeting-')[1] : null
+
             if (type === 'recording.ready_to_download' && meetingId) {
-                const { data: recData, error: recError } = await supabaseAdmin.from('recordings').insert({
-                    meeting_id: meetingId,
-                    daily_recording_id: payload.recording_id,
-                    download_url: payload.download_url,
-                    status: 'ready'
-                }).select().single();
+                const { data: recData, error: recError } = await supabaseAdmin
+                    .from('recordings')
+                    .insert({
+                        meeting_id: meetingId,
+                        daily_recording_id: payload.recording_id,
+                        download_url: payload.download_url,
+                        status: 'ready'
+                    })
+                    .select()
+                    .single()
 
                 if (!recError && recData) {
-                    await supabaseAdmin.from('meetings').update({ recording_id: recData.id }).eq('id', meetingId);
+                    await supabaseAdmin.from('meetings').update({ recording_id: recData.id }).eq('id', meetingId)
                 }
             }
+
             return new Response(JSON.stringify({ received: true }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
-        // --- AUTHENTICATED ROUTES ---
-        // 2. Extract Auth Context (Identity & RLS Client)
-        const { userId, email, supabase } = await getAuthContext(req);
+        // 2. Auth context — all routes below require a valid user JWT
+        const { userId, email, supabase } = await getAuthContext(req)
+        supabaseClient = supabase
 
-        // 3. Resolve Profile Context (Explicitly as per Guide)
-        const { data: profile, error: profError } = await supabase
-            .from('profiles')
-            .select('organization_id, role')
-            .eq('id', userId)
-            .single()
-
-        if (profError || !profile) {
-            throw new Error('Profile not found or access denied')
-        }
-
-        const { organization_id: orgId, role } = profile
-
-        // 4. Route logic
+        // ── GET /meetings-api?space_id=X → List meetings (RLS scoped) ──────────
         if (req.method === 'GET') {
-            const spaceId = url.searchParams.get('spaceId')
-            let query = supabase.from('meetings').select('*').eq('organization_id', orgId).is('deleted_at', null)
+            const spaceId = url.searchParams.get('space_id')
+
+            let query = supabase
+                .from('meetings')
+                .select('*')
+                .is('deleted_at', null)
+                .order('starts_at', { ascending: false })
+
             if (spaceId) query = query.eq('space_id', spaceId)
 
-            const { data: meetings, error } = await query.order('starts_at', { ascending: false })
+            const { data: meetings, error } = await query
             if (error) throw error
+
             return new Response(JSON.stringify({ data: meetings }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
+        // ── POST /meetings-api → Action-based meeting operations ───────────────
         if (req.method === 'POST') {
-            const body = await req.json()
-            const { action, meetingId } = body
+            const body = await req.json().catch(() => ({}))
+            const { action, meeting_id } = body
 
-            const getMeeting = async (mid: string) => {
-                const { data, error } = await supabase
-                    .from('meetings')
-                    .select('*')
-                    .eq('id', mid)
-                    .eq('organization_id', orgId)
-                    .single()
-                if (error || !data) throw new Error('Meeting not found')
-                return data
-            }
+            if (!action) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'action' }))
 
             switch (action) {
-                case 'CREATE_INSTANT_MEETING': {
-                    const { title, space_id, description, recording_enabled } = body
 
-                    // Daily-First Transaction
+                // ── CREATE_INSTANT_MEETING ─────────────────────────────────────
+                case 'CREATE_INSTANT_MEETING': {
+                    const { space_id, title, description, recording_enabled } = body
+                    if (!space_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'space_id' }))
+
+                    // 5. External API first (Daily.co room must exist before DB record)
                     const dailyRes = await fetch('https://api.daily.co/v1/rooms', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${dailyApiKey}` },
@@ -152,25 +132,21 @@ serve(async (req: Request) => {
                     const dailyData = await dailyRes.json()
                     if (!dailyRes.ok) throw new Error(`Daily API Error: ${dailyData.info || dailyData.error}`)
 
-                    const { data: meeting, error: dbError } = await supabase
-                        .from('meetings')
-                        .insert({
-                            organization_id: orgId,
-                            space_id,
-                            title: title || 'Instant Meeting',
-                            starts_at: new Date().toISOString(),
-                            duration_minutes: 60,
-                            created_by: userId,
-                            status: 'live',
-                            started_at: new Date().toISOString(),
-                            description,
-                            recording_enabled: recording_enabled ?? true,
-                            daily_room_name: dailyData.name,
-                            daily_room_url: dailyData.url
-                        })
-                        .select().single()
+                    // 4. SQL RPC: creates DB record, writes activity log atomically
+                    const { data: meeting, error: rpcError } = await supabase.rpc('create_meeting', {
+                        p_space_id: space_id,
+                        p_title: title || 'Instant Meeting',
+                        p_starts_at: new Date().toISOString(),
+                        p_duration_minutes: 60,
+                        p_description: description ?? null,
+                        p_recording_enabled: recording_enabled ?? true,
+                        p_daily_room_name: dailyData.name,
+                        p_daily_room_url: dailyData.url,
+                        p_is_instant: true,
+                        p_meeting_type: 'instant'
+                    })
 
-                    if (dbError) throw dbError
+                    if (rpcError) throw rpcError
 
                     return new Response(JSON.stringify({ data: { meeting, roomUrl: dailyData.url } }), {
                         status: 201,
@@ -178,11 +154,14 @@ serve(async (req: Request) => {
                     })
                 }
 
+                // ── CREATE_SCHEDULED_MEETING ───────────────────────────────────
                 case 'CREATE_SCHEDULED_MEETING': {
-                    const { title, space_id, starts_at, duration_minutes, description, recording_enabled } = body
+                    const { space_id, title, starts_at, duration_minutes, description, recording_enabled } = body
+                    if (!space_id || !starts_at) {
+                        return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { fields: ['space_id', 'starts_at'] }))
+                    }
 
-                    // Daily-First Transaction
-                    const startTime = new Date(starts_at).getTime();
+                    const startTime = new Date(starts_at).getTime()
                     const dailyRes = await fetch('https://api.daily.co/v1/rooms', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${dailyApiKey}` },
@@ -196,24 +175,20 @@ serve(async (req: Request) => {
                     const dailyData = await dailyRes.json()
                     if (!dailyRes.ok) throw new Error(`Daily API Error: ${dailyData.info || dailyData.error}`)
 
-                    const { data: meeting, error: dbError } = await supabase
-                        .from('meetings')
-                        .insert({
-                            organization_id: orgId,
-                            space_id,
-                            title: title || 'Scheduled Meeting',
-                            starts_at,
-                            duration_minutes: duration_minutes || 60,
-                            created_by: userId,
-                            status: 'scheduled',
-                            description,
-                            recording_enabled: recording_enabled ?? true,
-                            daily_room_name: dailyData.name,
-                            daily_room_url: dailyData.url
-                        })
-                        .select().single()
+                    const { data: meeting, error: rpcError } = await supabase.rpc('create_meeting', {
+                        p_space_id: space_id,
+                        p_title: title || 'Scheduled Meeting',
+                        p_starts_at: starts_at,
+                        p_duration_minutes: duration_minutes || 60,
+                        p_description: description ?? null,
+                        p_recording_enabled: recording_enabled ?? true,
+                        p_daily_room_name: dailyData.name,
+                        p_daily_room_url: dailyData.url,
+                        p_is_instant: false,
+                        p_meeting_type: 'scheduled'
+                    })
 
-                    if (dbError) throw dbError
+                    if (rpcError) throw rpcError
 
                     return new Response(JSON.stringify({ data: meeting }), {
                         status: 201,
@@ -221,33 +196,53 @@ serve(async (req: Request) => {
                     })
                 }
 
+                // ── START_MEETING ──────────────────────────────────────────────
                 case 'START_MEETING': {
-                    await getMeeting(meetingId) // Verify access
-                    const { data, error } = await supabase
-                        .from('meetings')
-                        .update({ status: 'live', started_at: new Date().toISOString() })
-                        .eq('id', meetingId)
-                        .select()
-                        .single()
+                    if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
 
-                    if (error) throw error
-                    return new Response(JSON.stringify({ data: { meeting: data, roomUrl: data.daily_room_url } }), {
-                        status: 200,
-                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    const { data: meeting, error: rpcError } = await supabase.rpc('start_meeting', {
+                        p_meeting_id: meeting_id,
+                        p_daily_room_url: body.daily_room_url ?? null,
+                        p_daily_room_name: body.daily_room_name ?? null
                     })
-                }
 
-                case 'JOIN_MEETING': {
-                    const meeting = await getMeeting(meetingId)
+                    if (rpcError) throw rpcError
+
                     return new Response(JSON.stringify({ data: { meeting, roomUrl: meeting.daily_room_url } }), {
                         status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })
                 }
 
-                case 'GET_TOKEN': {
-                    const meeting = await getMeeting(meetingId)
+                // ── JOIN_MEETING ───────────────────────────────────────────────
+                case 'JOIN_MEETING': {
+                    if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
 
+                    // RPC verifies org access and inserts participant record
+                    const { data: meeting, error: rpcError } = await supabase.rpc('join_meeting', {
+                        p_meeting_id: meeting_id
+                    })
+
+                    if (rpcError) throw rpcError
+
+                    return new Response(JSON.stringify({ data: { meeting, roomUrl: meeting.daily_room_url } }), {
+                        status: 200,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    })
+                }
+
+                // ── GET_TOKEN ──────────────────────────────────────────────────
+                case 'GET_TOKEN': {
+                    if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
+
+                    // RPC verifies access and returns meeting (including daily_room_name)
+                    const { data: meeting, error: rpcError } = await supabase.rpc('join_meeting', {
+                        p_meeting_id: meeting_id
+                    })
+
+                    if (rpcError) throw rpcError
+
+                    // External API: generate Daily.co participant token
                     const tokenRes = await fetch('https://api.daily.co/v1/meeting-tokens', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${dailyApiKey}` },
@@ -268,59 +263,51 @@ serve(async (req: Request) => {
                     })
                 }
 
-                case 'UPDATE_MEETING': {
-                    const { updates } = body
-                    const { data, error } = await supabase
-                        .from('meetings')
-                        .update(updates)
-                        .eq('id', meetingId)
-                        .eq('organization_id', orgId)
-                        .select()
-                        .single()
-                    if (error) throw error
-                    return new Response(JSON.stringify({ data }), {
-                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                    })
-                }
-
+                // ── END_MEETING ────────────────────────────────────────────────
                 case 'END_MEETING': {
-                    const { data, error } = await supabase
-                        .from('meetings')
-                        .update({ status: 'ended', ended_at: new Date().toISOString() })
-                        .eq('id', meetingId)
-                        .eq('organization_id', orgId)
-                        .select()
-                        .single()
-                    if (error) throw error
-                    return new Response(JSON.stringify({ data }), {
+                    if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
+
+                    const { error: rpcError } = await supabase.rpc('end_meeting', {
+                        p_meeting_id: meeting_id
+                    })
+
+                    if (rpcError) throw rpcError
+
+                    return new Response(JSON.stringify({ success: true }), {
+                        status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })
                 }
 
+                // ── DELETE_MEETING (soft cancel) ───────────────────────────────
                 case 'DELETE_MEETING': {
-                    const { error } = await supabase
-                        .from('meetings')
-                        .update({ deleted_at: new Date().toISOString() })
-                        .eq('id', meetingId)
-                        .eq('organization_id', orgId)
-                    if (error) throw error
+                    if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
+
+                    const { error: rpcError } = await supabase.rpc('cancel_meeting', {
+                        p_meeting_id: meeting_id
+                    })
+
+                    if (rpcError) throw rpcError
+
                     return new Response(JSON.stringify({ success: true }), {
+                        status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })
                 }
 
                 default:
-                    throw new Error(`Action ${action} not implemented`)
+                    return errorResponse(await hydrateError(supabase, 'VAL_INVALID_ACTION', { action }))
             }
         }
 
-        throw new Error(`Method ${req.method} not allowed`)
+        return errorResponse(await hydrateError(supabase, 'METHOD_NOT_ALLOWED', { method: req.method }))
 
     } catch (error: any) {
-        console.error('[meetings-api] Error:', error.message);
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: error.status || 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
+        console.error('[meetings-api] Error:', error)
+        const code = error.isStandard ? error.message
+            : (error.code && typeof error.code === 'string') ? error.code
+                : 'INTERNAL_ERROR'
+        const richError = await hydrateError(supabaseClient, code, { original_error: error.message || String(error) })
+        return errorResponse(richError)
     }
 })
