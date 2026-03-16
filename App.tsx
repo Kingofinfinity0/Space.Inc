@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { LoginForm } from './components/auth/LoginForm';
+import { Auth } from './components/auth/Auth';
 import { 
   LayoutDashboard, 
   Users, 
@@ -44,6 +44,7 @@ import { GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle } from
 import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData } from './types';
 import { LandingPage } from './components/LandingPage';
 import { Onboarding } from './components/Onboarding';
+import { MeetingHub } from './components/meetings/MeetingHub';
 
 // --- Mock Data ---
 const MOCK_DATA: ChartData[] = [
@@ -91,8 +92,35 @@ const MOCK_TASKS: Task[] = [
 ];
 
 const MOCK_MEETINGS: Meeting[] = [
-  { id: '1', title: 'Q3 Strategy Review', clientName: 'Acme Corp', clientId: '1', date: '2023-10-25', time: '14:00', type: 'upcoming' },
-  { id: '2', title: 'Onboarding Kickoff', clientName: 'Lumina Design', clientId: '2', date: '2023-10-20', time: '10:00', type: 'past', hasRecording: true, hasNotes: true, duration: '45 mins', notesContent: 'Client agreed to the new roadmap. Requires follow-up on design assets.' },
+  { 
+    id: '1', 
+    title: 'Q3 Strategy Review', 
+    description: 'Quarterly business strategy review meeting',
+    starts_at: '2023-10-25T14:00:00Z',
+    duration_minutes: 60,
+    space_id: '1',
+    organization_id: 'org-1',
+    status: 'scheduled',
+    recording_status: 'none',
+    created_at: '2023-10-20T10:00:00Z',
+    updated_at: '2023-10-20T10:00:00Z'
+  },
+  { 
+    id: '2', 
+    title: 'Onboarding Kickoff', 
+    description: 'Initial client onboarding session',
+    starts_at: '2023-10-20T10:00:00Z',
+    duration_minutes: 45,
+    space_id: '2',
+    organization_id: 'org-1',
+    status: 'ended',
+    has_recording: true,
+    notes: 'Client agreed to the new roadmap. Requires follow-up on design assets.',
+    ended_at: '2023-10-20T10:45:00Z',
+    recording_status: 'available',
+    created_at: '2023-10-20T09:00:00Z',
+    updated_at: '2023-10-20T10:45:00Z'
+  },
 ];
 
 const MOCK_MESSAGES: Message[] = [
@@ -1166,7 +1194,7 @@ const App = () => {
   }
 
   if (!isAuthenticated) {
-    return <LoginForm />;
+    return <Auth />;
   }
 
   // Handlers
@@ -1227,7 +1255,7 @@ const App = () => {
       case ViewState.TASKS:
         return <TaskView tasks={tasks} clients={clients} onUpdateStatus={handleTaskStatusUpdate} onCreate={handleCreateTask} />;
       case ViewState.MEETINGS:
-        return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} />;
+        return <MeetingHub spaces={clients} />;
       case ViewState.FILES:
         return <GlobalFilesView files={files} clients={clients} />;
       case ViewState.SETTINGS:

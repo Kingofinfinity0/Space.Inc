@@ -6,9 +6,9 @@ type AuthContextType = {
   user: User | null;
   session: any;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, userData: any) => Promise<{ error: any }>;
-  signOut: () => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: any; success: boolean }>;
+  signUp: (email: string, password: string, userData: any) => Promise<{ error: any; success: boolean }>;
+  signOut: () => Promise<{ error: any; success: boolean }>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,50 +19,165 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check active sessions and sets the user
-    const checkSession = async () => {
-      const currentSession = await getSession();
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-      setLoading(false);
+    // Get initial session
+    const getInitialSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
+      } catch (error) {
+        console.error('Error getting initial session:', error);
+        setSession(null);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    checkSession();
+    getInitialSession();
 
-    // Listen for changes in auth state
-    const { data: { subscription } } = onAuthStateChange((event, currentSession) => {
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    try {
+      // Validate environment variables
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Frontend configuration error: Missing environment variables');
+      }
+
+      const response = await fetch(`https://qkpjmsorzkdnebcckqts.supabase.co/functions/v1/auth-handler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`
+        },
+        body: JSON.stringify({
+          action: 'signin',
+          email,
+          password
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('Sign in error:', result.error);
+        return { error: result.error, success: false };
+      }
+      
+      console.log('Sign in successful:', result.data);
+      
+      // Update local state with session data
+      if (result.data.session) {
+        setSession(result.data.session);
+        setUser(result.data.user);
+      }
+      
+      return { error: null, success: true };
+    } catch (err) {
+      console.error('Unexpected sign in error:', err);
+      return { error: err, success: false };
+    }
   };
 
   const signUp = async (email: string, password: string, userData: any) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: userData,
-      },
-    });
-    return { error };
+    try {
+      // Validate environment variables
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Frontend configuration error: Missing environment variables');
+      }
+
+      const response = await fetch(`https://qkpjmsorzkdnebcckqts.supabase.co/functions/v1/auth-handler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`
+        },
+        body: JSON.stringify({
+          action: 'signup',
+          email,
+          password,
+          userData
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('Sign up error:', result.error);
+        return { error: result.error, success: false };
+      }
+      
+      console.log('Sign up successful:', result.data);
+      
+      // Update local state with session data
+      if (result.data.session) {
+        setSession(result.data.session);
+        setUser(result.data.user);
+      }
+      
+      return { error: null, success: true };
+    } catch (err) {
+      console.error('Unexpected sign up error:', err);
+      return { error: err, success: false };
+    }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    return { error };
+    try {
+      // Always clear local state first, regardless of API call success
+      const sessionToClear = session;
+      setSession(null);
+      setUser(null);
+
+      // Try to call edge function, but don't fail if it doesn't work
+      try {
+        const response = await fetch(`https://qkpjmsorzkdnebcckqts.supabase.co/functions/v1/auth-handler`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionToClear?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({
+            action: 'signout'
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+          console.warn('Sign out API call failed:', result.error);
+          // Don't return error since local state is already cleared
+        } else {
+          console.log('Sign out successful');
+        }
+      } catch (apiError) {
+        console.warn('Sign out API call failed:', apiError);
+        // Don't return error since local state is already cleared
+      }
+      
+      return { error: null, success: true };
+    } catch (err) {
+      console.error('Unexpected sign out error:', err);
+      // Even on unexpected error, return success since local state is cleared
+      return { error: null, success: true };
+    }
   };
 
   const value = {
@@ -76,7 +191,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
