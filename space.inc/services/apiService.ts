@@ -77,13 +77,13 @@ export const apiService = {
     async getProfile() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { data: null, error: { message: 'Not authenticated' } };
-        
+
         const { data, error } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', user.id)
             .single();
-            
+
         return { data, error };
     },
 
@@ -97,7 +97,7 @@ export const apiService = {
             .eq('id', user.id)
             .select()
             .single();
-            
+
         return { data, error };
     },
 
@@ -113,7 +113,7 @@ export const apiService = {
             .from('spaces')
             .select('*')
             .order('created_at', { ascending: false });
-        
+
         return { data: data || [], error: error };
     },
 
@@ -343,18 +343,16 @@ export const apiService = {
     },
 
     async sendMessage(spaceId: string, content: string, extension: string = 'chat', payload: any = {}, channel: 'general' | 'internal' = 'general', organizationId?: string) {
-        const { data, error } = await supabase
-            .from('messages')
-            .insert({
-                space_id: spaceId,
-                content,
-                extension,
-                payload,
-                channel
-            })
-            .select()
-            .single();
-        return { data, error };
+        const { data, error } = await supabase.rpc('send_message', {
+            p_space_id: spaceId,
+            p_content: content,
+            p_channel: channel,
+            p_extension: extension,
+            p_payload: payload
+        });
+        if (error) return { data: null, error };
+        if (!data?.success) return { data: null, error: { message: data?.error_code || 'Send failed' } };
+        return { data: data.data, error: null };
     },
 
     // --- Tasks ---
@@ -407,73 +405,86 @@ export const apiService = {
         return { data: data || [], error: null };
     },
 
-    async scheduleMeeting(data: { title: string; starts_at: string; duration_minutes?: number; space_id: string; description?: string; recording_enabled?: boolean; organizationId: string }) {
+    async scheduleMeeting(data: { title: string; starts_at: string; duration_minutes?: number; space_id: string; description?: string; recording_enabled?: boolean }) {
         const { data: res, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'CREATE_SCHEDULED_MEETING', ...data, organization_id: data.organizationId }
+            body: { action: 'CREATE_SCHEDULED_MEETING', ...data }
         });
         if (error || res?.error) return { data: null, error: res?.error || { message: error?.message || 'Failed to schedule meeting' } };
         return { data: res?.data || res, error: null };
     },
 
-    async createInstantMeeting(data: { space_id: string; title?: string; description?: string; recording_enabled?: boolean; organizationId: string }) {
-        const { data: res, error } = await supabase.functions.invoke('meetings-api', {
+    async createInstantMeeting(params: { space_id: string; title?: string; description?: string; recording_enabled?: boolean }) {
+        const { data, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'CREATE_INSTANT_MEETING', ...data, organization_id: data.organizationId }
+            body: { 
+                action: 'CREATE_INSTANT_MEETING', 
+                space_id: params.space_id,
+                title: params.title,
+                description: params.description,
+                recording_enabled: params.recording_enabled ?? true
+            }
         });
-        if (error || res?.error) return { data: null, error: res?.error || { message: error?.message || 'Failed to create instant meeting' } };
-        return { data: res?.data || res, error: null };
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
+        
+        const payload = data?.data ?? data;
+        return { data: payload, error: null };
     },
 
     async startMeeting(meetingId: string, organizationId: string) {
-        const { data: res, error } = await supabase.functions.invoke('meetings-api', {
+        const { data, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'START_MEETING', meeting_id: meetingId, organization_id: organizationId }
+            body: { action: 'START_MEETING', meetingId }
         });
-        if (error || res?.error) return { data: null, error: res?.error || { message: error?.message || 'Failed to start meeting' } };
-        return { data: res?.data || res, error: null };
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
+        const result = data?.data ?? data;
+        return { data: result, error: null };
     },
 
-    async joinMeeting(meetingId: string, organizationId: string) {
+    async joinMeeting(meetingId: string) {
         const { data: res, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'JOIN_MEETING', meeting_id: meetingId, organization_id: organizationId }
+            body: { action: 'JOIN_MEETING', meeting_id: meetingId }
         });
         if (error || res?.error) return { data: null, error: res?.error || { message: error?.message || 'Failed to join meeting' } };
         return { data: res?.data || res, error: null };
     },
 
-    async getMeetingToken(meetingId: string, organizationId: string) {
+    async getMeetingToken(meetingId: string) {
         const { data: res, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'GET_TOKEN', meeting_id: meetingId, organization_id: organizationId }
+            body: { action: 'GET_TOKEN', meetingId }
         });
-        if (error || res?.error) return { data: null, error: res?.error || { message: error?.message || 'Failed to fetch meeting token' } };
-        return { data: res?.data || res, error: null };
+        if (error) return { data: null, error: { message: error.message } };
+        if (res?.error) return { data: null, error: res.error };
+        const result = res?.data ?? res;
+        return { data: result, error: null };
     },
 
-    async updateMeeting(meetingId: string, updates: any, organizationId: string) {
+    async updateMeeting(meetingId: string, updates: any) {
         const { data, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'UPDATE_MEETING', meeting_id: meetingId, updates, organization_id: organizationId }
+            body: { action: 'UPDATE_MEETING', meeting_id: meetingId, updates }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to update meeting' } };
         return { data, error: null };
     },
 
-    async stopMeeting(meetingId: string, organizationId: string) {
+    async stopMeeting(meetingId: string) {
         const { data, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'END_MEETING', meeting_id: meetingId, organization_id: organizationId }
+            body: { action: 'END_MEETING', meeting_id: meetingId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to stop meeting' } };
         return { data, error: null };
     },
 
-    async cancelMeeting(meetingId: string, organizationId: string) {
+    async cancelMeeting(meetingId: string) {
         const { data, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'DELETE_MEETING', meeting_id: meetingId, organization_id: organizationId }
+            body: { action: 'DELETE_MEETING', meeting_id: meetingId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to cancel meeting' } };
         return { data, error: null };
@@ -496,10 +507,10 @@ export const apiService = {
         return { data: data || [], error: null };
     },
 
-    async getSignedUrl(fileId: string, organizationId: string) {
+    async getSignedUrl(fileId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'SIGN_URL', file_id: fileId, organization_id: organizationId }
+            body: { action: 'SIGN_URL', fileId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to get signed URL' } };
         return { data, error: null };
@@ -514,25 +525,25 @@ export const apiService = {
         return { data, error: null };
     },
 
-    async requestUploadVoucher(spaceId: string, organizationId: string, filename: string, contentType: string, checksum?: string, fileSize?: number) {
+    async requestUploadVoucher(spaceId: string, filename: string, contentType: string, checksum?: string, fileSize?: number) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
             body: {
                 action: 'REQUEST_UPLOAD_VOUCHER',
-                space_id: spaceId,
-                organization_id: organizationId,
-                file_name: filename,
-                content_type: contentType,
-                checksum,
-                file_size: fileSize
+                spaceId,        // was: space_id
+                filename,       // was: file_name
+                contentType,    // was: content_type
+                fileSize,       // was: file_size
+                checksum
             }
         });
 
-        if (error || data?.error) {
-            console.error('❌ [requestUploadVoucher] Error:', error || data?.error);
-            return { data: null, error: data?.error || { message: error?.message || 'Failed to request upload voucher' } };
-        }
-        return { data, error: null };
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
+
+        const voucher = data?.data ?? data;
+        if (!voucher?.upload_url) return { data: null, error: { message: 'No upload URL in response' } };
+        return { data: voucher, error: null };
     },
 
     async requestNewVersion(fileId: string, organizationId: string, filename: string, contentType: string) {
@@ -548,10 +559,10 @@ export const apiService = {
         return { data, error: null };
     },
 
-    async getSignedFileUrl(fileId: string, organizationId: string) {
+    async getSignedFileUrl(fileId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'SIGN_URL', file_id: fileId, organization_id: organizationId }
+            body: { action: 'SIGN_URL', fileId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to get signed URL' } };
         return { data, error: null };
@@ -560,7 +571,7 @@ export const apiService = {
     async confirmUpload(fileId: string, organizationId: string, storagePath?: string, checksum?: string, fileSize?: number) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'CONFIRM_UPLOAD', file_id: fileId, organization_id: organizationId, storage_path: storagePath, checksum, file_size: fileSize }
+            body: { action: 'CONFIRM_UPLOAD', fileId, organization_id: organizationId, storage_path: storagePath, checksum, file_size: fileSize }
         });
 
         if (error || data?.error) {
@@ -654,28 +665,28 @@ export const apiService = {
     },
 
 
-    async deleteFile(fileId: string, organizationId: string) {
+    async deleteFile(fileId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'SOFT_DELETE', file_id: fileId, organization_id: organizationId }
+            body: { action: 'SOFT_DELETE', fileId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to delete file' } };
         return { data, error: null };
     },
 
-    async restoreFile(fileId: string, organizationId: string) {
+    async restoreFile(fileId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'RESTORE', file_id: fileId, organization_id: organizationId }
+            body: { action: 'RESTORE', fileId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to restore file' } };
         return { data, error: null };
     },
 
-    async hardDeleteFile(fileId: string, organizationId: string) {
+    async hardDeleteFile(fileId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'HARD_DELETE', file_id: fileId, organization_id: organizationId }
+            body: { action: 'HARD_DELETE', fileId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to permanently delete file' } };
         return { data, error: null };

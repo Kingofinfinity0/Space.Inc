@@ -82,6 +82,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
         scrollToBottom();
     }, [messages]);
 
+
     // Send message function
     const sendMessage = async (content: string, channel: 'general' | 'internal' = 'general'): Promise<boolean> => {
         if (!spaceId || !content.trim()) return false;
@@ -89,14 +90,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
         try {
             const { data, error: sendError } = await apiService.sendMessage(spaceId, content, 'chat', {}, channel, orgId || '');
             if (sendError) throw sendError;
-
-            // Optimistic update - add to local state immediately
-            if (data) {
-                setMessages(prev => {
-                    if (prev.find(m => m.id === data.id)) return prev;
-                    return [...prev, data];
-                });
-            }
+            // Realtime subscription delivers the full row automatically — no optimistic update needed
             return true;
         } catch (err: any) {
             console.error('Failed to send message:', err);

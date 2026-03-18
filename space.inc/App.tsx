@@ -54,6 +54,7 @@ import HistoryView from './components/views/HistoryView';
 import ClientPortalView from './components/views/ClientPortalView';
 import JoinView from './components/views/JoinView';
 import { InviteStaffModal } from './components/views/InviteStaffModal';
+import { MeetingRoom } from './components/MeetingRoom';
 
 const OwnerDashboardView = StaffDashboardView;
 
@@ -85,6 +86,7 @@ const App = () => {
     const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
     const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
     const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
+    const [activeMeetingRoomUrl, setActiveMeetingRoomUrl] = useState<string | null>(null);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [lastInviteData, setLastInviteData] = useState<{ link: string | null, email: string, status?: string, invite_id?: string } | null>(null);
 
@@ -285,7 +287,7 @@ const App = () => {
         try {
             const targetSpace = spaceId || instantMeetingTargetSpace || (clients.length > 0 ? clients[0].id : '');
             if (!targetSpace) {
-                showToast('Please select a space first or create one.', "info");
+                showToast('Please select a space first or create one.', 'info');
                 return;
             }
             if (!title && !isInstantMeetingModalOpen) {
@@ -293,21 +295,31 @@ const App = () => {
                 setIsInstantMeetingModalOpen(true);
                 return;
             }
+
             const { data, error } = await apiService.createInstantMeeting({
                 space_id: targetSpace,
                 title: title || instantMeetingTitle || 'Instant Meeting',
                 recording_enabled: true,
-                organizationId: organizationId || ''
             });
+
+            if (error) {
+                showToast(`Meeting error: ${error.message || error}`, 'error');
+                return;
+            }
+
+            // data = { meeting: {...}, roomUrl: "https://..." }
             if (data?.meeting?.id) {
                 setActiveMeetingId(data.meeting.id);
+                setActiveMeetingRoomUrl(data.roomUrl || data.meeting?.daily_room_url || null);
                 setIsInstantMeetingModalOpen(false);
                 fetchData();
-            } else if (error) {
-                showToast(`Meeting error: ${error}`, "error");
+            } else {
+                showToast('Meeting created but no ID returned', 'error');
+                console.error('[handleInstantMeeting] Unexpected response shape:', data);
             }
         } catch (err) {
-            console.error('Instant meeting failed:', err);
+            console.error('[handleInstantMeeting] failed:', err);
+            showToast('Failed to create meeting', 'error');
         }
     };
 
@@ -318,8 +330,7 @@ const App = () => {
                 title: data.title || 'Scheduled Meeting',
                 starts_at: `${data.date}T${data.time}:00Z`,
                 description: data.description,
-                recording_enabled: data.recording_enabled,
-                organizationId: organizationId || ''
+                recording_enabled: data.recording_enabled
             });
             if (error) throw error;
             if (newMeeting) {
@@ -490,6 +501,14 @@ const App = () => {
                         <div className="max-w-7xl mx-auto px-8 py-10">{renderContent()}</div>
                     </div>
                 </AppLayout>
+
+                {activeMeetingId && (
+                    <MeetingRoom 
+                        meetingId={activeMeetingId}
+                        roomUrl={activeMeetingRoomUrl}
+                        onLeave={() => { setActiveMeetingId(null); setActiveMeetingRoomUrl(null); }}
+                    />
+                )}
 
                 {isInstantMeetingModalOpen && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">

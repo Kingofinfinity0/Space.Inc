@@ -9,7 +9,8 @@ import { MeetingState, MeetingStateContext, getInitialState, isLoading, isInMeet
 
 interface MeetingRoomProps {
     meetingId: string;
-    onClose: () => void;
+    roomUrl?: string | null;
+    onLeave: () => void;
 }
 
 // Debug flag - set to false in production
@@ -26,7 +27,7 @@ const DEBUG_EVENTS = true;
  * 5. Proper cleanup on leave/unmount
  */
 
-const MeetingRoomContent: React.FC<{ meetingId: string; onClose: () => void }> = ({ meetingId, onClose }) => {
+const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null; onLeave: () => void }> = ({ meetingId, roomUrl, onLeave }) => {
     const callObject = useDaily();
     const localSessionId = useLocalSessionId();
     const participantIds = useParticipantIds();
@@ -36,7 +37,7 @@ const MeetingRoomContent: React.FC<{ meetingId: string; onClose: () => void }> =
     const [meetingTitle, setMeetingTitle] = useState('Meeting');
 
     // TASK 3: Fail-safe spinner kill mechanism
-    const failsafeTimeoutRef = useRef<NodeJS.Timeout>();
+    const failsafeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // TASK 8: Defensive event logging
     useEffect(() => {
@@ -113,7 +114,7 @@ const MeetingRoomContent: React.FC<{ meetingId: string; onClose: () => void }> =
                 state: MeetingState.LEFT,
                 leftAt: Date.now()
             });
-            onClose();
+            onLeave();
         };
 
         const handleError = (e: any) => {
@@ -142,12 +143,12 @@ const MeetingRoomContent: React.FC<{ meetingId: string; onClose: () => void }> =
                 clearTimeout(failsafeTimeoutRef.current);
             }
         };
-    }, [callObject, onClose]);
+    }, [callObject, onLeave]);
 
     // TASK 6: Leave meeting handler
     const handleLeave = useCallback(async () => {
         if (!callObject) {
-            onClose();
+            onLeave();
             return;
         }
 
@@ -165,9 +166,9 @@ const MeetingRoomContent: React.FC<{ meetingId: string; onClose: () => void }> =
         } catch (err) {
             console.error('[MeetingRoom] Error leaving:', err);
             // Force close anyway
-            onClose();
+            onLeave();
         }
-    }, [callObject, onClose]);
+    }, [callObject, onLeave]);
 
     // Toggle microphone
     const handleToggleMic = useCallback(() => {
@@ -244,7 +245,7 @@ const MeetingRoomContent: React.FC<{ meetingId: string; onClose: () => void }> =
                         <p className="text-white text-xl font-semibold mb-4">Unable to Join</p>
                         <p className="text-white/60 text-sm mb-6 max-w-md text-center">{meetingState.error}</p>
                         <button
-                            onClick={onClose}
+                            onClick={onLeave}
                             className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
                         >
                             Close
@@ -307,7 +308,7 @@ const ParticipantTile: React.FC<{ sessionId: string; isLocal: boolean }> = ({ se
  * CRITICAL: This component handles call object creation
  * Backend calls happen here but NEVER block UI state
  */
-export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, onClose }) => {
+export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, roomUrl: initialRoomUrl, onLeave }) => {
     const [callObject, setCallObject] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
     const [isInitializing, setIsInitializing] = useState(true);
@@ -330,10 +331,13 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, onClose }) 
 
                 // TASK 1: Get meeting details from backend
                 // BUT: This is for room URL/token only, NOT for UI state
-                console.log('[MeetingRoom] 📞 Fetching meeting details (non-blocking)...');
-                const startRes = await apiService.startMeeting(meetingId);
-                if (startRes.error) throw new Error(startRes.error.message);
-                const { roomUrl, meeting } = startRes.data;
+                let resolvedRoomUrl = initialRoomUrl;
+                if (!resolvedRoomUrl) {
+                    // Only call startMeeting for scheduled meetings joining from the meetings list
+                    const startRes = await apiService.startMeeting(meetingId, '');
+                    if (startRes.error) throw new Error(startRes.error.message);
+                    resolvedRoomUrl = startRes.data?.roomUrl || startRes.data?.meeting?.daily_room_url;
+                }
 
                 const tokenRes = await apiService.getMeetingToken(meetingId);
                 if (tokenRes.error) throw new Error(tokenRes.error.message);
@@ -356,8 +360,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, onClose }) 
                 // Join the call
                 // CRITICAL: We don't wait for this or set any state based on it
                 // The 'joined-meeting' event is the ONLY source of truth
-                console.log('[MeetingRoom] 🚀 Initiating join (non-blocking)...', { roomUrl, hasToken: !!token });
-                createdCall.join({ url: roomUrl, token }).catch((err: any) => {
+                console.log('[MeetingRoom] 🚀 Initiating join (non-blocking)...', { resolvedRoomUrl, hasToken: !!token });
+                createdCall.join({ url: resolvedRoomUrl, token }).catch((err: any) => {
                     console.error('[MeetingRoom] Join error:', err);
                     // Error event will handle UI state
                 });
@@ -404,7 +408,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, onClose }) 
                     <p className="text-white text-xl font-semibold mb-4">Unable to Initialize</p>
                     <p className="text-white/60 text-sm mb-6">{error}</p>
                     <button
-                        onClick={onClose}
+                        onClick={onLeave}
                         className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
                     >
                         Close
@@ -429,7 +433,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, onClose }) 
     // Render with DailyProvider
     return (
         <DailyProvider callObject={callObject}>
-            <MeetingRoomContent meetingId={meetingId} onClose={onClose} />
+            <MeetingRoomContent meetingId={meetingId} roomUrl={initialRoomUrl} onLeave={onLeave} />
         </DailyProvider>
     );
 };

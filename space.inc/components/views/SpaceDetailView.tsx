@@ -257,7 +257,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                     <Button
                                                         variant="ghost"
                                                         onClick={async () => {
-                                                            const { data } = await apiService.getSignedUrl(file.id, organizationId || '');
+                                                            const { data } = await apiService.getSignedUrl(file.id);
                                                             if (data?.signedUrl) window.open(data.signedUrl, '_blank');
                                                         }}
                                                         className="h-8 w-8 p-0"
@@ -269,7 +269,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                         onClick={async () => {
                                                             if (confirm('Are you sure you want to move this file to trash?')) {
                                                                  try {
-                                                                     await apiService.deleteFile(file.id, organizationId || '');
+                                                                     await apiService.deleteFile(file.id);
                                                                      showToast('File moved to trash.', "success");
                                                                  } catch (err: any) {
                                                                      showToast(`Failed to trash file: ${err.message}`, "error");
@@ -287,7 +287,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                         variant="ghost"
                                                         onClick={async () => {
                                                             try {
-                                                                await apiService.restoreFile(file.id, organizationId || '');
+                                                                await apiService.restoreFile(file.id);
                                                                 showToast('File restored.', "success");
                                                             } catch (err: any) {
                                                                 showToast(`Failed to restore file: ${err.message}`, "error");
@@ -303,7 +303,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                         onClick={async () => {
                                                             if (confirm('PERMANENT DELETE: Are you sure? This cannot be undone.')) {
                                                                 try {
-                                                                    await apiService.hardDeleteFile(file.id, organizationId || '');
+                                                                    await apiService.hardDeleteFile(file.id);
                                                                     showToast('File permanently deleted.', "success");
                                                                 } catch (err: any) {
                                                                     showToast(`Failed to delete file: ${err.message}`, "error");
