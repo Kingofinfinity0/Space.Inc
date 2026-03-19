@@ -257,7 +257,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                     <Button
                                                         variant="ghost"
                                                         onClick={async () => {
-                                                            const { data } = await apiService.getSignedUrl(file.id);
+                                                            const { data } = await apiService.getSignedUrl(file.id, organizationId || '');
                                                             if (data?.signedUrl) window.open(data.signedUrl, '_blank');
                                                         }}
                                                         className="h-8 w-8 p-0"

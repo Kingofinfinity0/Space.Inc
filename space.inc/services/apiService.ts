@@ -117,13 +117,18 @@ export const apiService = {
         return { data: data || [], error: error };
     },
 
-    async createSpace(data: { name: string; description?: string; modules?: any; metadata?: any; organizationId: string }) {
-        const { data: result, error } = await supabase.functions.invoke('createspace-api', {
+    async createSpace(name: string, description?: string, organizationId?: string) {
+        const { data, error } = await supabase.functions.invoke('createspace-api', {
             method: 'POST',
-            body: { ...data, organization_id: data.organizationId }
+            body: { name, description }
         });
-        if (error || result?.error) return { data: null, error: result?.error || { message: error?.message || 'Failed to create space' } };
-        return { data: result?.data, error: null };
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
+        
+        // Edge fn returns: { data: { id: "uuid" } } with 201
+        // invoke wraps body into data: invoke.data.data.id
+        const result = data?.data ?? data;
+        return { data: result, error: null };
     },
 
     async updateSpace(spaceId: string, updates: any, organizationId: string) {
@@ -163,40 +168,24 @@ export const apiService = {
      * @param email   - Invitee email address
      * @param role    - 'staff' | 'client' (default: 'client')
      */
-    async sendInvitation(
-        spaceId: string,
-        organizationId: string,
-        email?: string,
-        role: 'staff' | 'client' = 'client'
-    ) {
-        if (!email) {
-            return { data: null, error: { message: 'Email is required' } };
-        }
-
+    async sendClientInvitation(email: string, spaceId: string) {
         const { data, error } = await supabase.functions.invoke('invitations-api', {
             method: 'POST',
-            body: {
-                action: 'send',
-                email: email.toLowerCase().trim(),
-                role: role,
-                space_id: spaceId,
-                organization_id: organizationId
-            }
+            body: { action: 'send_client', email, space_id: spaceId }
         });
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
+        return { data: data?.data ?? data, error: null };
+    },
 
-        if (error || data?.error) {
-            const err = data?.error || error;
-            const msg = err.message || '';
-            if (msg.includes('Insufficient capability')) {
-                return { data: null, error: { message: 'You do not have permission to invite this role.', code: 'CAPABILITY_DENIED' } };
-            }
-            if (msg.includes('Active invite already exists')) {
-                return { data: null, error: { message: 'An active invitation already exists for this email.', code: 'DUPLICATE_INVITE' } };
-            }
-            return { data: null, error: { message: msg || 'Failed to send invitation.' } };
-        }
-
-        return { data: data?.data || data, error: null };
+    async sendStaffInvitation(email: string, role: 'staff' | 'admin', spaceAssignments: any[] = []) {
+        const { data, error } = await supabase.functions.invoke('invitations-api', {
+            method: 'POST',
+            body: { action: 'send_staff', email, role, space_assignments: spaceAssignments }
+        });
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
+        return { data: data?.data ?? data, error: null };
     },
 
     /**
@@ -216,37 +205,27 @@ export const apiService = {
         return { data: data ?? [], error: null };
     },
 
-    async acceptInvitation(token: string, organizationId: string) {
-        return await supabase.functions.invoke('invitations-api', {
+    async validateInvitation(token: string) {
+        const { data, error } = await supabase.functions.invoke('invitations-api', {
             method: 'POST',
-            body: { action: 'accept', token, organization_id: organizationId }
+            body: { action: 'validate', token }
         });
+        if (error) return { data: null, error: { message: error.message } };
+        return { data: data?.data ?? data, error: null };
+    },
+
+    async acceptInvitation(token: string) {
+        const { data, error } = await supabase.functions.invoke('invitations-api', {
+            method: 'POST',
+            body: { action: 'accept', token }
+        });
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
+        return { data: data?.data ?? data, error: null };
     },
 
     // --- Invitation System V3 (Supabase Native) ---
-    async sendStaffInvitation(email: string, role: string, spaceAssignments: any[]) {
-        const { data, error } = await supabase.rpc('send_staff_invitation', {
-            email,
-            role,
-            space_assignments: spaceAssignments
-        });
-        return { data, error };
-    },
 
-    async sendClientInvitation2(email: string, spaceId: string) {
-        const { data, error } = await supabase.rpc('send_client_invitation', {
-            email,
-            space_id: spaceId
-        });
-        return { data, error };
-    },
-
-    async validateInvitationContext(invitationId: string) {
-        const { data, error } = await supabase.rpc('validate_invitation_context', {
-            invitation_id: invitationId
-        });
-        return { data, error };
-    },
 
     async acceptInvitation2(invitationId: string) {
         // accepting_user_id is auth.uid() automatically injected by Supabase, 
@@ -507,13 +486,20 @@ export const apiService = {
         return { data: data || [], error: null };
     },
 
-    async getSignedUrl(fileId: string) {
+    async getSignedUrl(fileId: string, organizationId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
             body: { action: 'SIGN_URL', fileId }
         });
-        if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to get signed URL' } };
-        return { data, error: null };
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
+        
+        // Edge fn returns: { data: { signedUrl: "..." } }
+        // invoke wraps body into data, so: invoke.data.data.signedUrl
+        const result = data?.data ?? data;
+        const signedUrl = result?.signedUrl || result?.signed_url;
+        if (!signedUrl) return { data: null, error: { message: 'No signed URL returned' } };
+        return { data: { signedUrl }, error: null };
     },
 
     async registerFileMetadata(metadata: any, organizationId: string) {
@@ -525,15 +511,15 @@ export const apiService = {
         return { data, error: null };
     },
 
-    async requestUploadVoucher(spaceId: string, filename: string, contentType: string, checksum?: string, fileSize?: number) {
+    async requestUploadVoucher(spaceId: string, organizationId: string, filename: string, contentType: string, checksum?: string, fileSize?: number) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
             body: {
                 action: 'REQUEST_UPLOAD_VOUCHER',
                 spaceId,        // was: space_id
                 filename,       // was: file_name
-                contentType,    // was: content_type
-                fileSize,       // was: file_size
+                contentType,
+                fileSize: fileSize?.toString(),  // send as string now (RPC accepts text)
                 checksum
             }
         });
@@ -559,13 +545,20 @@ export const apiService = {
         return { data, error: null };
     },
 
-    async getSignedFileUrl(fileId: string) {
+    async getSignedFileUrl(fileId: string, organizationId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
             body: { action: 'SIGN_URL', fileId }
         });
-        if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to get signed URL' } };
-        return { data, error: null };
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
+        
+        // Edge fn returns: { data: { signedUrl: "..." } }
+        // invoke wraps body into data, so: invoke.data.data.signedUrl
+        const result = data?.data ?? data;
+        const signedUrl = result?.signedUrl || result?.signed_url;
+        if (!signedUrl) return { data: null, error: { message: 'No signed URL returned' } };
+        return { data: { signedUrl }, error: null };
     },
 
     async confirmUpload(fileId: string, organizationId: string, storagePath?: string, checksum?: string, fileSize?: number) {

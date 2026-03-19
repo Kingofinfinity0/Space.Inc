@@ -1,88 +1,76 @@
-// invitations-api/index.ts — SaaS Hardening V2
-// action: send → generates email-bound invitation record
-// action: accept → calls consume_invitation() SQL RPC for atomic join
+// invitations-api/index.ts — Thin Gateway V3
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getAuthContext, hydrateError, errorResponse } from 'shared/auth.ts'
 
 serve(async (req: Request) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders })
-    }
+    if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-    let supabaseClient: any;
+    let supabaseClient: any
 
     try {
-        const { userId, supabase } = await getAuthContext(req);
-        supabaseClient = supabase;
+        const body = await req.json().catch(() => ({}))
+        const { action } = body
 
-        // Resolve Profile for organization context
-        const { data: profile, error: profError } = await supabase
-            .from('profiles')
-            .select('organization_id, role')
-            .eq('id', userId)
-            .single()
+        if (!action) return new Response(JSON.stringify({ error: 'Action required' }), { status: 400, headers: corsHeaders })
 
-        if (profError || !profile) {
-            return errorResponse(await hydrateError(supabase, 'PERMISSION_DENIED', { detail: 'Profile resolution failed' }))
+        // 1. PUBLIC actions (no auth required)
+        if (action === 'validate') {
+            const { token } = body
+            if (!token) return errorResponse(await hydrateError(null, 'VAL_MISSING_FIELD', { field: 'token' }))
+            
+            const anon = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!)
+            const { data, error } = await anon.rpc('validate_invitation_context', { p_token: token })
+            if (error) throw error
+            return new Response(JSON.stringify({ data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
-        const body = await req.json()
-        const { action, space_id, email, token, role = 'client' } = body
+        // 2. PROTECTED actions (Admin/Owner)
+        const { userId, supabase } = await getAuthContext(req)
+        supabaseClient = supabase
 
-        // ── action: send ──────────────────────────────────────────────────
-        if (action === 'send') {
-            if (!email) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'email' }))
-            if (!space_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'space_id' }))
+        if (action === 'send_staff') {
+            const { email, role, space_assignments } = body
+            if (!email || !role) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD'))
 
-            // THIN GATEWAY: Call the security-hardened RPC
-            const { data: result, error: rpcError } = await supabase.rpc('invite_user_secure', {
+            const { data, error } = await supabase.rpc('send_staff_invitation', {
                 p_email: email.toLowerCase().trim(),
                 p_role: role,
-                p_space_id: space_id
+                p_space_assignments: space_assignments || []
             })
-
-            if (rpcError) throw rpcError
-
-            return new Response(JSON.stringify({
-                success: true,
-                data: result
-            }), {
-                status: 200,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            })
+            if (error) throw error
+            return new Response(JSON.stringify({ data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
-        // ── action: accept ────────────────────────────────────────────────
+        if (action === 'send_client') {
+            const { email, space_id } = body
+            if (!email || !space_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD'))
+
+            const { data, error } = await supabase.rpc('send_client_invitation', {
+                p_email: email.toLowerCase().trim(),
+                p_space_id: space_id
+            })
+            if (error) throw error
+            return new Response(JSON.stringify({ data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+
+        // 3. ATOMIC action (handled by DB logic)
         if (action === 'accept') {
+            const { token } = body
             if (!token) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'token' }))
 
-            // Call the Atomic consume_invitation RPC
-            const { data: result, error: rpcError } = await supabase.rpc('consume_invitation', {
-                p_token: token
-            })
-
+            const { data: result, error: rpcError } = await supabase.rpc('accept_invitation', { p_token: token })
             if (rpcError) throw rpcError
 
-            if (!result?.success) {
-                return errorResponse(await hydrateError(supabase, result?.error_code || 'INTERNAL_ERROR'))
-            }
-
-            return new Response(JSON.stringify({
-                success: true,
-                data: result.data
-            }), {
-                status: 200,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            })
+            return new Response(JSON.stringify({ data: result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
         return errorResponse(await hydrateError(supabase, 'METHOD_NOT_ALLOWED'))
 
-    } catch (error: any) {
-        console.error('[invitations-api] Error:', error)
-        let code = 'INTERNAL_ERROR'
-        if (error.isStandard) code = error.message
-        const richError = await hydrateError(supabaseClient, code, { detail: error.message || String(error) })
+    } catch (err: any) {
+        console.error('[invitations-api] Error:', err)
+        const code = err.isStandard ? err.message : (err.code || 'INTERNAL_ERROR')
+        const richError = await hydrateError(supabaseClient, code, { original_error: err.message || String(err) })
         return errorResponse(richError)
     }
 })

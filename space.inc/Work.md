@@ -1,114 +1,86 @@
-# Implementation Work Plan - Fixing JoinView.tsx Syntax and Logic Errors
+# Implementation Work Plan - Invitation System & Email Dispatch Fix
 
-## Sequence Diagram
+## Architecture Flow (Hardened SaaS)
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant JV as JoinView (Frontend)
-    participant AS as apiService (Frontend)
-    participant SB as Supabase (Backend)
-    participant AC as AuthContext (Frontend)
+    participant EF as Edge Function (Gateway)
+    participant SQL as SQL RPC (Logic)
+    participant DB as Table (State)
+    participant W as background-worker (Worker)
+    participant Auth as Supabase Auth (Service Role)
 
-    U->>JV: Opens link with ?token=UUID
-    JV->>JV: Extract token from URL
-    JV->>AS: validateInvitationContext(token)
-    AS->>SB: rpc('validate_invitation_context', {invitation_id: token})
-    SB-->>AS: {data: context, error: null}
-    AS-->>JV: {data: context, error: null}
+    EF->>SQL: validate & call_rpc()
+    SQL->>DB: INSERT Invitation record
+    SQL->>DB: INSERT background_job (type='send_email')
+    SQL-->>EF: Return invitation_id
+    EF-->>User: HTTP 200 Success
     
-    alt User not logged in
-        JV->>U: Show invitation details & LoginForm
-        U->>AC: Logs in / Signs up
-        AC-->>JV: user state updated
-    end
-
-    JV->>JV: trigger acceptInvitation(token)
-    JV->>AS: acceptInvitation2(token)
-    AS->>SB: rpc('accept_invitation', {invitation_id: token, ...})
-    SB-->>AS: {data: result, error: null}
-    AS-->>JV: {data: result, error: null}
-    JV->>AC: refreshCapabilities()
-    JV->>U: Show success & redirect
+    Note over W: Cron Wakes Worker
+    W->>DB: Fetch PENDING send_email jobs
+    W->>Auth: admin.inviteUserByEmail()
+    W->>DB: Update job status='done'
 ```
 
-## Thought Process
+## Phase 1: Database Logic (Status: COMPLETED)
+- [x] **Fix SQL Search Path**: Updated `send_staff_invitation` and others to include `extensions`. (**FIXED 500 errors**)
 
-The current `JoinView.tsx` file is corrupted with non-code text at the bottom and uses incorrect method names from a previous version of the `apiService`. 
+## Phase 2: The Background Engine (Asynchronous Automation)
+- [ ] **Build `background-worker`**: Generic handler for `public.background_jobs`. 
+- [ ] **Worker Handshake**: Ensure worker uses `SERVICE_ROLE_KEY` to perform Admin Auth invites.
+- [ ] **High-Frequency Cron**: Program `pg_cron` to process jobs every 1 minute.
 
-1.  **Cleanup**: I need to remove the trailing text after `export default JoinView;`.
-2.  **API Integration**: I need to update the calls to `apiService` to match the "V3 (Supabase Native)" implementation currently in `apiService.ts`.
-    - `validateInvitationToken` -> `validateInvitationContext`
-    - `acceptInvitationToken` -> `acceptInvitation2`
-3.  **Validation**: I'll ensure the flow correctly handles the "already logged in" vs "need to log in" states.
+## Phase 3: Thin Gateway & Cleanup
+- [ ] **Thin Gateway Pass**: Remove redundant email logic from `invitations-api`.
+- [ ] **Frontend Sync**: Update `apiService.ts` to correctly handle the new invitation responses.
 
-## Task List
+---
+## Founder's Research: Scalable Email Providers (Free Tier)
 
-- [x] Create `Work.md` with plan and diagram.
-- [x] Remove corrupted lines (196-214) from `JoinView.tsx`.
-- [x] Replace `apiService.validateInvitationToken` with `apiService.validateInvitationContext`.
-- [x] Replace `apiService.acceptInvitationToken` with `apiService.acceptInvitation2`.
-- [x] Verify imports and general structure.
-- [x] Confirm syntax errors are resolved.
+| Provider | Free Tier | Scaling Story | Why for Space.inc? |
+| :--- | :--- | :--- | :--- |
+| **Resend** | **3,000 emails/mo** | Linear pricing, modern API. | **Winner.** Native-like integration for Supabase. |
+| **Postmark** | 100 emails/mo | Highest deliverability. | Too small for scaling. |
+| **Amazon SES** | $0.10 / 1k | Cheapest bulk price. | High overhead for setup. Use later. |
 
-## Phase 2: Refactoring apiService.ts (File Upload & Management)
+---
+## USER SECTION NOTES
+- User reported not receiving emails.
+- Confirmed jobs are stuck in `pending` status in `public.background_jobs`.
+- **Strategy**: Maintain architectural purity (Edge -> SQL -> Worker).
 
-- [x] Edit 1: Verify `requestUploadVoucher` body uses camelCase.
-- [x] Edit 2: In `confirmUpload`, change `file_id: fileId` to `fileId`.
-- [x] Edit 3: In `deleteFile`, `restoreFile`, `hardDeleteFile`, `getSignedUrl`, `getSignedFileUrl`:
-    - [x] Remove `organization_id` from body.
-    - [x] Change `file_id: fileId` to `fileId`.
-    - [x] Clean up method signatures if `organizationId` is unused. (Decided to keep signatures for compatibility with call sites, but removed from bodies)
-
-## Phase 3: Meeting Orchestrator & Room URL Pass-through
-
-### Sequence Diagram: Instant Meeting Flow
+---
+## Resend Integration Flow
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant A as App.tsx
-    participant AS as apiService
-    participant EF as edge-function (meetings-api)
-    participant MR as MeetingRoom.tsx
-    participant D as Daily.co
+    participant SQL as SQL RPC
+    participant DB as background_jobs
+    participant W as background-worker
+    participant RE as Resend API
 
-    U->>A: Click "Instant Meeting"
-    A->>AS: createInstantMeeting({space_id, ...})
-    AS->>EF: invoke('meetings-api', {action: 'CREATE_INSTANT_MEETING', ...})
-    EF-->>AS: { data: { meeting: {...}, roomUrl: "https://..." } }
-    AS-->>A: { data: { meeting: {...}, roomUrl: "https://..." } }
-    A->>A: setActiveMeetingId(meeting.id)
-    A->>A: setActiveMeetingRoomUrl(roomUrl)
-    A->>MR: <MeetingRoom meetingId={id} roomUrl={url} />
-    MR->>MR: setupCall()
-    alt roomUrl provided as prop
-        MR->>MR: Use roomUrl prop
-    else roomUrl missing
-        MR->>AS: startMeeting(meetingId)
-        AS-->>MR: { data: { roomUrl, ... } }
-    end
-    MR->>AS: getMeetingToken(meetingId)
-    AS-->>MR: { data: { token } }
-    MR->>D: callObject.join({ url, token })
+    SQL->>DB: INSERT job (type='send_email', payload={token, to, ...})
+    Note over W: Worker polls every 60s
+    W->>DB: Fetch PENDING jobs
+    W->>W: Construct Link: ${URL}/join?token=${token}
+    W->>RE: POST /emails (API Key auth)
+    RE-->>W: 200 OK (Email Sent)
+    W->>DB: Update status='completed'
 ```
 
-### Task List
-- [x] **apiService.ts**:
-    - [x] Update `requestUploadVoucher` return to unwrap `data.data`.
-    - [x] Refactor `createInstantMeeting`: remove `organizationId`, unwrap return payload.
-    - [x] Refine `startMeeting`: use `meetingId` (camelCase) in body and unwrap result.
-- [x] **App.tsx**:
-    - [x] Add `activeMeetingRoomUrl` state.
-    - [x] Update `handleInstantMeeting` to capture room URL with optional chaining.
-    - [x] Pass `roomUrl={activeMeetingRoomUrl}` and renamed `onClose` to `onLeave`.
-- [x] **MeetingRoom.tsx**:
-    - [x] Add `roomUrl` to `MeetingRoomProps` and renamed `onClose` to `onLeave`.
-    - [x] In `setupCall`, updated fallback logic for `resolvedRoomUrl`.
+## Task List: Resend Implementation
+- [ ] **Vault Setup**: Store `RESEND_API_KEY` in Supabase Secrets.
+- [ ] **Worker Logic**: Update `background-worker/index.ts` to replace `inviteUserByEmail` with Resend Fetch.
+- [ ] **Email Templates**: Define HTML/Text templates for Staff vs Client invitations.
+- [ ] **Link Integrity**: Ensure `FRONTEND_URL` is set correctly in Edge Function env.
 
+## Task List: Resolving DNS Check Failure
+- [ ] **Identify Infrastructure**: Confirm which DNS provider is being used (Cloudflare, GoDaddy, etc.).
+- [ ] **Syntax Audit**: Verify record types (CNAME vs TXT) and Host/Value mapping.
+- [ ] **TTL & Propagation**: Check propagation via `dig` or `nslookup`.
+- [ ] **The "Root vs Subdomain" Check**: Ensure records aren't being double-appended with the root domain.
+
+---
 ## USER SECTION NOTES
-- MeetingRoom redundant call fix: Pass `roomUrl` as prop and skip straight to `GET_TOKEN`.
-- `apiService.startMeeting` signature needs `organizationId` kept (even if unused) to avoid breakage.
-- `apiService.startMeeting` body uses `meetingId` (camelCase).
-- `apiService.getMeetingToken` body uses `meetingId` (camelCase).
-- `MeetingRoom` prop `onClose` should be `onLeave`.
+- User reported: "DNS check failed: All required records are missing. Fix records in your DNS provider. Once fixed, restart verification."
+- Analysis: Resend expects at minimum 2-3 DKIM records (usually CNAME) to prove you own the domain AND have permission to send from it.

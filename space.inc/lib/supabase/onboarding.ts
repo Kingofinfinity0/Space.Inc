@@ -59,7 +59,7 @@ export const onboardingService = {
   // Verify payment and create user
   async verifyPayment(paymentData: PaymentVerificationData) {
     const { getAuthHeader } = await import('../../services/apiService');
-    const headers = await getAuthHeader(true);
+    const headers = await getAuthHeader();
 
     const { data, error } = await supabase.functions.invoke('verify-payment', {
       body: JSON.stringify(paymentData),

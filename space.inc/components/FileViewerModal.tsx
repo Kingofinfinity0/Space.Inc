@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import { Button } from './UI';
 
@@ -14,12 +15,13 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ fileId, filena
     const [url, setUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { organizationId } = useAuth();
 
     useEffect(() => {
         const fetchUrl = async () => {
             setLoading(true);
             try {
-                const { data, error } = await apiService.getSignedFileUrl(fileId);
+                const { data, error } = await apiService.getSignedFileUrl(fileId, organizationId || '');
                 if (error) throw error;
                 if (data?.signedUrl) {
                     setUrl(data.signedUrl);

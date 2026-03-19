@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../UI';
+import { supabase } from '../../lib/supabase';
 
 const STEPS = [
   {
@@ -155,7 +156,7 @@ const OnboardingForm = () => {
 
   // Helper function to get auth token
   const getAuthToken = async () => {
-    const session = await supabase.auth.session();
+    const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token;
   };
 

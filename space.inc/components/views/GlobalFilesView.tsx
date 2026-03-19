@@ -93,7 +93,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                     variant="ghost"
                                                     className="h-8 w-8 p-0"
                                                     onClick={async () => {
-                                                        const { data } = await apiService.getSignedUrl(file.id);
+                                                        const { data } = await apiService.getSignedUrl(file.id, organizationId || '');
                                                         if (data?.signedUrl) window.open(data.signedUrl, '_blank');
                                                     }}
                                                 >

@@ -22,6 +22,7 @@ import { FileUploadModal } from '../FileUploadModal';
 import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
+import { PolicySettings } from '../settings/PolicySettings';
 
 
 // 8. Settings View

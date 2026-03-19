@@ -138,7 +138,7 @@ const App = () => {
         const checkInvite = async () => {
             if (invitationToken && isAuthenticated) {
                 try {
-                    const { data, error } = await apiService.acceptInvitation(invitationToken, organizationId || '');
+                    const { data, error } = await apiService.acceptInvitation(invitationToken);
                     if (error) throw error;
                     setOnboardingSpace(data);
                 } catch (err) {
@@ -216,13 +216,11 @@ const App = () => {
     const handleCreateSpace = async (data: any) => {
         const loadingId = showToast("Creating your space...", "loading");
         try {
-            const { data: newSpace, error } = await apiService.createSpace({
-                name: data.name || 'New Client',
-                description: `Workspace for ${data.name}`,
-                modules: data.modules,
-                metadata: { features: data.modules, client_email: data.email, created_at: new Date().toISOString() },
-                organizationId: organizationId || ''
-            });
+            const { data: newSpace, error } = await apiService.createSpace(
+                data.name || 'New Client',
+                `Workspace for ${data.name || 'New Client'}`,
+                organizationId || ''
+            );
 
             if (error) throw error;
             if (newSpace) {
@@ -249,7 +247,7 @@ const App = () => {
                 showToast("Space Created Successfully!", "success");
 
                 if (data.email) {
-                    const { data: inviteRes, error: inviteErr } = await apiService.sendInvitation(newSpace.id, organizationId || '', data.email, 'client');
+                    const { data: inviteRes, error: inviteErr } = await apiService.sendClientInvitation(data.email, newSpace.id);
                     if (inviteRes) {
                         setLastInviteData({ email: inviteRes.email || data.email, invite_id: inviteRes.invite_id, status: 'pending', link: null });
                         setShowInviteModal(true);
@@ -424,6 +422,8 @@ const App = () => {
             </div>
         );
     }
+
+    if (window.location.pathname === '/join') return <JoinView />;
 
     if (globalView === 'JOIN') {
         return <JoinView />;
