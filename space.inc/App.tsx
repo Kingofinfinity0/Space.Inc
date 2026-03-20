@@ -52,9 +52,10 @@ import SettingsView from './components/views/SettingsView';
 import InboxView from './components/views/InboxView';
 import HistoryView from './components/views/HistoryView';
 import ClientPortalView from './components/views/ClientPortalView';
-import JoinView from './components/views/JoinView';
 import { InviteStaffModal } from './components/views/InviteStaffModal';
 import { MeetingRoom } from './components/MeetingRoom';
+import { Routes, Route } from 'react-router-dom';
+import JoinPage from './src/views/JoinPage';
 
 const OwnerDashboardView = StaffDashboardView;
 
@@ -423,128 +424,135 @@ const App = () => {
         );
     }
 
-    if (window.location.pathname === '/join') return <JoinView />;
-
-    if (globalView === 'JOIN') {
-        return <JoinView />;
-    }
-
-    if (!isAuthenticated) {
-        return <LoginForm onSuccess={() => { if (invitationToken) setGlobalView('ONBOARDING'); else setGlobalView('APP'); }} />;
-    }
-
-    if (globalView === 'ONBOARDING') {
-        return <ClientOnboardingView onComplete={() => { setGlobalView('APP'); window.history.replaceState({}, document.title, window.location.pathname); }} />;
-    }
-
-    if (globalView === 'AUTH') setGlobalView('APP');
-
-    if (userRole === 'client') {
-        return <ClientLayout>{renderContent()}</ClientLayout>;
-    }
-
-    if (userRole === 'owner' || userRole === 'admin' || userRole === 'staff') {
-        return (
-            <>
-                <AppLayout
-                    sidebar={
-                        <aside className="w-64 bg-[#ECECF1] border-r border-[#D1D5DB] flex flex-col justify-between p-4 z-20">
-                            <div className="space-y-8">
-                                <div className="flex items-center gap-3 px-3 mb-8 mt-2">
-                                    <div className="h-8 w-8 bg-[#10A37F] rounded-md flex items-center justify-center text-white"><Rocket size={20} /></div>
-                                    <span className="font-bold text-xl tracking-tight text-[#1D1D1D]">Space.inc</span>
-                                </div>
-                                <div className="px-2 relative mb-4">
-                                    <Search size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-[#8E8EA0]" />
-                                    <input placeholder="Search..." className="w-full bg-white border border-[#D1D5DB] rounded-md py-2 pl-10 pr-4 text-xs focus:outline-none" />
-                                </div>
-                                <nav className="space-y-1">
-                                    {can('can_view_dashboard') && <NavItem icon={<LayoutGrid size={16} />} label="Dashboard" active={currentView === ViewState.DASHBOARD} onClick={() => setCurrentView(ViewState.DASHBOARD)} />}
-                                    {can('can_view_history') && <NavItem icon={<Activity size={16} />} label="History" active={currentView === ViewState.ACTIVITY_LEDGER} onClick={() => setCurrentView(ViewState.ACTIVITY_LEDGER)} />}
-                                    {(can('can_view_all_spaces') || can('can_view_assigned_spaces')) && <NavItem icon={<Users size={16} />} label="Spaces" active={currentView === ViewState.SPACES || currentView === ViewState.SPACE_DETAIL} onClick={() => setCurrentView(ViewState.SPACES)} />}
-                                    {can('can_view_dashboard') && <NavItem icon={<Inbox size={16} />} label="Inbox" active={currentView === ViewState.INBOX} onClick={() => setCurrentView(ViewState.INBOX)} badge={inboxData.reduce((acc, curr) => acc + (curr.unread_count || 0), 0)} />}
-                                    <div className="my-4 pt-4 border-t border-[#D1D5DB]">
-                                        <p className="text-[10px] font-bold text-[#8E8EA0] uppercase tracking-wider px-3 mb-2">Management</p>
-                                        {can('can_manage_team') && <NavItem icon={<UserCheck size={16} />} label="Team" active={currentView === ViewState.STAFF} onClick={() => setCurrentView(ViewState.STAFF)} />}
-                                        {(userRole === 'owner' || userRole === 'admin') && <NavItem icon={<Briefcase size={16} />} label="CRM" active={currentView === ViewState.CRM} onClick={() => setCurrentView(ViewState.CRM)} />}
-                                        {can('can_view_tasks') && <NavItem icon={<CheckSquare size={16} />} label="Tasks" active={currentView === ViewState.TASKS} onClick={() => setCurrentView(ViewState.TASKS)} />}
-                                        {can('can_view_meetings') && <NavItem icon={<Calendar size={16} />} label="Calendar" active={currentView === ViewState.MEETINGS} onClick={() => setCurrentView(ViewState.MEETINGS)} />}
-                                        {can('can_view_files') && <NavItem icon={<FolderClosed size={16} />} label="Drive" active={currentView === ViewState.FILES} onClick={() => setCurrentView(ViewState.FILES)} />}
-                                    </div>
-                                </nav>
-                            </div>
-                            <div className="p-2 border-t border-[#D1D5DB] pt-4">
-                                <div onClick={() => setCurrentView(ViewState.SETTINGS)} className="flex items-center gap-3 p-2 rounded-md hover:bg-[#D1D5DB]/30 cursor-pointer">
-                                    <div className="h-9 w-9 bg-[#1D1D1D] rounded-md flex items-center justify-center text-white text-xs font-bold overflow-hidden">
-                                        {profile?.full_name?.substring(0, 2).toUpperCase() || 'AD'}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-medium text-sm text-[#1D1D1D] truncate">{profile?.full_name || 'User'}</p>
-                                        <p className="text-[10px] text-[#565869] font-medium uppercase">{userRole || 'Member'}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </aside>
+    return (
+        <Routes>
+            <Route path="/join" element={<JoinPage />} />
+            <Route path="*" element={
+                (() => {
+                    if (globalView === 'JOIN') {
+                        return <JoinPage />;
                     }
-                >
-                    <header className="h-16 border-b border-[#D1D5DB] flex items-center justify-between px-8 bg-white z-10 sticky top-0">
-                        <div className="flex items-center gap-2">
-                            <span className="text-[#8E8EA0] text-sm font-medium">Main</span>
-                            <ChevronRight size={14} className="text-[#D1D5DB]" />
-                            <span className="text-[#1D1D1D] text-sm font-semibold">{Object.keys(ViewState).find(key => ViewState[key as keyof typeof ViewState] === currentView)}</span>
-                        </div>
-                        <div className="flex items-center gap-6">
-                            <Button variant="primary" size="sm" className="font-semibold">Upgrade</Button>
-                        </div>
-                    </header>
-                    <div className="flex-1 overflow-y-auto bg-white">
-                        <div className="max-w-7xl mx-auto px-8 py-10">{renderContent()}</div>
-                    </div>
-                </AppLayout>
 
-                {activeMeetingId && (
-                    <MeetingRoom 
-                        meetingId={activeMeetingId}
-                        roomUrl={activeMeetingRoomUrl}
-                        onLeave={() => { setActiveMeetingId(null); setActiveMeetingRoomUrl(null); }}
-                    />
-                )}
+                    if (!isAuthenticated) {
+                        return <LoginForm onSuccess={() => { if (invitationToken) setGlobalView('ONBOARDING'); else setGlobalView('APP'); }} />;
+                    }
 
-                {isInstantMeetingModalOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                        <GlassCard className="max-w-md w-full p-8 relative">
-                            <button title="Close" onClick={() => setIsInstantMeetingModalOpen(false)} className="absolute right-4 top-4 p-2 rounded-full"><X size={18} /></button>
-                            <Heading level={2} className="mb-6 flex items-center gap-2"><Video className="text-emerald-500" /> Instant Meeting</Heading>
-                            <input placeholder="Meeting Title" value={instantMeetingTitle} onChange={(e) => setInstantMeetingTitle(e.target.value)} className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-sm mb-6" />
-                            <div className="flex gap-3">
-                                <Button variant="ghost" className="flex-1" onClick={() => setIsInstantMeetingModalOpen(false)}>Cancel</Button>
-                                <Button variant="primary" className="flex-1" onClick={() => handleInstantMeeting(instantMeetingTargetSpace!, instantMeetingTitle)}>Create</Button>
-                            </div>
-                        </GlassCard>
-                    </div>
-                )}
+                    if (globalView === 'ONBOARDING') {
+                        return <ClientOnboardingView onComplete={() => { setGlobalView('APP'); window.history.replaceState({}, document.title, window.location.pathname); }} />;
+                    }
 
-                {showInviteModal && lastInviteData && (
-                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-                        <GlassCard className="max-w-md w-full p-10 text-center relative overflow-hidden">
-                            <Rocket className="text-emerald-500 mx-auto mb-8" size={60} />
-                            <h2 className="text-3xl font-extrabold mb-2">Space Ready!</h2>
-                            <p className="text-zinc-500 mb-6">Invitation sent to <strong>{lastInviteData.email}</strong></p>
-                            <Button variant="ghost" className="w-full py-4" onClick={() => setShowInviteModal(false)}>Done</Button>
-                        </GlassCard>
-                    </div>
-                )}
+                    if (globalView === 'AUTH') setGlobalView('APP');
 
-                <InviteStaffModal 
-                    isOpen={showInviteModal && !lastInviteData} 
-                    onClose={() => setShowInviteModal(false)}
-                    spaces={clients}
-                />
-            </>
-        );
-    }
+                    if (userRole === 'client') {
+                        return <ClientLayout>{renderContent()}</ClientLayout>;
+                    }
 
-    return <ErrorView message="Identity not recognized. Please sign in again." />;
+                    if (userRole === 'owner' || userRole === 'admin' || userRole === 'staff') {
+                        return (
+                            <>
+                                <AppLayout
+                                    sidebar={
+                                        <aside className="w-64 bg-[#ECECF1] border-r border-[#D1D5DB] flex flex-col justify-between p-4 z-20">
+                                            <div className="space-y-8">
+                                                <div className="flex items-center gap-3 px-3 mb-8 mt-2">
+                                                    <div className="h-8 w-8 bg-[#10A37F] rounded-md flex items-center justify-center text-white"><Rocket size={20} /></div>
+                                                    <span className="font-bold text-xl tracking-tight text-[#1D1D1D]">Space.inc</span>
+                                                </div>
+                                                <div className="px-2 relative mb-4">
+                                                    <Search size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-[#8E8EA0]" />
+                                                    <input placeholder="Search..." className="w-full bg-white border border-[#D1D5DB] rounded-md py-2 pl-10 pr-4 text-xs focus:outline-none" />
+                                                </div>
+                                                <nav className="space-y-1">
+                                                    {can('can_view_dashboard') && <NavItem icon={<LayoutGrid size={16} />} label="Dashboard" active={currentView === ViewState.DASHBOARD} onClick={() => setCurrentView(ViewState.DASHBOARD)} />}
+                                                    {can('can_view_history') && <NavItem icon={<Activity size={16} />} label="History" active={currentView === ViewState.ACTIVITY_LEDGER} onClick={() => setCurrentView(ViewState.ACTIVITY_LEDGER)} />}
+                                                    {(can('can_view_all_spaces') || can('can_view_assigned_spaces')) && <NavItem icon={<Users size={16} />} label="Spaces" active={currentView === ViewState.SPACES || currentView === ViewState.SPACE_DETAIL} onClick={() => setCurrentView(ViewState.SPACES)} />}
+                                                    {can('can_view_dashboard') && <NavItem icon={<Inbox size={16} />} label="Inbox" active={currentView === ViewState.INBOX} onClick={() => setCurrentView(ViewState.INBOX)} badge={inboxData.reduce((acc, curr) => acc + (curr.unread_count || 0), 0)} />}
+                                                    <div className="my-4 pt-4 border-t border-[#D1D5DB]">
+                                                        <p className="text-[10px] font-bold text-[#8E8EA0] uppercase tracking-wider px-3 mb-2">Management</p>
+                                                        {can('can_manage_team') && <NavItem icon={<UserCheck size={16} />} label="Team" active={currentView === ViewState.STAFF} onClick={() => setCurrentView(ViewState.STAFF)} />}
+                                                        {(userRole === 'owner' || userRole === 'admin') && <NavItem icon={<Briefcase size={16} />} label="CRM" active={currentView === ViewState.CRM} onClick={() => setCurrentView(ViewState.CRM)} />}
+                                                        {can('can_view_tasks') && <NavItem icon={<CheckSquare size={16} />} label="Tasks" active={currentView === ViewState.TASKS} onClick={() => setCurrentView(ViewState.TASKS)} />}
+                                                        {can('can_view_meetings') && <NavItem icon={<Calendar size={16} />} label="Calendar" active={currentView === ViewState.MEETINGS} onClick={() => setCurrentView(ViewState.MEETINGS)} />}
+                                                        {can('can_view_files') && <NavItem icon={<FolderClosed size={16} />} label="Drive" active={currentView === ViewState.FILES} onClick={() => setCurrentView(ViewState.FILES)} />}
+                                                    </div>
+                                                </nav>
+                                            </div>
+                                            <div className="p-2 border-t border-[#D1D5DB] pt-4">
+                                                <div onClick={() => setCurrentView(ViewState.SETTINGS)} className="flex items-center gap-3 p-2 rounded-md hover:bg-[#D1D5DB]/30 cursor-pointer">
+                                                    <div className="h-9 w-9 bg-[#1D1D1D] rounded-md flex items-center justify-center text-white text-xs font-bold overflow-hidden">
+                                                        {profile?.full_name?.substring(0, 2).toUpperCase() || 'AD'}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-medium text-sm text-[#1D1D1D] truncate">{profile?.full_name || 'User'}</p>
+                                                        <p className="text-[10px] text-[#565869] font-medium uppercase">{userRole || 'Member'}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </aside>
+                                    }
+                                >
+                                    <header className="h-16 border-b border-[#D1D5DB] flex items-center justify-between px-8 bg-white z-10 sticky top-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[#8E8EA0] text-sm font-medium">Main</span>
+                                            <ChevronRight size={14} className="text-[#D1D5DB]" />
+                                            <span className="text-[#1D1D1D] text-sm font-semibold">{Object.keys(ViewState).find(key => ViewState[key as keyof typeof ViewState] === currentView)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-6">
+                                            <Button variant="primary" size="sm" className="font-semibold">Upgrade</Button>
+                                        </div>
+                                    </header>
+                                    <div className="flex-1 overflow-y-auto bg-white">
+                                        <div className="max-w-7xl mx-auto px-8 py-10">{renderContent()}</div>
+                                    </div>
+                                </AppLayout>
+
+                                {activeMeetingId && (
+                                    <MeetingRoom 
+                                        meetingId={activeMeetingId}
+                                        roomUrl={activeMeetingRoomUrl}
+                                        onLeave={() => { setActiveMeetingId(null); setActiveMeetingRoomUrl(null); }}
+                                    />
+                                )}
+
+                                {isInstantMeetingModalOpen && (
+                                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                                        <GlassCard className="max-w-md w-full p-8 relative">
+                                            <button title="Close" onClick={() => setIsInstantMeetingModalOpen(false)} className="absolute right-4 top-4 p-2 rounded-full"><X size={18} /></button>
+                                            <Heading level={2} className="mb-6 flex items-center gap-2"><Video className="text-emerald-500" /> Instant Meeting</Heading>
+                                            <input placeholder="Meeting Title" value={instantMeetingTitle} onChange={(e) => setInstantMeetingTitle(e.target.value)} className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-sm mb-6" />
+                                            <div className="flex gap-3">
+                                                <Button variant="ghost" className="flex-1" onClick={() => setIsInstantMeetingModalOpen(false)}>Cancel</Button>
+                                                <Button variant="primary" className="flex-1" onClick={() => handleInstantMeeting(instantMeetingTargetSpace!, instantMeetingTitle)}>Create</Button>
+                                            </div>
+                                        </GlassCard>
+                                    </div>
+                                )}
+
+                                {showInviteModal && lastInviteData && (
+                                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                                        <GlassCard className="max-w-md w-full p-10 text-center relative overflow-hidden">
+                                            <Rocket className="text-emerald-500 mx-auto mb-8" size={60} />
+                                            <h2 className="text-3xl font-extrabold mb-2">Space Ready!</h2>
+                                            <p className="text-zinc-500 mb-6">Invitation sent to <strong>{lastInviteData.email}</strong></p>
+                                            <Button variant="ghost" className="w-full py-4" onClick={() => setShowInviteModal(false)}>Done</Button>
+                                        </GlassCard>
+                                    </div>
+                                )}
+
+                                <InviteStaffModal 
+                                    isOpen={showInviteModal && !lastInviteData} 
+                                    onClose={() => setShowInviteModal(false)}
+                                    spaces={clients}
+                                />
+                            </>
+                        );
+                    }
+
+                    return <ErrorView message="Identity not recognized. Please sign in again." />;
+                })()
+            } />
+        </Routes>
+    );
 };
 
 export default App;

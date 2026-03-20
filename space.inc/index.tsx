@@ -7,6 +7,8 @@ import { ToastProvider } from './contexts/ToastContext';
 import { initializeFetchLogger } from './utils/fetchLogger';
 import { Analytics } from '@vercel/analytics/react';
 
+import { BrowserRouter } from 'react-router-dom';
+
 // TASK 2: Initialize global fetch logger to detect phantom requests
 // This will log ALL fetch calls and highlight suspicious ones
 initializeFetchLogger();
@@ -19,11 +21,13 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <AuthProvider>
-      <ToastProvider>
-        <App />
-        <Analytics />
-      </ToastProvider>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <ToastProvider>
+          <App />
+          <Analytics />
+        </ToastProvider>
+      </AuthProvider>
+    </BrowserRouter>
   </React.StrictMode>
 );
