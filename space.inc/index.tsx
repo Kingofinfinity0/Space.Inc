@@ -5,6 +5,7 @@ import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { initializeFetchLogger } from './utils/fetchLogger';
+import { Analytics } from '@vercel/analytics/react';
 
 // TASK 2: Initialize global fetch logger to detect phantom requests
 // This will log ALL fetch calls and highlight suspicious ones
@@ -21,6 +22,7 @@ root.render(
     <AuthProvider>
       <ToastProvider>
         <App />
+        <Analytics />
       </ToastProvider>
     </AuthProvider>
   </React.StrictMode>

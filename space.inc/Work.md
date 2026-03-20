@@ -1,38 +1,37 @@
 # Implementation Work Plan - Invitation System & Email Dispatch Fix
 
-## Architecture Flow (Hardened SaaS)
+## Architecture Flow (Hardened SaaS - Direct Dispatch)
 
 ```mermaid
 sequenceDiagram
-    participant EF as Edge Function (Gateway)
-    participant SQL as SQL RPC (Logic)
-    participant DB as Table (State)
-    participant W as background-worker (Worker)
-    participant Auth as Supabase Auth (Service Role)
+    participant User as Admin User
+    participant Inv as invitations-api
+    participant SQL as SQL RPC
+    participant Res as resend-api
+    participant RE as Resend SMTP/API
 
-    EF->>SQL: validate & call_rpc()
-    SQL->>DB: INSERT Invitation record
-    SQL->>DB: INSERT background_job (type='send_email')
-    SQL-->>EF: Return invitation_id
-    EF-->>User: HTTP 200 Success
-    
-    Note over W: Cron Wakes Worker
-    W->>DB: Fetch PENDING send_email jobs
-    W->>Auth: admin.inviteUserByEmail()
-    W->>DB: Update job status='done'
+    User->>Inv: POST /send_staff
+    Inv->>SQL: call_rpc()
+    SQL->>SQL: INSERT invite record (Status: pending)
+    SQL-->>Inv: Return {token, org_id}
+    Inv->>Res: POST /send (Sync Call)
+    Res->>RE: POST /emails (External)
+    Inv-->>User: 200 OK (Invite Processed)
 ```
 
 ## Phase 1: Database Logic (Status: COMPLETED)
 - [x] **Fix SQL Search Path**: Updated `send_staff_invitation` and others to include `extensions`. (**FIXED 500 errors**)
 
 ## Phase 2: The Background Engine (Asynchronous Automation)
-- [ ] **Build `background-worker`**: Generic handler for `public.background_jobs`. 
-- [ ] **Worker Handshake**: Ensure worker uses `SERVICE_ROLE_KEY` to perform Admin Auth invites.
-- [ ] **High-Frequency Cron**: Program `pg_cron` to process jobs every 1 minute.
+- [x] **Audit RPCs**: Confirmed `send_staff_invitation` and `send_client_invitation` return `token` and `org_id`.
+- [x] **Worker Update**: Updated `background-worker` to include Resend logic (as fallback/audit).
 
-## Phase 3: Thin Gateway & Cleanup
-- [ ] **Thin Gateway Pass**: Remove redundant email logic from `invitations-api`.
-- [ ] **Frontend Sync**: Update `apiService.ts` to correctly handle the new invitation responses.
+## Phase 3: Direct Dispatch (Resend-API Sync) - COMPLETED
+- [x] **Create `resend-api`**: Dedicated edge function for template rendering.
+- [x] **Update `invitations-api`**: Move from Async (Worker) to Sync (Direct) dispatch (V4).
+- [x] **Template Audit**: Verified `email_templates` table and keys exist.
+- [x] **Vercel Analytics**: Installed `@vercel/analytics` and added to `index.tsx`.
+- [ ] **Deployment**: User to deploy functions via CLI.
 
 ---
 ## Founder's Research: Scalable Email Providers (Free Tier)
@@ -46,41 +45,18 @@ sequenceDiagram
 ---
 ## USER SECTION NOTES
 - User reported not receiving emails.
-- Confirmed jobs are stuck in `pending` status in `public.background_jobs`.
-- **Strategy**: Maintain architectural purity (Edge -> SQL -> Worker).
+- Diagnosis: `background-worker` was using Supabase Auth (AWS SES) instead of Resend, causing "Already Registered" errors for existing users.
+- **New Strategy**: Direct sync call to `resend-api` for instant feedback and bypassing Auth service limitations.
 
 ---
-## Resend Integration Flow
-
-```mermaid
-sequenceDiagram
-    participant SQL as SQL RPC
-    participant DB as background_jobs
-    participant W as background-worker
-    participant RE as Resend API
-
-    SQL->>DB: INSERT job (type='send_email', payload={token, to, ...})
-    Note over W: Worker polls every 60s
-    W->>DB: Fetch PENDING jobs
-    W->>W: Construct Link: ${URL}/join?token=${token}
-    W->>RE: POST /emails (API Key auth)
-    RE-->>W: 200 OK (Email Sent)
-    W->>DB: Update status='completed'
-```
-
-## Task List: Resend Implementation
-- [ ] **Vault Setup**: Store `RESEND_API_KEY` in Supabase Secrets.
-- [ ] **Worker Logic**: Update `background-worker/index.ts` to replace `inviteUserByEmail` with Resend Fetch.
-- [ ] **Email Templates**: Define HTML/Text templates for Staff vs Client invitations.
-- [ ] **Link Integrity**: Ensure `FRONTEND_URL` is set correctly in Edge Function env.
-
-## Task List: Resolving DNS Check Failure
-- [ ] **Identify Infrastructure**: Confirm which DNS provider is being used (Cloudflare, GoDaddy, etc.).
-- [ ] **Syntax Audit**: Verify record types (CNAME vs TXT) and Host/Value mapping.
-- [ ] **TTL & Propagation**: Check propagation via `dig` or `nslookup`.
-- [ ] **The "Root vs Subdomain" Check**: Ensure records aren't being double-appended with the root domain.
+## DNS Verification Protocol (Resend Logic)
+- Status: **Pending Verification**
+- Problem: "All required records are missing"
+- Resolution: User adding TXT (DKIM/SPF) and MX records to DNS Provider.
 
 ---
-## USER SECTION NOTES
-- User reported: "DNS check failed: All required records are missing. Fix records in your DNS provider. Once fixed, restart verification."
-- Analysis: Resend expects at minimum 2-3 DKIM records (usually CNAME) to prove you own the domain AND have permission to send from it.
+## TASK LIST: High Performance Implementation
+- [ ] Step 1: Create `supabase/functions/resend-api/index.ts`.
+- [ ] Step 2: Update `supabase/functions/invitations-api/index.ts` to V4.
+- [ ] Step 3: Verify `email_templates` database data.
+- [ ] Step 4: Deploy functions.

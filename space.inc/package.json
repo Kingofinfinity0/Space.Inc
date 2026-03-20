@@ -13,6 +13,7 @@
     "@daily-co/daily-react": "^0.24.0",
     "@hookform/resolvers": "^5.2.2",
     "@supabase/supabase-js": "^2.88.0",
+    "@vercel/analytics": "^2.0.1",
     "lucide-react": "^0.556.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
