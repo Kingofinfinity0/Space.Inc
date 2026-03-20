@@ -59,11 +59,11 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ fileId, filena
                     </div>
                     <div className="flex items-center gap-2">
                         {url && (
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors">
+                            <a href={url} target="_blank" rel="noopener noreferrer" title="Open in new tab" className="p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors">
                                 <ExternalLink size={20} />
                             </a>
                         )}
-                        <button onClick={onClose} className="p-2 text-zinc-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                        <button title="Close" onClick={onClose} className="p-2 text-zinc-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                             <X size={20} />
                         </button>
                     </div>

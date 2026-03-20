@@ -31,6 +31,8 @@ sequenceDiagram
 - [x] **Update `invitations-api`**: Move from Async (Worker) to Sync (Direct) dispatch (V4).
 - [x] **Template Audit**: Verified `email_templates` table and keys exist.
 - [x] **Vercel Analytics**: Installed `@vercel/analytics` and added to `index.tsx`.
+- [x] **Vercel Routing Fix**: Added `vercel.json` for SPA rewrites.
+- [x] **Join Page**: Created `src/views/JoinPage.tsx` and integrated with `Routes`.
 - [ ] **Deployment**: User to deploy functions via CLI.
 
 ---

@@ -63,114 +63,54 @@ export default function JoinPage() {
   }
 
   if (status === 'loading') return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <p style={styles.muted}>Verifying your invitation...</p>
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] font-sans">
+      <div className="bg-[#111] border border-[#222] rounded-[12px] p-12 px-10 max-w-[460px] w-full text-center">
+        <p className="text-[#666] text-[14px] leading-relaxed">Verifying your invitation...</p>
       </div>
     </div>
   )
 
   if (status === 'invalid' || status === 'error') return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h2 style={styles.title}>Link Expired</h2>
-        <p style={styles.muted}>{errorMsg}</p>
-        <p style={styles.muted}>Contact the person who invited you to send a new link.</p>
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] font-sans">
+      <div className="bg-[#111] border border-[#222] rounded-[12px] p-12 px-10 max-w-[460px] w-full text-center">
+        <h2 className="text-white text-[24px] font-semibold mb-3">Link Expired</h2>
+        <p className="text-[#666] text-[14px] leading-relaxed mb-4">{errorMsg}</p>
+        <p className="text-[#666] text-[14px] leading-relaxed">Contact the person who invited you to send a new link.</p>
       </div>
     </div>
   )
 
   if (status === 'done') return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h2 style={styles.title}>You're in.</h2>
-        <p style={styles.muted}>Account created. Redirecting to login...</p>
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] font-sans">
+      <div className="bg-[#111] border border-[#222] rounded-[12px] p-12 px-10 max-w-[460px] w-full text-center">
+        <h2 className="text-white text-[24px] font-semibold mb-3">You're in.</h2>
+        <p className="text-[#666] text-[14px] leading-relaxed">Account created. Redirecting to login...</p>
       </div>
     </div>
   )
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={styles.logo}>Space.inc</div>
-        <h2 style={styles.title}>You're invited</h2>
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] font-sans">
+      <div className="bg-[#111] border border-[#222] rounded-[12px] p-12 px-10 max-w-[460px] w-full text-center">
+        <div className="text-white font-bold text-[18px] mb-8 tracking-tight">Space.inc</div>
+        <h2 className="text-white text-[24px] font-semibold mb-3">You're invited</h2>
         {context && (
-          <p style={styles.subtitle}>
+          <p className="text-[#aaa] text-[15px] leading-relaxed mb-8">
             <strong>{context.inviter_name}</strong> has invited you to join{' '}
             <strong>{context.org_name}</strong> as a <strong>{context.role}</strong>.
           </p>
         )}
         <button
-          style={styles.button}
+          className="bg-[#10b981] text-white border-none rounded-[8px] p-3.5 px-7 text-[15px] font-semibold cursor-pointer w-full mb-4 disabled:opacity-50"
           onClick={handleAccept}
           disabled={status === 'accepting'}
         >
           {status === 'accepting' ? 'Setting up your account...' : 'Accept Invitation →'}
         </button>
-        <p style={styles.fine}>
+        <p className="text-[#444] text-[12px]">
           By accepting, you agree to Space.inc's terms of service.
         </p>
       </div>
     </div>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0a0a0a',
-    fontFamily: 'Inter, sans-serif',
-  },
-  card: {
-    backgroundColor: '#111',
-    border: '1px solid #222',
-    borderRadius: '12px',
-    padding: '48px 40px',
-    maxWidth: '460px',
-    width: '100%',
-    textAlign: 'center',
-  },
-  logo: {
-    color: '#fff',
-    fontWeight: 700,
-    fontSize: '18px',
-    marginBottom: '32px',
-    letterSpacing: '-0.5px',
-  },
-  title: {
-    color: '#fff',
-    fontSize: '24px',
-    fontWeight: 600,
-    margin: '0 0 12px',
-  },
-  subtitle: {
-    color: '#aaa',
-    fontSize: '15px',
-    lineHeight: 1.6,
-    margin: '0 0 32px',
-  },
-  muted: {
-    color: '#666',
-    fontSize: '14px',
-    lineHeight: 1.6,
-  },
-  button: {
-    backgroundColor: '#10b981',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '14px 28px',
-    fontSize: '15px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    width: '100%',
-    marginBottom: '16px',
-  },
-  fine: {
-    color: '#444',
-    fontSize: '12px',
-  }
 }
