@@ -90,6 +90,7 @@ const App = () => {
     const [activeMeetingRoomUrl, setActiveMeetingRoomUrl] = useState<string | null>(null);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [lastInviteData, setLastInviteData] = useState<{ link: string | null, email: string, status?: string, invite_id?: string } | null>(null);
+    const [copiedLink, setCopiedLink] = useState(false);
 
     // Data State
     const [clients, setClients] = useState<ClientSpace[]>([]);
@@ -248,10 +249,13 @@ const App = () => {
                 showToast("Space Created Successfully!", "success");
 
                 if (data.email) {
-                    const { data: inviteRes, error: inviteErr } = await apiService.sendClientInvitation(data.email, newSpace.id);
-                    if (inviteRes) {
-                        setLastInviteData({ email: inviteRes.email || data.email, invite_id: inviteRes.invite_id, status: 'pending', link: null });
+                    try {
+                        const invite = await apiService.generateClientInviteLink(data.email, optimisticSpace.id);
+                        setLastInviteData({ email: data.email, link: invite.invite_link });
                         setShowInviteModal(true);
+                    } catch (inviteError) {
+                        console.error("Invite Error:", inviteError);
+                        showToast("Space created, but invite link generation failed.", "info");
                     }
                 }
             }
@@ -531,10 +535,43 @@ const App = () => {
                                 {showInviteModal && lastInviteData && (
                                     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
                                         <GlassCard className="max-w-md w-full p-10 text-center relative overflow-hidden">
-                                            <Rocket className="text-emerald-500 mx-auto mb-8" size={60} />
-                                            <h2 className="text-3xl font-extrabold mb-2">Space Ready!</h2>
-                                            <p className="text-zinc-500 mb-6">Invitation sent to <strong>{lastInviteData.email}</strong></p>
-                                            <Button variant="ghost" className="w-full py-4" onClick={() => setShowInviteModal(false)}>Done</Button>
+                                            <div className="h-20 w-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner border border-emerald-100/50">
+                                                <Rocket className="text-emerald-500" size={40} />
+                                            </div>
+                                            <h2 className="text-3xl font-extrabold mb-2 tracking-tight text-zinc-900">Space Ready!</h2>
+                                            <p className="text-zinc-500 mb-8 font-light leading-relaxed">
+                                                Invite generated for <strong>{lastInviteData.email}</strong>.<br/> Share the link below with your client.
+                                            </p>
+                                            
+                                            <div className="space-y-4 mb-10">
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        readOnly 
+                                                        title="Invitation Link"
+                                                        value={lastInviteData.link || ''} 
+                                                        className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-xs font-mono text-zinc-600 focus:outline-none"
+                                                    />
+                                                    <Button 
+                                                        variant={copiedLink ? "primary" : "secondary"}
+                                                        size="sm" 
+                                                        onClick={() => {
+                                                            if (lastInviteData.link) {
+                                                                navigator.clipboard.writeText(lastInviteData.link);
+                                                                setCopiedLink(true);
+                                                                setTimeout(() => setCopiedLink(false), 2000);
+                                                            }
+                                                        }}
+                                                        className="min-w-[100px] font-bold uppercase tracking-widest text-[10px]"
+                                                    >
+                                                        {copiedLink ? 'Copied!' : 'Copy Link'}
+                                                    </Button>
+                                                </div>
+                                                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest italic bg-zinc-50 py-2 rounded-full inline-block px-5 border border-zinc-100">
+                                                    This link expires in 72 hours
+                                                </p>
+                                            </div>
+
+                                            <Button variant="primary" className="w-full py-4 text-sm font-black uppercase tracking-[0.2em]" onClick={() => { setShowInviteModal(false); setLastInviteData(null); }}>Done</Button>
                                         </GlassCard>
                                     </div>
                                 )}

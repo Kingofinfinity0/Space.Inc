@@ -33,6 +33,15 @@ sequenceDiagram
 - [x] **Vercel Analytics**: Installed `@vercel/analytics` and added to `index.tsx`.
 - [x] **Vercel Routing Fix**: Added `vercel.json` for SPA rewrites.
 - [x] **Join Page**: Created `src/views/JoinPage.tsx` and integrated with `Routes`.
+### Phase 3: Deployment & Invitation Flow (Manual Sharing) - IN PROGRESS
+- [x] Vercel Analytics Integration
+- [x] Vercel Routing Fix (vercel.json)
+- [x] Join Page Implementation (/join)
+- [x] SPA-20: Invite Link Generation Flow
+  - [x] Update apiService with generate link RPCs
+  - [x] Implement copy-button success state in Staff Modal
+  - [x] Implement copy-button success state in Client Space creation
+  - [x] Accessibility fixes (title attributes)
 - [ ] **Deployment**: User to deploy functions via CLI.
 
 ---

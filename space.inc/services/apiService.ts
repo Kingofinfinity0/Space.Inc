@@ -168,24 +168,23 @@ export const apiService = {
      * @param email   - Invitee email address
      * @param role    - 'staff' | 'client' (default: 'client')
      */
-    async sendClientInvitation(email: string, spaceId: string) {
-        const { data, error } = await supabase.functions.invoke('invitations-api', {
-            method: 'POST',
-            body: { action: 'send_client', email, space_id: spaceId }
+    async generateClientInviteLink(email: string, spaceId: string) {
+        const { data, error } = await supabase.rpc('generate_client_invite_link', {
+            p_email: email,
+            p_space_id: spaceId
         });
-        if (error) return { data: null, error: { message: error.message } };
-        if (data?.error) return { data: null, error: data.error };
-        return { data: data?.data ?? data, error: null };
+        if (error) throw error;
+        return data;
     },
 
-    async sendStaffInvitation(email: string, role: 'staff' | 'admin', spaceAssignments: any[] = []) {
-        const { data, error } = await supabase.functions.invoke('invitations-api', {
-            method: 'POST',
-            body: { action: 'send_staff', email, role, space_assignments: spaceAssignments }
+    async generateStaffInviteLink(email: string, role: string, spaceAssignments: any[] = []) {
+        const { data, error } = await supabase.rpc('generate_staff_invite_link', {
+            p_email: email,
+            p_role: role,
+            p_space_assignments: spaceAssignments
         });
-        if (error) return { data: null, error: { message: error.message } };
-        if (data?.error) return { data: null, error: data.error };
-        return { data: data?.data ?? data, error: null };
+        if (error) throw error;
+        return data;
     },
 
     /**

@@ -24,6 +24,8 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
     const [loading, setLoading] = useState(false);
     const [sent, setSent] = useState(false);
     const [sentEmail, setSentEmail] = useState('');
+    const [inviteLink, setInviteLink] = useState('');
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -33,6 +35,8 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
             setLoading(false);
             setSent(false);
             setSentEmail('');
+            setInviteLink('');
+            setCopied(false);
         }
     }, [isOpen]);
 
@@ -61,6 +65,12 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
         }));
     };
 
+    const handleCopy = () => {
+        navigator.clipboard.writeText(inviteLink);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email.trim()) return showToast('Email is required', 'error');
@@ -72,19 +82,8 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
 
         setLoading(true);
         try {
-            const { data, error } = await apiService.sendStaffInvitation(email.trim(), role, spaceAssignments);
-
-            if (error) {
-                if (error.code === 'DUPLICATE_INVITE' || error.message?.includes('DUPLICATE_INVITE')) {
-                    showToast('An active invitation already exists for this email.', 'error');
-                } else if (error.code === 'PERMISSION_DENIED' || error.message?.includes('PERMISSION_DENIED')) {
-                    showToast('Only owners and admins can invite staff.', 'error');
-                } else {
-                    showToast(error.message || 'Failed to send invitation.', 'error');
-                }
-                return;
-            }
-
+            const data = await apiService.generateStaffInviteLink(email.trim(), role, spaceAssignments);
+            setInviteLink(data.invite_link);
             setSentEmail(email.trim());
             setSent(true);
         } catch (err: any) {
@@ -102,12 +101,34 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                     <div className="h-16 w-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
                         <Rocket className="text-emerald-500" size={32} />
                     </div>
-                    <Heading level={3} className="mb-2 text-zinc-900">Invitation Sent!</Heading>
-                    <p className="text-zinc-500 mb-2">
-                        An email has been sent to <strong>{sentEmail}</strong> with a link to join your workspace.
+                    <Heading level={3} className="mb-2 text-zinc-900">Invite Created!</Heading>
+                    <p className="text-zinc-500 mb-6 font-light">
+                        Staff invite generated for <strong>{sentEmail}</strong>. Share the link below manually.
                     </p>
-                    <p className="text-xs text-zinc-400 mb-8">The link expires in 72 hours.</p>
-                    <Button variant="primary" className="w-full" onClick={onClose}>Done</Button>
+                    
+                    <div className="space-y-4 mb-8">
+                        <div className="flex gap-2">
+                            <input 
+                                readOnly 
+                                title="Invitation Link"
+                                value={inviteLink} 
+                                className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-2.5 text-xs font-mono text-zinc-600 focus:outline-none"
+                            />
+                            <Button 
+                                variant={copied ? "primary" : "outline"}
+                                size="sm" 
+                                onClick={handleCopy}
+                                className="min-w-[90px] text-xs font-bold uppercase transition-all"
+                            >
+                                {copied ? 'Copied!' : 'Copy'}
+                            </Button>
+                        </div>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest bg-zinc-50 py-1.5 rounded-full inline-block px-4 border border-zinc-100 italic">
+                            Expires in 72 hours
+                        </p>
+                    </div>
+
+                    <Button variant="primary" className="w-full py-4 text-sm font-black uppercase tracking-widest" onClick={onClose}>Done</Button>
                 </GlassCard>
             </div>
         );
@@ -251,7 +272,7 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                             className="flex-1"
                             disabled={loading || !email.trim()}
                         >
-                            {loading ? 'Sending...' : 'Send Invitation'}
+                            {loading ? 'Generating...' : 'Generate Invite Link'}
                         </Button>
                     </div>
                 </form>
