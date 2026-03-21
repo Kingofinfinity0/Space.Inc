@@ -33,6 +33,13 @@ sequenceDiagram
 - [x] **Vercel Analytics**: Installed `@vercel/analytics` and added to `index.tsx`.
 - [x] **Vercel Routing Fix**: Added `vercel.json` for SPA rewrites.
 - [x] **Join Page**: Created `src/views/JoinPage.tsx` and integrated with `Routes`.
+## Phase 4: Invitations Management & Hybrid Join Flow (COMPLETED)
+- [x] **Invitations Management View**: Created `InvitationsManagementView.tsx` with list, revoke, and edit functionality.
+- [x] **Edit Email Identity**: Implemented "Update & Reissue" modal for pending invitations.
+- [x] **Hybrid Join Flow**: Refactored `JoinPage.tsx` to handle status checks (Revoked, Expired, Accepted) and post-acceptance redirection.
+- [x] **Team Sidebar Integration**: Added "Invitations" navigation item for admins.
+- [x] **Mobile & Accessibility Audit**: Fixed input labels and accessibility titles in modals.
+
 ### Phase 3: Deployment & Invitation Flow (Manual Sharing) - IN PROGRESS
 - [x] Vercel Analytics Integration
 - [x] Vercel Routing Fix (vercel.json)
@@ -54,6 +61,12 @@ sequenceDiagram
 | **Amazon SES** | $0.10 / 1k | Cheapest bulk price. | High overhead for setup. Use later. |
 
 ---
+## Founder's Research: Scalability Metrics
+- Invitations: 100% manual sharing (Zero email cost/deliverability risk).
+- Verification: JWT-based domain validation for `/join`.
+- Performance: Edge-cached routing via `vercel.json`.
+
+---
 ## USER SECTION NOTES
 - User reported not receiving emails.
 - Diagnosis: `background-worker` was using Supabase Auth (AWS SES) instead of Resend, causing "Already Registered" errors for existing users.
@@ -66,8 +79,9 @@ sequenceDiagram
 - Resolution: User adding TXT (DKIM/SPF) and MX records to DNS Provider.
 
 ---
-## TASK LIST: High Performance Implementation
-- [ ] Step 1: Create `supabase/functions/resend-api/index.ts`.
-- [ ] Step 2: Update `supabase/functions/invitations-api/index.ts` to V4.
-- [ ] Step 3: Verify `email_templates` database data.
-- [ ] Step 4: Deploy functions.
+## TASK LIST: High Performance Implementation (FINAL)
+- [x] Step 1: Update `apiService.ts` with 7 new lifecycle methods.
+- [x] Step 2: Implement `InvitationsManagementView.tsx`.
+- [x] Step 3: Refactor `JoinPage.tsx` for robust status handling.
+- [x] Step 4: Fix accessibility lints in `InviteStaffModal.tsx`.
+- [x] Step 5: Final deployment via Vercel CLI.

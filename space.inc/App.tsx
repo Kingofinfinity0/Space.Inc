@@ -21,7 +21,8 @@ import {
     FileVideo,
     X,
     Search,
-    Copy
+    Copy,
+    Key
 } from 'lucide-react';
 import {
     Button,
@@ -32,7 +33,12 @@ import {
     SkeletonText,
     SkeletonCard
 } from './components/UI/index';
-import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ClientLifecycle } from './types';
+import { FileViewerModal } from './components/FileViewerModal';
+import { FileUploadModal } from './components/FileUploadModal';
+import { InvitationsManagementView } from './components/views/InvitationsManagementView';
+import {
+    ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle, Invitation
+} from './types';
 import { Onboarding as ClientOnboardingView } from './components/Onboarding';
 import { supabase } from './lib/supabase';
 
@@ -390,6 +396,9 @@ const App = () => {
             case ViewState.SETTINGS:
                 if (!can('can_view_settings')) return <div className="p-8">Access Denied</div>;
                 return <SettingsView />;
+            case ViewState.INVITATIONS:
+                if (!can('can_manage_team')) return <div className="p-8">Access Denied</div>;
+                return <InvitationsManagementView />;
             default:
                 return <div className="p-8">View Not Found</div>;
         }
@@ -474,6 +483,7 @@ const App = () => {
                                                     <div className="my-4 pt-4 border-t border-[#D1D5DB]">
                                                         <p className="text-[10px] font-bold text-[#8E8EA0] uppercase tracking-wider px-3 mb-2">Management</p>
                                                         {can('can_manage_team') && <NavItem icon={<UserCheck size={16} />} label="Team" active={currentView === ViewState.STAFF} onClick={() => setCurrentView(ViewState.STAFF)} />}
+                                                        {can('can_manage_team') && <NavItem icon={<Key size={16} />} label="Invitations" active={currentView === ViewState.INVITATIONS} onClick={() => setCurrentView(ViewState.INVITATIONS)} />}
                                                         {(userRole === 'owner' || userRole === 'admin') && <NavItem icon={<Briefcase size={16} />} label="CRM" active={currentView === ViewState.CRM} onClick={() => setCurrentView(ViewState.CRM)} />}
                                                         {can('can_view_tasks') && <NavItem icon={<CheckSquare size={16} />} label="Tasks" active={currentView === ViewState.TASKS} onClick={() => setCurrentView(ViewState.TASKS)} />}
                                                         {can('can_view_meetings') && <NavItem icon={<Calendar size={16} />} label="Calendar" active={currentView === ViewState.MEETINGS} onClick={() => setCurrentView(ViewState.MEETINGS)} />}

@@ -10,7 +10,20 @@ export enum ViewState {
   STAFF = 'STAFF',
   SETTINGS = 'SETTINGS',
   ACTIVITY_LEDGER = 'ACTIVITY_LEDGER',
-  CRM = 'CRM'
+  CRM = 'CRM',
+  INVITATIONS = 'INVITATIONS'
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: string;
+  status: 'pending' | 'accepted' | 'expired' | 'revoked';
+  expires_at: string;
+  created_at: string;
+  invited_by: string;
+  token?: string;
+  type: 'staff' | 'client';
 }
 
 export interface ClientSpace {

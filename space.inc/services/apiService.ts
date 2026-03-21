@@ -168,76 +168,64 @@ export const apiService = {
      * @param email   - Invitee email address
      * @param role    - 'staff' | 'client' (default: 'client')
      */
-    async generateClientInviteLink(email: string, spaceId: string) {
+    async generateClientInviteLink(email: string, spaceId: string, expiresAt?: string) {
         const { data, error } = await supabase.rpc('generate_client_invite_link', {
             p_email: email,
-            p_space_id: spaceId
+            p_space_id: spaceId,
+            p_expires_at: expiresAt
         });
         if (error) throw error;
         return data;
     },
 
-    async generateStaffInviteLink(email: string, role: string, spaceAssignments: any[] = []) {
+    async generateStaffInviteLink(email: string, role: string, spaceAssignments: any[] = [], expiresAt?: string) {
         const { data, error } = await supabase.rpc('generate_staff_invite_link', {
             p_email: email,
             p_role: role,
-            p_space_assignments: spaceAssignments
+            p_space_assignments: spaceAssignments,
+            p_expires_at: expiresAt
         });
         if (error) throw error;
         return data;
     },
 
-    /**
-     * Lists pending invitations for a given space.
-     * Subject to RLS: only visible to space members.
-     */
-    async getInvitations(spaceId: string) {
-        const { data, error } = await supabase
-            .from('invitations')
-            .select('id, email, role, status, expires_at, created_at, invited_by')
-            .eq('space_id', spaceId)
-            .eq('status', 'pending')
-            .gt('expires_at', new Date().toISOString())
-            .order('created_at', { ascending: false });
-
-        if (error) return { data: null, error };
-        return { data: data ?? [], error: null };
-    },
-
-    async validateInvitation(token: string) {
-        const { data, error } = await supabase.functions.invoke('invitations-api', {
-            method: 'POST',
-            body: { action: 'validate', token }
+    async validateInvitationContext(token: string) {
+        const { data, error } = await supabase.rpc('validate_invitation_context', {
+            p_token: token
         });
-        if (error) return { data: null, error: { message: error.message } };
-        return { data: data?.data ?? data, error: null };
+        if (error) throw error;
+        return data;
     },
 
     async acceptInvitation(token: string) {
-        const { data, error } = await supabase.functions.invoke('invitations-api', {
-            method: 'POST',
-            body: { action: 'accept', token }
+        const { data, error } = await supabase.rpc('accept_invitation', {
+            p_token: token
         });
-        if (error) return { data: null, error: { message: error.message } };
-        if (data?.error) return { data: null, error: data.error };
-        return { data: data?.data ?? data, error: null };
+        if (error) throw error;
+        return data;
     },
 
-    // --- Invitation System V3 (Supabase Native) ---
-
-
-    async acceptInvitation2(invitationId: string) {
-        // accepting_user_id is auth.uid() automatically injected by Supabase, 
-        // wait, accept_invitation signature in PG requires accepting_user_id !
-        // Let's pass it by calling auth.getUser()
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("Not logged in");
-
-        const { data, error } = await supabase.rpc('accept_invitation', {
-            accepting_user_id: user.id,
-            invitation_id: invitationId
+    async revokeInvitation(token: string) {
+        const { data, error } = await supabase.rpc('revoke_invitation', {
+            p_token: token
         });
-        return { data, error };
+        if (error) throw error;
+        return data;
+    },
+
+    async updateInvitationEmail(token: string, newEmail: string) {
+        const { data, error } = await supabase.rpc('update_invitation_email', {
+            p_token: token,
+            p_new_email: newEmail
+        });
+        if (error) throw error;
+        return data;
+    },
+
+    async listSentInvitations() {
+        const { data, error } = await supabase.rpc('list_sent_invitations');
+        if (error) throw error;
+        return data || [];
     },
 
     // --- Activity Logs ---
