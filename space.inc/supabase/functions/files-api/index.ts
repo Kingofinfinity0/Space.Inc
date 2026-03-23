@@ -95,6 +95,40 @@ serve(async (req: Request) => {
                     })
                 }
 
+                // ── REQUEST_NEW_VERSION ────────────────────────────────────────
+                case 'REQUEST_NEW_VERSION': {
+                    if (!file_id || !file_name) {
+                        return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { fields: ['file_id', 'file_name'] }))
+                    }
+
+                    const { data: voucher, error: rpcError } = await supabase.rpc('request_new_version', {
+                        p_file_id: file_id,
+                        p_file_name: file_name,
+                        p_content_type: content_type || 'application/octet-stream'
+                    })
+
+                    if (rpcError) throw rpcError
+
+                    const { data: uploadData, error: uploadError } = await supabaseAdmin
+                        .storage
+                        .from(STORAGE_BUCKET)
+                        .createSignedUploadUrl(voucher.storage_path)
+
+                    if (uploadError) throw uploadError
+
+                    return new Response(JSON.stringify({
+                        data: {
+                            upload_url: uploadData.signedUrl,
+                            file_id: voucher.file_id,
+                            storage_path: voucher.storage_path,
+                            version_number: voucher.version_number
+                        }
+                    }), {
+                        status: 200,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    })
+                }
+
                 // ── CONFIRM_UPLOAD ─────────────────────────────────────────────
                 case 'CONFIRM_UPLOAD': {
                     if (!file_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'file_id' }))

@@ -106,6 +106,7 @@ export interface Message {
   extension?: 'text' | 'file' | 'system';
   payload?: any;
   created_at: string;
+  updated_at?: string;
   is_unread?: boolean;
   space_id: string;
   sender?: {
@@ -182,6 +183,8 @@ export interface SpaceFile {
   created_at: string;
   deleted_at?: string | null;
   uploaded_by: string;
+  parent_id?: string | null;
+  version_number?: number;
 }
 
 export interface ChartData {

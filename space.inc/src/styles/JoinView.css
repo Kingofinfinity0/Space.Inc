@@ -1,0 +1,219 @@
+/* JoinView.css - Industrial Grade Styles - Final Audit Version */
+
+.join-view-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #f9fafb;
+    padding: 24px;
+}
+
+.join-view-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.08);
+    padding: 48px 40px;
+    width: 100%;
+    max-width: 440px;
+    border: 1px solid #f3f4f6;
+}
+
+.join-view-center {
+    text-align: center;
+}
+
+.join-view-logo {
+    font-weight: 800;
+    font-size: 18px;
+    margin-bottom: 40px;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: #111;
+}
+
+.join-view-logo-box {
+    height: 32px;
+    width: 32px;
+    background: #18181b;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 16px;
+}
+
+.join-view-title {
+    font-weight: 800;
+    font-size: 24px;
+    margin-bottom: 8px;
+    color: #111;
+    text-align: center;
+}
+
+.join-view-subtitle {
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 6px;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.join-view-spacing-b28 {
+    margin-bottom: 28px;
+}
+
+.join-view-spacing-b24 {
+    margin-bottom: 24px;
+}
+
+.join-view-badge {
+    display: inline-block;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 99px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #6b7280;
+    margin-bottom: 24px;
+}
+
+.join-view-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.join-view-tab {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    background: #f3f4f6;
+    color: #6b7280;
+    transition: all 0.2s;
+}
+
+.join-view-tab.active {
+    background: #18181b;
+    color: #fff;
+}
+
+.join-view-input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 14px;
+    outline: none;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.join-view-input:focus {
+    border-color: #18181b;
+}
+
+.join-view-input.readonly {
+    background: #f9fafb;
+    color: #6b7280;
+    cursor: not-allowed;
+}
+
+.join-view-btn {
+    width: 100%;
+    padding: 14px;
+    background: #18181b;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: transform 0.1s, opacity 0.2s;
+}
+
+.join-view-btn:active {
+    transform: scale(0.98);
+}
+
+.join-view-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.join-view-err {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 12px 14px;
+    color: #dc2626;
+    font-size: 13px;
+    margin-bottom: 16px;
+    font-weight: 500;
+}
+
+.join-view-spinner {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 4px solid #e5e7eb;
+    border-top-color: #10b981;
+    animation: join-spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes join-spin {
+    to { transform: rotate(360deg); }
+}
+
+.join-view-invalid-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.join-view-rocket-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+}
+
+.join-view-verify-text {
+    color: #6b7280;
+    text-align: center;
+}
+
+.join-view-footer-info {
+    font-size: 13px;
+    color: #9ca3af;
+    background: #f3f4f6;
+    padding: 12px 16px;
+    border-radius: 8px;
+}
+
+.join-view-footer {
+    margin-top: 24px;
+    font-size: 11px;
+    color: #9ca3af;
+    text-align: center;
+    font-style: italic;
+}
+
+.join-view-text-bold {
+    color: #111;
+    font-weight: 700;
+}

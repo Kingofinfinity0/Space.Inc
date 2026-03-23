@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, ArrowRight, Check, Briefcase, User, Building, Mail, Lock } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface OnboardingProps {
     onComplete: () => void;
@@ -13,14 +14,19 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const params = new URLSearchParams(window.location.search);
+    const inviteTokenInit = params.get('invite_token');
+    const inviteEmailInit = params.get('email') || '';
+
     const [formData, setFormData] = useState({
         purpose: '',
         role: '',
         orgName: '',
-        email: '',
+        email: inviteEmailInit,
         password: '',
         fullName: ''
     });
+    const [inviteToken] = useState(inviteTokenInit);
 
     const handleNext = async () => {
         if (step < 4) {
@@ -33,10 +39,17 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                     full_name: formData.fullName || 'New User',
                     organization_name: formData.orgName,
                     role: formData.role,
-                    purpose: formData.purpose
+                    purpose: formData.purpose,
+                    invite_token: inviteToken // CRITICAL for handle_new_user trigger
                 });
 
                 if (signUpError) throw signUpError;
+
+                // Accept invitation if coming from an invite link
+                if (inviteToken) {
+                    await supabase.rpc('accept_invitation', { p_token: inviteToken });
+                }
+
                 onComplete();
             } catch (err: any) {
                 setError(err.message || 'Failed to create account. Please try again.');
@@ -57,9 +70,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         <div className="min-h-screen bg-[#F7F7F8] flex items-center justify-center p-6 text-[#1D1D1D] font-sans relative overflow-hidden">
             {/* Simple Progress Bar */}
             <div className="absolute top-0 left-0 w-full h-1 bg-[#D1D5DB]">
-                <div
-                    className="h-full bg-[#10A37F] transition-all duration-700 ease-out"
-                    style={{ width: `${(step / 4) * 100}%` }}
+                <div 
+                    className="h-full progress-bar-fill" 
+                    data-step={step} 
                 />
             </div>
 
@@ -121,6 +134,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                                     <div className="relative">
                                         <select
                                             value={formData.role}
+                                            title="Select your role"
                                             onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                                             className="w-full bg-white border border-[#D1D5DB] rounded-md p-4 text-base appearance-none focus:outline-none focus:ring-1 focus:ring-[#10A37F] focus:border-[#10A37F] transition-all text-[#1D1D1D]"
                                         >
@@ -161,9 +175,12 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                                         <input
                                             type="email"
                                             placeholder="Email Address"
-                                            className="w-full bg-white border border-[#D1D5DB] rounded-md py-3 pl-12 pr-4 text-[#1D1D1D] focus:ring-1 focus:ring-[#10A37F] focus:border-[#10A37F] outline-none transition-all"
+                                            className={`w-full bg-white border border-[#D1D5DB] rounded-md py-3 pl-12 pr-4 text-[#1D1D1D] focus:ring-1 focus:ring-[#10A37F] focus:border-[#10A37F] outline-none transition-all ${
+                                                inviteToken ? 'bg-zinc-100 cursor-not-allowed opacity-70' : ''
+                                            }`}
                                             value={formData.email}
-                                            onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                            onChange={e => !inviteToken && setFormData({ ...formData, email: e.target.value })}
+                                            readOnly={!!inviteToken}
                                         />
                                     </div>
                                     <div className="relative">

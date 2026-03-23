@@ -7,8 +7,7 @@ import {
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
     Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
     GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft
+    Bell, Eye, Play, X, FileVideo, ChevronLeft, History
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -19,6 +18,7 @@ import {
 } from '../UI/index';
 import { FileViewerModal } from '../FileViewerModal';
 import { FileUploadModal } from '../FileUploadModal';
+import { FileVersionsModal } from '../FileVersionsModal';
 import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
@@ -48,6 +48,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     const [showTrash, setShowTrash] = useState(false);
     const [viewingFile, setViewingFile] = useState<SpaceFile | null>(null);
+    const [versioningFile, setVersioningFile] = useState<SpaceFile | null>(null);
 
     // Filter meetings for this space
     const localMeetings = meetings.filter(m => m.space_id === space.id && !m.deleted_at);
@@ -261,8 +262,17 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                             if (data?.signedUrl) window.open(data.signedUrl, '_blank');
                                                         }}
                                                         className="h-8 w-8 p-0"
+                                                        title="Download"
                                                     >
                                                         <Download size={16} />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="h-8 w-8 p-0 text-zinc-400 hover:text-indigo-500"
+                                                        onClick={() => setVersioningFile(file as any)}
+                                                        title="Version History"
+                                                    >
+                                                        <History size={16} />
                                                     </Button>
                                                     <Button
                                                         variant="ghost"
@@ -341,6 +351,12 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                     onClose={() => setViewingFile(null)}
                 />
             )}
+
+            <FileVersionsModal
+                isOpen={!!versioningFile}
+                onClose={() => setVersioningFile(null)}
+                file={versioningFile}
+            />
         </div>
     );
 };

@@ -175,6 +175,8 @@ export const apiService = {
             p_expires_at: expiresAt
         });
         if (error) throw error;
+        // Build robust link from current origin
+        data.invite_link = `${window.location.origin}/join?token=${data.token}`;
         return data;
     },
 
@@ -186,6 +188,8 @@ export const apiService = {
             p_expires_at: expiresAt
         });
         if (error) throw error;
+        // Build robust link from current origin
+        data.invite_link = `${window.location.origin}/join?token=${data.token}`;
         return data;
     },
 
@@ -219,6 +223,10 @@ export const apiService = {
             p_new_email: newEmail
         });
         if (error) throw error;
+        // Build robust link from current origin if a new token was generated
+        if (data.token) {
+            data.invite_link = `${window.location.origin}/join?token=${data.token}`;
+        }
         return data;
     },
 
@@ -309,12 +317,14 @@ export const apiService = {
     },
 
     async sendMessage(spaceId: string, content: string, extension: string = 'chat', payload: any = {}, channel: 'general' | 'internal' = 'general', organizationId?: string) {
+        const idempotencyKey = crypto.randomUUID();
         const { data, error } = await supabase.rpc('send_message', {
             p_space_id: spaceId,
             p_content: content,
             p_channel: channel,
             p_extension: extension,
-            p_payload: payload
+            p_payload: payload,
+            p_idempotency_key: idempotencyKey
         });
         if (error) return { data: null, error };
         if (!data?.success) return { data: null, error: { message: data?.error_code || 'Send failed' } };
@@ -462,6 +472,7 @@ export const apiService = {
         let query = supabase
             .from('files')
             .select('*')
+            // Only fetch latest versions (or unversioned) at the top level
             .order('created_at', { ascending: false });
 
         if (spaceId) {
@@ -470,19 +481,32 @@ export const apiService = {
 
         const { data, error } = await query;
         if (error) return { data: null, error };
+        
+        // In the UI, we only want to list the LATEST version of each file tree
+        // If a file has a parent_id, it's part of a version tree.
         return { data: data || [], error: null };
     },
 
-    async getSignedUrl(fileId: string, organizationId: string) {
+    async getFileVersions(fileId: string, parentId?: string) {
+        // A version tree is identified by its root parent_id
+        const rootId = parentId || fileId;
+        const { data, error } = await supabase
+            .from('files')
+            .select('*')
+            .or(`id.eq.${rootId},parent_id.eq.${rootId}`)
+            .order('version_number', { ascending: false });
+        
+        return { data: data || [], error };
+    },
+
+    async getSignedUrl(file_id: string, organizationId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'SIGN_URL', fileId }
+            body: { action: 'SIGN_URL', file_id }
         });
         if (error) return { data: null, error: { message: error.message } };
         if (data?.error) return { data: null, error: data.error };
         
-        // Edge fn returns: { data: { signedUrl: "..." } }
-        // invoke wraps body into data, so: invoke.data.data.signedUrl
         const result = data?.data ?? data;
         const signedUrl = result?.signedUrl || result?.signed_url;
         if (!signedUrl) return { data: null, error: { message: 'No signed URL returned' } };
@@ -498,15 +522,15 @@ export const apiService = {
         return { data, error: null };
     },
 
-    async requestUploadVoucher(spaceId: string, organizationId: string, filename: string, contentType: string, checksum?: string, fileSize?: number) {
+    async requestUploadVoucher(space_id: string, organizationId: string, file_name: string, content_type: string, checksum?: string, file_size?: number) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
             body: {
                 action: 'REQUEST_UPLOAD_VOUCHER',
-                spaceId,        // was: space_id
-                filename,       // was: file_name
-                contentType,
-                fileSize: fileSize?.toString(),  // send as string now (RPC accepts text)
+                space_id,
+                file_name,
+                content_type,
+                file_size: file_size?.toString(),
                 checksum
             }
         });
@@ -532,26 +556,14 @@ export const apiService = {
         return { data, error: null };
     },
 
-    async getSignedFileUrl(fileId: string, organizationId: string) {
-        const { data, error } = await supabase.functions.invoke('files-api', {
-            method: 'POST',
-            body: { action: 'SIGN_URL', fileId }
-        });
-        if (error) return { data: null, error: { message: error.message } };
-        if (data?.error) return { data: null, error: data.error };
-        
-        // Edge fn returns: { data: { signedUrl: "..." } }
-        // invoke wraps body into data, so: invoke.data.data.signedUrl
-        const result = data?.data ?? data;
-        const signedUrl = result?.signedUrl || result?.signed_url;
-        if (!signedUrl) return { data: null, error: { message: 'No signed URL returned' } };
-        return { data: { signedUrl }, error: null };
+    async getSignedFileUrl(file_id: string, organizationId: string) {
+        return this.getSignedUrl(file_id, organizationId);
     },
 
-    async confirmUpload(fileId: string, organizationId: string, storagePath?: string, checksum?: string, fileSize?: number) {
+    async confirmUpload(file_id: string, organizationId: string, storagePath?: string, checksum?: string, fileSize?: number) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'CONFIRM_UPLOAD', fileId, organization_id: organizationId, storage_path: storagePath, checksum, file_size: fileSize }
+            body: { action: 'CONFIRM_UPLOAD', file_id, organization_id: organizationId, storage_path: storagePath, checksum, file_size: fileSize }
         });
 
         if (error || data?.error) {
@@ -645,28 +657,28 @@ export const apiService = {
     },
 
 
-    async deleteFile(fileId: string) {
+    async deleteFile(file_id: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'SOFT_DELETE', fileId }
+            body: { action: 'SOFT_DELETE', file_id }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to delete file' } };
         return { data, error: null };
     },
 
-    async restoreFile(fileId: string) {
+    async restoreFile(file_id: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'RESTORE', fileId }
+            body: { action: 'RESTORE', file_id }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to restore file' } };
         return { data, error: null };
     },
 
-    async hardDeleteFile(fileId: string) {
+    async hardDeleteFile(file_id: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'HARD_DELETE', fileId }
+            body: { action: 'HARD_DELETE', file_id }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to permanently delete file' } };
         return { data, error: null };

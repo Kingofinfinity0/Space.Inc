@@ -119,10 +119,6 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
             );
 
             if (sendError) throw sendError;
-
-            if (data) {
-                setMessages(prev => [...prev, data]);
-            }
             return true;
         } catch (err: any) {
             console.error('Failed to upload file:', err);

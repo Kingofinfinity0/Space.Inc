@@ -22,6 +22,7 @@ import { FileUploadModal } from '../FileUploadModal';
 import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
+import { MessageItem } from './MessageItem';
 
 
 // SpaceChatPanel - Inline chat component for Space Detail view
@@ -79,53 +80,13 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
                     </div>
                 ) : (
                     messages.map(msg => (
-                        <div key={msg.id} className={`flex ${msg.sender_type === 'staff' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[80%] p-3 rounded-lg text-sm ${msg.channel === 'internal'
-                                ? 'bg-amber-50 border border-amber-200 text-amber-900'
-                                : msg.sender_type === 'staff'
-                                    ? 'bg-[#10A37F] text-white'
-                                    : 'bg-[#F7F7F8] text-[#1D1D1D] border border-[#D1D5DB]/30'
-                                }`}>
-                                {msg.channel === 'internal' && (
-                                    <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">
-                                        <Lock size={10} /> Internal Note
-                                    </div>
-                                )}
-                                {msg.sender?.full_name && (
-                                    <p className={`text-[10px] mb-1 font-medium ${msg.sender_type === 'staff' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                                        {msg.sender.full_name}
-                                    </p>
-                                )}
-
-                                {msg.extension === 'file' ? (
-                                    <div className={`flex items-center gap-3 p-2 rounded-lg ${msg.sender_type === 'staff' ? 'bg-white/10' : 'bg-zinc-50'}`}>
-                                        <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400">
-                                            <DocIcon size={20} />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-medium truncate text-xs">{msg.payload?.file_name}</p>
-                                            <p className="text-[10px] opacity-60">Document Shared</p>
-                                        </div>
-                                        <button
-                                            title="Download File"
-                                            onClick={async () => {
-                                                const { data } = await apiService.getSignedUrl(msg.payload.file_id, organizationId || '');
-                                                if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                                            }}
-                                            className="p-1.5 hover:bg-white/10 rounded-full transition-colors"
-                                        >
-                                            <Download size={16} />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <p>{msg.content}</p>
-                                )}
-
-                                <p className={`text-[10px] mt-1 text-right ${msg.sender_type === 'staff' ? 'text-zinc-400' : 'text-zinc-400'}`}>
-                                    {formatTime(msg.created_at)}
-                                </p>
-                            </div>
-                        </div>
+                        <MessageItem 
+                            key={msg.id} 
+                            msg={msg} 
+                            currentUserId={user?.id || ''} 
+                            organizationId={organizationId || profile?.organization_id || ''} 
+                            theme="panel" 
+                        />
                     ))
                 )}
                 <div ref={messagesEndRef} />

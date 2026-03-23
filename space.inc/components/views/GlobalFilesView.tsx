@@ -8,7 +8,7 @@ import {
     Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
     GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
     File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft
+    Bell, Eye, Play, X, FileVideo, ChevronLeft, History
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -19,6 +19,7 @@ import {
 } from '../UI/index';
 import { FileViewerModal } from '../FileViewerModal';
 import { FileUploadModal } from '../FileUploadModal';
+import { FileVersionsModal } from '../FileVersionsModal';
 import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
@@ -31,6 +32,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
     const [selectedSpaceForUpload, setSelectedSpaceForUpload] = useState<string>(clients[0]?.id || '');
     const [uploading, setUploading] = useState(false);
     const [viewingFile, setViewingFile] = useState<SpaceFile | null>(null);
+    const [versioningFile, setVersioningFile] = useState<SpaceFile | null>(null);
     const [showTrash, setShowTrash] = useState(false);
     const { files: realtimeFiles, loading: filesLoading } = useRealtimeFiles('', showTrash);
     const { showToast } = useToast();
@@ -96,8 +98,17 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                         const { data } = await apiService.getSignedUrl(file.id, organizationId || '');
                                                         if (data?.signedUrl) window.open(data.signedUrl, '_blank');
                                                     }}
+                                                    title="Download"
                                                 >
                                                     <Download size={16} />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    className="h-8 w-8 p-0 text-zinc-400 hover:text-indigo-500"
+                                                    onClick={() => setVersioningFile(file as any)}
+                                                    title="Version History"
+                                                >
+                                                    <History size={16} />
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
@@ -225,6 +236,12 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                     onClose={() => setViewingFile(null)}
                 />
             )}
+
+            <FileVersionsModal
+                isOpen={!!versioningFile}
+                onClose={() => setVersioningFile(null)}
+                file={versioningFile}
+            />
         </div>
     );
 };

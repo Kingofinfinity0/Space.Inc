@@ -1,87 +1,102 @@
-# Implementation Work Plan - Invitation System & Email Dispatch Fix
+# Work.md - Space.inc Frontend Development
 
-## Architecture Flow (Hardened SaaS - Direct Dispatch)
+## Sequence Diagram
 
 ```mermaid
 sequenceDiagram
-    participant User as Admin User
-    participant Inv as invitations-api
-    participant SQL as SQL RPC
-    participant Res as resend-api
-    participant RE as Resend SMTP/API
+    participant User
+    participant Frontend
+    participant SupabaseRPC
+    participant EdgeFunctions
+    participant Realtime
 
-    User->>Inv: POST /send_staff
-    Inv->>SQL: call_rpc()
-    SQL->>SQL: INSERT invite record (Status: pending)
-    SQL-->>Inv: Return {token, org_id}
-    Inv->>Res: POST /send (Sync Call)
-    Res->>RE: POST /emails (External)
-    Inv-->>User: 200 OK (Invite Processed)
+    %% System 1: Messaging
+    rect rgb(230, 240, 255)
+        Note over User,Realtime: System 1 - Messaging
+        User->>Frontend: Send Message
+        Frontend->>SupabaseRPC: send_message(p_space_id, p_content, p_idempotency_key)
+        SupabaseRPC-->>Frontend: Success
+        Realtime-->>Frontend: Broadcast Message (Postgres Changes)
+    end
+
+    %% System 2: Files
+    rect rgb(255, 240, 230)
+        Note over User,EdgeFunctions: System 2 - File Storage
+        User->>Frontend: Request Upload Voucher
+        Frontend->>EdgeFunctions: files-api (REQUEST_UPLOAD_VOUCHER)
+        EdgeFunctions-->>Frontend: { data: { upload_url, file_id } }
+        User->>Frontend: Download / View History
+        Frontend->>EdgeFunctions: files-api (SIGN_URL)
+        EdgeFunctions-->>Frontend: signedUrl
+    end
+    
+    %% System 3: Meetings
+    rect rgb(230, 255, 230)
+        Note over User,EdgeFunctions: System 3 - Meetings
+        User->>Frontend: Join Meeting
+        Frontend->>EdgeFunctions: meetings-api (GET_TOKEN with meetingId)
+        User->>Frontend: Leave Meeting
+        Frontend->>EdgeFunctions: meetings-api (END_MEETING)
+        Frontend->>User: Show Outcome Prompt
+        User->>Frontend: Save Outcome
+        Frontend->>SupabaseRPC: record_meeting_outcome()
+    end
+
+    %% System 4: Notifications
+    rect rgb(255, 230, 255)
+        Note over User,Realtime: System 4 - Notifications
+        Frontend->>SupabaseRPC: Initial Unread Count Fetch
+        Realtime-->>Frontend: Realtime Badges Updates (INSERT)
+        User->>Frontend: Click Bell
+        Frontend->>SupabaseRPC: Fetch 20 Notifications
+        User->>Frontend: Click Notification
+        Frontend->>SupabaseRPC: Mark as Read & Redirect
+    end
+
+    %% System 5: Analytics
+    rect rgb(255, 255, 230)
+        Note over User,SupabaseRPC: System 5 - Analytics
+        User->>Frontend: Open Dashboard
+        Frontend->>SupabaseRPC: Fetch Stats & Feeds (via multiple RPCs)
+        SupabaseRPC-->>Frontend: Dashboard Data
+    end
 ```
 
-## Phase 1: Database Logic (Status: COMPLETED)
-- [x] **Fix SQL Search Path**: Updated `send_staff_invitation` and others to include `extensions`. (**FIXED 500 errors**)
+## Thought Process
 
-## Phase 2: The Background Engine (Asynchronous Automation)
-- [x] **Audit RPCs**: Confirmed `send_staff_invitation` and `send_client_invitation` return `token` and `org_id`.
-- [x] **Worker Update**: Updated `background-worker` to include Resend logic (as fallback/audit).
+I will tackle this task step-by-step according to the strict deployment order:
+Messaging → Files → Meetings → Notifications → Analytics.
 
-## Phase 3: Direct Dispatch (Resend-API Sync) - COMPLETED
-- [x] **Create `resend-api`**: Dedicated edge function for template rendering.
-- [x] **Update `invitations-api`**: Move from Async (Worker) to Sync (Direct) dispatch (V4).
-- [x] **Template Audit**: Verified `email_templates` table and keys exist.
-- [x] **Vercel Analytics**: Installed `@vercel/analytics` and added to `index.tsx`.
-- [x] **Vercel Routing Fix**: Added `vercel.json` for SPA rewrites.
-- [x] **Join Page**: Created `src/views/JoinPage.tsx` and integrated with `Routes`.
-## Phase 4: Invitations Management & Hybrid Join Flow (COMPLETED)
-- [x] **Invitations Management View**: Created `InvitationsManagementView.tsx` with list, revoke, and edit functionality.
-- [x] **Edit Email Identity**: Implemented "Update & Reissue" modal for pending invitations.
-- [x] **Hybrid Join Flow**: Refactored `JoinPage.tsx` to handle status checks (Revoked, Expired, Accepted) and post-acceptance redirection.
-- [x] **Team Sidebar Integration**: Added "Invitations" navigation item for admins.
-- [x] **Mobile & Accessibility Audit**: Fixed input labels and accessibility titles in modals.
+### Task List
+#### System 1 — Messaging (SPA-30)
+- [x] Task 1B: Create global error translation helper `friendlyError`.
+- [x] Task 1A: Fix duplicate messages (use `.rpc('send_message')`).
+- [x] Task 1C: Implement Message edit UI (`.rpc('edit_message')`).
+- [x] Task 1D: Implement Message delete UI (`.rpc('delete_message')`).
 
-### Phase 3: Deployment & Invitation Flow (Manual Sharing) - IN PROGRESS
-- [x] Vercel Analytics Integration
-- [x] Vercel Routing Fix (vercel.json)
-- [x] Join Page Implementation (/join)
-- [x] SPA-20: Invite Link Generation Flow
-  - [x] Update apiService with generate link RPCs
-  - [x] Implement copy-button success state in Staff Modal
-  - [x] Implement copy-button success state in Client Space creation
-  - [x] Accessibility fixes (title attributes)
-- [ ] **Deployment**: User to deploy functions via CLI.
+#### System 2 — File Storage (SPA-28)
+- [ ] Task 2A: Fix the upload bug `upload_url`.
+- [ ] Task 2B: Secure file downloads via `SIGN_URL`.
+- [ ] Task 2C: Version history Modal/Dropdown.
 
----
-## Founder's Research: Scalable Email Providers (Free Tier)
+#### System 3 — Meetings (SPA-29)
+- [ ] Task 3A: Fix `getMeetingToken` (`meeting_id` -> `meetingId`).
+- [ ] Task 3B: Add meeting category selector.
+- [ ] Task 3C: Implement lifecycle hooks `START_MEETING` and `END_MEETING`.
+- [ ] Task 3D: Post-meeting outcome prompt.
+- [ ] Task 3E: "View Recording" button.
 
-| Provider | Free Tier | Scaling Story | Why for Space.inc? |
-| :--- | :--- | :--- | :--- |
-| **Resend** | **3,000 emails/mo** | Linear pricing, modern API. | **Winner.** Native-like integration for Supabase. |
-| **Postmark** | 100 emails/mo | Highest deliverability. | Too small for scaling. |
-| **Amazon SES** | $0.10 / 1k | Cheapest bulk price. | High overhead for setup. Use later. |
+#### System 4 — Notifications (SPA-32)
+- [ ] Task 4A: Create `NotificationBell.tsx`.
+- [ ] Task 4B: Implement notification dropdown.
 
----
-## Founder's Research: Scalability Metrics
-- Invitations: 100% manual sharing (Zero email cost/deliverability risk).
-- Verification: JWT-based domain validation for `/join`.
-- Performance: Edge-cached routing via `vercel.json`.
+#### System 5 — Analytics Dashboards (SPA-31)
+- [ ] Task 5A: Owner dashboard.
+- [ ] Task 5B: Staff dashboard.
+- [ ] Task 5C: Space detail mini-stats bar.
 
 ---
 ## USER SECTION NOTES
-- User reported not receiving emails.
-- Diagnosis: `background-worker` was using Supabase Auth (AWS SES) instead of Resend, causing "Already Registered" errors for existing users.
-- **New Strategy**: Direct sync call to `resend-api` for instant feedback and bypassing Auth service limitations.
-
----
-## DNS Verification Protocol (Resend Logic)
-- Status: **Pending Verification**
-- Problem: "All required records are missing"
-- Resolution: User adding TXT (DKIM/SPF) and MX records to DNS Provider.
-
----
-## TASK LIST: High Performance Implementation (FINAL)
-- [x] Step 1: Update `apiService.ts` with 7 new lifecycle methods.
-- [x] Step 2: Implement `InvitationsManagementView.tsx`.
-- [x] Step 3: Refactor `JoinPage.tsx` for robust status handling.
-- [x] Step 4: Fix accessibility lints in `InviteStaffModal.tsx`.
-- [x] Step 5: Final deployment via Vercel CLI.
+- spaces.status is lowercase only ('active', 'archived').
+- friendlyError() everywhere to never show raw API errors.
+- Token and time efficiency is priority.

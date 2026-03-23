@@ -22,7 +22,7 @@ import { FileUploadModal } from '../FileUploadModal';
 import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
-
+import { MessageItem } from './MessageItem';
 
 // 9. Inbox View - Realtime Chat
 const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: any[] }) => {
@@ -137,43 +137,13 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                                 </div>
                             ) : (
                                 messages.map(msg => (
-                                    <div key={msg.id} className={`flex ${msg.sender_type === 'staff' ? 'justify-end' : 'justify-start'}`}>
-                                        <div className={`max-w-[70%] p-4 rounded-lg ${msg.sender_type === 'staff' ? 'bg-[#1D1D1D] text-white rounded-br-none' : 'bg-white shadow-sm border border-zinc-100 rounded-bl-none'}`}>
-                                            {msg.sender?.full_name && (
-                                                <p className={`text-[10px] mb-1 font-medium ${msg.sender_type === 'staff' ? 'text-zinc-300' : 'text-zinc-500'}`}>
-                                                    {msg.sender.full_name}
-                                                </p>
-                                            )}
-
-                                            {msg.extension === 'file' ? (
-                                                <div className={`flex items-center gap-3 p-3 rounded-md ${msg.sender_type === 'staff' ? 'bg-white/10' : 'bg-zinc-50'}`}>
-                                                    <div className="p-2.5 bg-indigo-500/20 rounded-lg text-indigo-400">
-                                                        <DocIcon size={20} />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="font-medium truncate text-xs">{msg.payload?.file_name}</p>
-                                                        <p className="text-[10px] opacity-60">Shared Document</p>
-                                                    </div>
-                                                    <button
-                                                        title="Download File"
-                                                        onClick={async () => {
-                                                            const { data } = await apiService.getSignedUrl(msg.payload.file_id, organizationId || '');
-                                                            if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                                                        }}
-                                                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                                                    >
-                                                        <Download size={18} />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <p className="text-sm leading-relaxed">{msg.content}</p>
-                                            )}
-
-                                            <p className={`text-[10px] mt-2 text-right opacity-70 ${msg.sender_type === 'staff' ? 'text-zinc-300' : 'text-zinc-400'}`}>
-                                                {formatTime(msg.created_at)}
-                                            </p>
-                                        </div>
-                                    </div>
+                                    <MessageItem 
+                                        key={msg.id} 
+                                        msg={msg} 
+                                        currentUserId={user?.id || ''} 
+                                        organizationId={organizationId || profile?.organization_id || ''} 
+                                        theme="inbox" 
+                                    />
                                 ))
                             )}
                             <div ref={messagesEndRef} />
