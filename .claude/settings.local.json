@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/PC/Downloads/Space.inc/space.inc -name fetchLogger* -o -name utils* -type f)",
+      "Bash(xargs grep:*)"
+    ]
+  }
+}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { apiService } from '../services/apiService';
+import { friendlyError } from '../utils/errors';
 
 import { Message } from '../types';
 
@@ -41,7 +42,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
                 }
             } catch (err: any) {
                 console.error('Failed to fetch messages:', err);
-                setError(err.message || 'Failed to load messages');
+                setError(friendlyError(err?.message));
             } finally {
                 setLoading(false);
             }
@@ -94,7 +95,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
             return true;
         } catch (err: any) {
             console.error('Failed to send message:', err);
-            setError(err.message || 'Failed to send message');
+            setError(friendlyError(err?.message));
             return false;
         }
     };
@@ -122,7 +123,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
             return true;
         } catch (err: any) {
             console.error('Failed to upload file:', err);
-            setError(err.message || 'Failed to upload file');
+            setError(friendlyError(err?.message));
             return false;
         } finally {
             setLoading(false);

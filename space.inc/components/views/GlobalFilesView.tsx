@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
+import { friendlyError } from '../../utils/errors';
 import {
     LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
@@ -118,7 +119,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                                 await apiService.deleteFile(file.id);
                                                                 showToast('File moved to trash.', "success");
                                                             } catch (err: any) {
-                                                                showToast(`Failed to trash file: ${err.message}`, "error");
+                                                                showToast(friendlyError(err?.message), "error");
                                                             }
                                                         }
                                                     }}
@@ -136,7 +137,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                             await apiService.restoreFile(file.id);
                                                             showToast('File restored.', "success");
                                                         } catch (err: any) {
-                                                            showToast(`Failed to restore file: ${err.message}`, "error");
+                                                            showToast(friendlyError(err?.message), "error");
                                                         }
                                                     }}
                                                     className="h-8 w-8 p-0 text-zinc-400 hover:text-emerald-500"
@@ -152,7 +153,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                                 await apiService.hardDeleteFile(file.id);
                                                                 showToast('File permanently deleted.', "success");
                                                             } catch (err: any) {
-                                                                showToast(`Failed to delete file: ${err.message}`, "error");
+                                                            showToast(friendlyError(err?.message), "error");
                                                             }
                                                         }
                                                     }}
@@ -221,7 +222,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                         showToast("File uploaded successfully.", "success");
                     } catch (err: any) {
                         console.error("Upload error:", err);
-                        showToast(`Failed to upload file: ${err.message}`, "error");
+                        showToast(friendlyError(err?.message), "error");
                     } finally {
                         setUploading(false);
                     }

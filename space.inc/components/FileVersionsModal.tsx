@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, File as FileIcon, Loader2, Download, ExternalLink, History } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
+import { supabase } from '../lib/supabase';
 import { SpaceFile } from '../types';
 import { Button, Text, GlassCard } from './UI';
 import { useToast } from '../contexts/ToastContext';
+import { friendlyError } from '../utils/errors';
 
 interface FileVersionsModalProps {
     isOpen: boolean;
@@ -22,15 +24,22 @@ export const FileVersionsModal: React.FC<FileVersionsModalProps> = ({ isOpen, on
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const fetchVersions = async () => {
-        if (!file || !organizationId) return;
+        if (!file) return;
         setLoading(true);
         try {
-            const { data, error } = await apiService.getFileVersions(file.id, file.parent_id || undefined);
+            // Task 2C: RPC-based version history (safer than parent_id table queries)
+            const { data, error } = await supabase.rpc('get_file_versions', {
+                p_file_id: file.id
+            });
             if (error) throw error;
-            setVersions(data || []);
+
+            // Expected shape: array of versions including
+            // version_number, uploaded_by(_name), file_size, created_at, storage_path
+            setVersions((data || []) as SpaceFile[]);
         } catch (err: any) {
             console.error("Failed to fetch versions", err);
-            showToast("Failed to load version history", "error");
+            showToast(friendlyError(err?.message), "error");
+            setVersions([file as any]); // fallback: show current file
         } finally {
             setLoading(false);
         }
@@ -56,7 +65,7 @@ export const FileVersionsModal: React.FC<FileVersionsModalProps> = ({ isOpen, on
             if (onVersionUploaded) onVersionUploaded();
         } catch (err: any) {
             console.error("Upload error:", err);
-            showToast(`Upload failed: ${err.message}`, "error");
+            showToast(friendlyError(err?.message), "error");
         } finally {
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -65,10 +74,16 @@ export const FileVersionsModal: React.FC<FileVersionsModalProps> = ({ isOpen, on
 
     const handleDownload = async (v: SpaceFile) => {
         try {
-            const { data } = await apiService.getSignedUrl(v.id, organizationId || '');
+            // Task 2C download pattern: createSignedUrl from storage_path directly.
+            if (!v.storage_path) throw new Error('MISSING_STORAGE_PATH');
+            const { data, error } = await supabase.storage
+                .from('space-files')
+                .createSignedUrl(v.storage_path, 900);
+
+            if (error) throw error;
             if (data?.signedUrl) window.open(data.signedUrl, '_blank');
         } catch (err: any) {
-             showToast(`Download failed: ${err.message}`, "error");
+            showToast(friendlyError(err?.message), "error");
         }
     };
 
@@ -118,7 +133,7 @@ export const FileVersionsModal: React.FC<FileVersionsModalProps> = ({ isOpen, on
                                             </p>
                                             <p className="text-xs text-zinc-500 mt-0.5">
                                                 {v.file_size ? `${(v.file_size / (1024 * 1024)).toFixed(2)} MB • ` : ''} 
-                                                {new Date(v.created_at).toLocaleString()}
+                                                Uploaded by {v.uploaded_by_name || v.uploaded_by} • {new Date(v.created_at).toLocaleString()}
                                             </p>
                                         </div>
                                     </div>

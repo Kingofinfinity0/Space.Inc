@@ -185,6 +185,9 @@ export interface SpaceFile {
   uploaded_by: string;
   parent_id?: string | null;
   version_number?: number;
+  // Populated by version-history RPCs / queries for secure downloads.
+  storage_path?: string;
+  uploaded_by_name?: string;
 }
 
 export interface ChartData {

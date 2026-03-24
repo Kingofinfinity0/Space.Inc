@@ -41,12 +41,14 @@ import {
     ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle, Invitation
 } from './types';
 import { supabase } from './lib/supabase';
+import { friendlyError } from './utils/errors';
 
 // Shared Layouts
 import { NavItem, AppLayout, ClientLayout } from './components/Layout';
 
 // View Components
 import StaffDashboardView from './components/views/StaffDashboardView';
+import OwnerDashboardView from './components/views/OwnerDashboardView';
 import SpacesView from './components/views/SpacesView';
 import ClientsCRMView from './components/views/ClientsCRMView';
 import StaffView from './components/views/StaffView';
@@ -62,8 +64,7 @@ import { InviteStaffModal } from './components/views/InviteStaffModal';
 import { MeetingRoom } from './components/MeetingRoom';
 import { Routes, Route } from 'react-router-dom';
 import JoinView from './components/views/JoinView';
-
-const OwnerDashboardView = StaffDashboardView;
+import { NotificationBell } from './components/NotificationBell';
 
 const ErrorView = ({ message }: { message: string }) => (
     <div className="h-screen w-full flex items-center justify-center bg-zinc-50 p-4">
@@ -107,6 +108,7 @@ const App = () => {
     const [isInstantMeetingModalOpen, setIsInstantMeetingModalOpen] = useState(false);
     const [instantMeetingTargetSpace, setInstantMeetingTargetSpace] = useState<string | null>(null);
     const [instantMeetingTitle, setInstantMeetingTitle] = useState('Instant Meeting');
+    const [instantMeetingCategory, setInstantMeetingCategory] = useState<string>('general');
 
     useEffect(() => {
         if (user && !loading) {
@@ -272,10 +274,11 @@ const App = () => {
                 space_id: targetSpace,
                 title: title || instantMeetingTitle || 'Instant Meeting',
                 recording_enabled: true,
+                category: instantMeetingCategory
             });
 
             if (error) {
-                showToast(`Meeting error: ${error.message || error}`, 'error');
+                showToast(friendlyError(error?.message || String(error)), 'error');
                 return;
             }
 
@@ -302,7 +305,8 @@ const App = () => {
                 title: data.title || 'Scheduled Meeting',
                 starts_at: `${data.date}T${data.time}:00Z`,
                 description: data.description,
-                recording_enabled: data.recording_enabled
+                recording_enabled: data.recording_enabled,
+                category: data.category || 'general'
             });
             if (error) throw error;
             if (newMeeting) {
@@ -310,7 +314,7 @@ const App = () => {
                 fetchData();
             }
         } catch (err: any) {
-            showToast(`Error scheduling meeting: ${err.message}`, "error");
+            showToast(friendlyError(err?.message || String(err)), "error");
         }
     };
 
@@ -319,10 +323,38 @@ const App = () => {
         switch (currentView) {
             case ViewState.DASHBOARD:
                 if (userRole === 'owner' || userRole === 'admin') {
-                    return <OwnerDashboardView clients={clients} messages={[]} meetings={meetings} tasks={tasks} profile={profile} onJoin={handleJoinMeeting} onInstantMeet={() => handleInstantMeeting(clients[0]?.id)} />;
+                    return (
+                        <OwnerDashboardView
+                            clients={clients}
+                            messages={[]}
+                            meetings={meetings}
+                            tasks={tasks}
+                            profile={profile}
+                            onJoin={handleJoinMeeting}
+                            onInstantMeet={() => handleInstantMeeting(clients[0]?.id)}
+                            onGoToSpace={(spaceId) => {
+                                setSelectedSpaceId(spaceId);
+                                setCurrentView(ViewState.SPACE_DETAIL);
+                            }}
+                        />
+                    );
                 }
                 if (userRole === 'staff') {
-                    return <StaffDashboardView clients={clients} messages={[]} meetings={meetings} tasks={tasks} profile={profile} onJoin={handleJoinMeeting} onInstantMeet={() => handleInstantMeeting(clients[0]?.id)} />;
+                    return (
+                        <StaffDashboardView
+                            clients={clients}
+                            messages={[]}
+                            meetings={meetings}
+                            tasks={tasks}
+                            profile={profile}
+                            onJoin={handleJoinMeeting}
+                            onInstantMeet={() => handleInstantMeeting(clients[0]?.id)}
+                            onGoToSpace={(spaceId) => {
+                                setSelectedSpaceId(spaceId);
+                                setCurrentView(ViewState.SPACE_DETAIL);
+                            }}
+                        />
+                    );
                 }
                 if (userRole === 'client') {
                     const currentClient = clients[0];
@@ -430,6 +462,9 @@ const App = () => {
                                             <div className="flex items-center gap-3 px-3 mb-8 mt-2">
                                                 <div className="h-8 w-8 bg-[#1D1D1D] rounded-md flex items-center justify-center text-white"><Rocket size={20} /></div>
                                                 <span className="font-bold text-xl tracking-tight text-[#1D1D1D]">Space.inc</span>
+                                                <div className="ml-auto">
+                                                    <NotificationBell />
+                                                </div>
                                             </div>
                                             <div className="px-2 relative mb-4">
                                                 <Search size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-[#8E8EA0]" />
@@ -494,6 +529,22 @@ const App = () => {
                                         <button title="Close" onClick={() => setIsInstantMeetingModalOpen(false)} className="absolute right-4 top-4 p-2 rounded-full"><X size={18} /></button>
                                         <Heading level={2} className="mb-6 flex items-center gap-2 uppercase tracking-tighter"><Video className="text-emerald-500" /> Instant Meeting</Heading>
                                         <input placeholder="Meeting Title" value={instantMeetingTitle} onChange={(e) => setInstantMeetingTitle(e.target.value)} className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-sm mb-6" />
+                        <div className="mb-6">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Category</label>
+                            <select
+                                value={instantMeetingCategory}
+                                onChange={(e) => setInstantMeetingCategory(e.target.value)}
+                                className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                            >
+                                <option value="sales_call">Sales Call</option>
+                                <option value="onboarding">Onboarding</option>
+                                <option value="check_in">Check-in</option>
+                                <option value="project_review">Project Review</option>
+                                <option value="strategy">Strategy</option>
+                                <option value="general">General</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
                                         <div className="flex gap-3">
                                             <Button variant="ghost" className="flex-1 uppercase text-[10px] font-black tracking-widest" onClick={() => setIsInstantMeetingModalOpen(false)}>Cancel</Button>
                                             <Button variant="primary" className="flex-1 uppercase text-[10px] font-black tracking-widest" onClick={() => handleInstantMeeting(instantMeetingTargetSpace!, instantMeetingTitle)}>Create</Button>

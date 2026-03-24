@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
+import { supabase } from '../../lib/supabase';
+import { friendlyError } from '../../utils/errors';
 import {
     LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
@@ -29,6 +31,34 @@ import SpaceChatPanel from './SpaceChatPanel';
 const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstantMeet }: { space: ClientSpace | undefined, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void }) => {
     const { user, profile, organizationId } = useAuth();
     const { showToast } = useToast();
+
+    const [spaceStats, setSpaceStats] = useState<any>(null);
+    const [spaceStatsLoading, setSpaceStatsLoading] = useState(false);
+
+    useEffect(() => {
+        if (!space?.id) return;
+        let cancelled = false;
+        const loadStats = async () => {
+            try {
+                setSpaceStatsLoading(true);
+                const { data, error } = await supabase
+                    .from('space_stats')
+                    .select('message_count, file_count, meeting_count, last_activity_at')
+                    .eq('space_id', space.id)
+                    .single();
+                if (error) throw error;
+                if (!cancelled) setSpaceStats(data);
+            } catch (err: any) {
+                console.error('[SpaceDetailView] Failed to load space_stats:', err);
+            } finally {
+                if (!cancelled) setSpaceStatsLoading(false);
+            }
+        };
+        loadStats();
+        return () => {
+            cancelled = true;
+        };
+    }, [space?.id]);
 
     if (!space) {
         return (
@@ -58,6 +88,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
     const [newMeetingTime, setNewMeetingTime] = useState('');
     const [newMeetingTitle, setNewMeetingTitle] = useState(`${space.name} Sync`);
     const [notifyClient, setNotifyClient] = useState(true);
+    const [newMeetingCategory, setNewMeetingCategory] = useState<string>('general');
 
     const handleLocalSchedule = () => {
         onSchedule({
@@ -65,7 +96,8 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
             title: newMeetingTitle,
             date: newMeetingDate,
             time: newMeetingTime,
-            notify: notifyClient
+            notify: notifyClient,
+            category: newMeetingCategory
         });
         setIsScheduleModalOpen(false);
     };
@@ -100,6 +132,30 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                         </button>
                     ))}
                 </div>
+            </div>
+
+            {/* Mini stats bar (Task 5C) */}
+            <div className="flex gap-2 flex-wrap mb-6">
+                {spaceStatsLoading ? (
+                    <>
+                        <span className="px-3 py-1 text-[10px] rounded-full bg-zinc-100 text-zinc-400">Loading...</span>
+                    </>
+                ) : (
+                    <>
+                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700">
+                            Messages: {spaceStats?.message_count ?? 0}
+                        </span>
+                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700">
+                            Files: {spaceStats?.file_count ?? 0}
+                        </span>
+                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700">
+                            Meetings: {spaceStats?.meeting_count ?? 0}
+                        </span>
+                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700">
+                            Last active: {spaceStats?.last_activity_at ? new Date(spaceStats.last_activity_at).toLocaleString() : '—'}
+                        </span>
+                    </>
+                )}
             </div>
 
             {/* Content Area */}
@@ -199,6 +255,23 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                     </div>
                                 </div>
                                 <Toggle label="Notify Client (Email & Push)" checked={notifyClient} onChange={setNotifyClient} />
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-700 mb-1">Category</label>
+                                    <select
+                                        value={newMeetingCategory}
+                                        onChange={(e) => setNewMeetingCategory(e.target.value)}
+                                        className="w-full bg-white/40 border border-zinc-200 rounded-lg px-5 py-3 text-zinc-800 text-sm focus:outline-none"
+                                        title="Meeting category"
+                                    >
+                                        <option value="sales_call">Sales Call</option>
+                                        <option value="onboarding">Onboarding</option>
+                                        <option value="check_in">Check-in</option>
+                                        <option value="project_review">Project Review</option>
+                                        <option value="strategy">Strategy</option>
+                                        <option value="general">General</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
                                 <Button className="w-full mt-4" onClick={handleLocalSchedule}>Schedule for this Space</Button>
                             </div>
                         </Modal>
@@ -282,7 +355,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                                      await apiService.deleteFile(file.id);
                                                                      showToast('File moved to trash.', "success");
                                                                  } catch (err: any) {
-                                                                     showToast(`Failed to trash file: ${err.message}`, "error");
+                                                                    showToast(friendlyError(err?.message), "error");
                                                                  }
                                                             }
                                                         }}
@@ -300,7 +373,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                                 await apiService.restoreFile(file.id);
                                                                 showToast('File restored.', "success");
                                                             } catch (err: any) {
-                                                                showToast(`Failed to restore file: ${err.message}`, "error");
+                                                                    showToast(friendlyError(err?.message), "error");
                                                             }
                                                         }}
                                                         className="h-8 w-8 p-0 text-zinc-400 hover:text-emerald-500"
@@ -316,7 +389,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                                     await apiService.hardDeleteFile(file.id);
                                                                     showToast('File permanently deleted.', "success");
                                                                 } catch (err: any) {
-                                                                    showToast(`Failed to delete file: ${err.message}`, "error");
+                                                                    showToast(friendlyError(err?.message), "error");
                                                                 }
                                                             }
                                                         }}

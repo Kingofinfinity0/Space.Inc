@@ -381,7 +381,7 @@ export const apiService = {
         return { data: data || [], error: null };
     },
 
-    async scheduleMeeting(data: { title: string; starts_at: string; duration_minutes?: number; space_id: string; description?: string; recording_enabled?: boolean }) {
+    async scheduleMeeting(data: { title: string; starts_at: string; duration_minutes?: number; space_id: string; description?: string; recording_enabled?: boolean; category?: string }) {
         const { data: res, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
             body: { action: 'CREATE_SCHEDULED_MEETING', ...data }
@@ -390,7 +390,7 @@ export const apiService = {
         return { data: res?.data || res, error: null };
     },
 
-    async createInstantMeeting(params: { space_id: string; title?: string; description?: string; recording_enabled?: boolean }) {
+    async createInstantMeeting(params: { space_id: string; title?: string; description?: string; recording_enabled?: boolean; category?: string }) {
         const { data, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
             body: { 
@@ -398,7 +398,8 @@ export const apiService = {
                 space_id: params.space_id,
                 title: params.title,
                 description: params.description,
-                recording_enabled: params.recording_enabled ?? true
+                recording_enabled: params.recording_enabled ?? true,
+                category: params.category ?? 'general'
             }
         });
         if (error) return { data: null, error: { message: error.message } };
@@ -451,7 +452,8 @@ export const apiService = {
     async stopMeeting(meetingId: string) {
         const { data, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'END_MEETING', meeting_id: meetingId }
+            // Task 3C expects meetingId (camelCase). Backend will validate access + end meeting.
+            body: { action: 'END_MEETING', meetingId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to stop meeting' } };
         return { data, error: null };
@@ -488,13 +490,12 @@ export const apiService = {
     },
 
     async getFileVersions(fileId: string, parentId?: string) {
-        // A version tree is identified by its root parent_id
         const rootId = parentId || fileId;
         const { data, error } = await supabase
             .from('files')
             .select('*')
-            .or(`id.eq.${rootId},parent_id.eq.${rootId}`)
-            .order('version_number', { ascending: false });
+            .eq('id', rootId)
+            .order('created_at', { ascending: false });
         
         return { data: data || [], error };
     },
