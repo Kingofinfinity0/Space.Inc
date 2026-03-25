@@ -29,7 +29,23 @@ const StaffView: React.FC<{
     spaces: ClientSpace[];
     onInvite: () => void;
     onUpdateCapability: (staffId: string, spaceId: string, capKey: string, allowed: boolean) => void;
-}> = ({ staff, spaces, onInvite, onUpdateCapability }) => (
+    onRefresh?: () => void;
+}> = ({ staff, spaces, onInvite, onUpdateCapability, onRefresh }) => {
+    const { showToast } = useToast();
+
+    const handleToggleSpace = async (staffUserId: string, spaceId: string, currentValue: boolean) => {
+        try {
+            await apiService.updateStaffCapability(staffUserId, spaceId, !currentValue);
+            showToast("Staff capability updated successfully.", "success");
+            // Refresh staff list after update
+            if (onRefresh) onRefresh();
+        } catch (err) {
+            console.error('Failed to update staff capability:', err);
+            showToast("Failed to update staff capability.", "error");
+        }
+    };
+
+    return (
     <div className="space-y-8 animate-[fadeIn_0.5s_ease-out]">
         <div className="flex items-center justify-between">
             <div>
@@ -81,10 +97,7 @@ const StaffView: React.FC<{
                                             <span className="text-sm font-bold text-zinc-800">{space.name}</span>
                                             <Toggle
                                                 checked={isAssigned}
-                                                onChange={() => {
-                                                    // This would trigger apiService.assignStaffToSpace logic
-                                                    console.log('Toggle space assignment', member.id, space.id);
-                                                }}
+                                                onChange={() => handleToggleSpace(member.id, space.id, isAssigned)}
                                             />
                                         </div>
                                         {isAssigned && (
@@ -109,6 +122,7 @@ const StaffView: React.FC<{
             ))}
         </div>
     </div>
-);
+    );
+};
 
 export default StaffView;

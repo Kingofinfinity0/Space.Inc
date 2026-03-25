@@ -168,16 +168,16 @@ export const apiService = {
      * @param email   - Invitee email address
      * @param role    - 'staff' | 'client' (default: 'client')
      */
-    async generateClientInviteLink(email: string, spaceId: string, expiresAt?: string) {
+    async generateClientInviteLink(spaceId: string, email?: string) {
         const { data, error } = await supabase.rpc('generate_client_invite_link', {
-            p_email: email,
             p_space_id: spaceId,
-            p_expires_at: expiresAt
+            p_email: email ?? null
         });
         if (error) throw error;
-        // Build robust link from current origin
-        data.invite_link = `${window.location.origin}/join?token=${data.token}`;
-        return data;
+        // The RPC returns { token, invite_id, expires_at, invite_url }
+        // The backend already handles invite_url construction if needed,
+        // but let's ensure it's returned as requested.
+        return data as { token: string; invite_id: string; expires_at: string; invite_url: string };
     },
 
     async generateStaffInviteLink(email: string, role: string, spaceAssignments: any[] = [], expiresAt?: string) {
@@ -294,15 +294,12 @@ export const apiService = {
         return data || [];
     },
 
-    async updateStaffCapability(staffId: string, spaceId: string, capKey: string, allowed: boolean): Promise<void> {
-        const { error } = await supabase
-            .from('staff_space_capabilities')
-            .upsert({
-                staff_id: staffId,
-                space_id: spaceId,
-                capability_key: capKey,
-                allowed: allowed
-            }, { onConflict: 'staff_id,space_id,capability_key' });
+    async updateStaffCapability(staffUserId: string, spaceId: string, enabled: boolean) {
+        const { error } = await supabase.rpc('update_staff_capability', {
+            p_staff_user_id: staffUserId,
+            p_space_id: spaceId,
+            p_enabled: enabled
+        });
         if (error) throw error;
     },
 
@@ -384,10 +381,22 @@ export const apiService = {
     async scheduleMeeting(data: { title: string; starts_at: string; duration_minutes?: number; space_id: string; description?: string; recording_enabled?: boolean; category?: string }) {
         const { data: res, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'CREATE_SCHEDULED_MEETING', ...data }
+            body: {
+                action: 'CREATE_SCHEDULED_MEETING',
+                space_id: data.space_id,
+                title: data.title,
+                starts_at: data.starts_at,
+                duration_minutes: data.duration_minutes,
+                description: data.description,
+                recording_enabled: data.recording_enabled,
+                category: data.category
+            }
         });
         if (error || res?.error) return { data: null, error: res?.error || { message: error?.message || 'Failed to schedule meeting' } };
-        return { data: res?.data || res, error: null };
+
+        // New response: { data: meeting }
+        const result = res?.data ?? res;
+        return { data: result, error: null };
     },
 
     async createInstantMeeting(params: { space_id: string; title?: string; description?: string; recording_enabled?: boolean; category?: string }) {
@@ -405,8 +414,9 @@ export const apiService = {
         if (error) return { data: null, error: { message: error.message } };
         if (data?.error) return { data: null, error: data.error };
         
-        const payload = data?.data ?? data;
-        return { data: payload, error: null };
+        // result.data.data.meeting and result.data.data.roomUrl
+        const result = data?.data ?? data;
+        return { data: result, error: null };
     },
 
     async startMeeting(meetingId: string, organizationId: string) {
@@ -426,7 +436,10 @@ export const apiService = {
             body: { action: 'JOIN_MEETING', meeting_id: meetingId }
         });
         if (error || res?.error) return { data: null, error: res?.error || { message: error?.message || 'Failed to join meeting' } };
-        return { data: res?.data || res, error: null };
+
+        // New response: { data: { token, roomUrl, meeting } }
+        const result = res?.data ?? res;
+        return { data: result, error: null };
     },
 
     async getMeetingToken(meetingId: string) {
@@ -436,6 +449,8 @@ export const apiService = {
         });
         if (error) return { data: null, error: { message: error.message } };
         if (res?.error) return { data: null, error: res.error };
+
+        // New response: { data: { token, roomUrl, meeting } }
         const result = res?.data ?? res;
         return { data: result, error: null };
     },

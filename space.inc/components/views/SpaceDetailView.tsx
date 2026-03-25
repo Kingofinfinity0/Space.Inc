@@ -34,6 +34,79 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
 
     const [spaceStats, setSpaceStats] = useState<any>(null);
     const [spaceStatsLoading, setSpaceStatsLoading] = useState(false);
+    const [activityIndicators, setActivityIndicators] = useState<{
+        unreadCount: number;
+        upcomingMeetings: any[];
+        recentFilesCount: number;
+    }>({ unreadCount: 0, upcomingMeetings: [], recentFilesCount: 0 });
+
+    const loadActivityIndicators = useCallback(async () => {
+        if (!space?.id) return;
+        try {
+            const lastSeenAt = localStorage.getItem(`space_${space.id}_last_seen`) || new Date(0).toISOString();
+            const [unreadRes, meetingsRes, filesRes] = await Promise.all([
+                supabase.from('messages')
+                    .select('id', { count: 'exact' })
+                    .eq('space_id', space.id)
+                    .gt('created_at', lastSeenAt),
+                supabase.from('meetings')
+                    .select('id, title, starts_at')
+                    .eq('space_id', space.id)
+                    .gt('starts_at', new Date().toISOString())
+                    .eq('status', 'scheduled')
+                    .order('starts_at')
+                    .limit(3),
+                supabase.from('files')
+                    .select('id', { count: 'exact' })
+                    .eq('space_id', space.id)
+                    .eq('status', 'available')
+                    .gt('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+            ]);
+
+            setActivityIndicators({
+                unreadCount: unreadRes.count || 0,
+                upcomingMeetings: meetingsRes.data || [],
+                recentFilesCount: filesRes.count || 0
+            });
+        } catch (err) {
+            console.error('Failed to load activity indicators:', err);
+        }
+    }, [space?.id]);
+    const [invites, setInvites] = useState<any[]>([]);
+    const [invitesLoading, setInvitesLoading] = useState(false);
+
+    const loadInvites = useCallback(async () => {
+        if (!space?.id) return;
+        try {
+            setInvitesLoading(true);
+            const { data, error } = await supabase
+                .from('space_invites')
+                .select('id, token, expires_at, email, status, created_at')
+                .eq('space_id', space.id)
+                .eq('status', 'pending')
+                .gt('expires_at', new Date().toISOString())
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setInvites(data || []);
+        } catch (err) {
+            console.error('Failed to fetch invites:', err);
+        } finally {
+            setInvitesLoading(false);
+        }
+    }, [space?.id]);
+
+    const handleGenerateInvite = async (email?: string) => {
+        if (!space?.id) return;
+        try {
+            await apiService.generateClientInviteLink(space.id, email);
+            showToast("Invite link generated successfully.", "success");
+            await loadInvites();
+        } catch (err: any) {
+            console.error('Failed to generate invite link:', err);
+            showToast(friendlyError(err.message), "error");
+        }
+    };
 
     useEffect(() => {
         if (!space?.id) return;
@@ -55,10 +128,18 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
             }
         };
         loadStats();
+        loadInvites();
+        loadActivityIndicators();
         return () => {
             cancelled = true;
         };
-    }, [space?.id]);
+    }, [space?.id, loadInvites, loadActivityIndicators]);
+
+    useEffect(() => {
+        if (activeTab === 'Chat' && space?.id) {
+            localStorage.setItem(`space_${space.id}_last_seen`, new Date().toISOString());
+        }
+    }, [activeTab, space?.id]);
 
     if (!space) {
         return (
@@ -134,24 +215,37 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                 </div>
             </div>
 
-            {/* Mini stats bar (Task 5C) */}
+            {/* Activity Indicators (Task 7) */}
             <div className="flex gap-2 flex-wrap mb-6">
                 {spaceStatsLoading ? (
-                    <>
-                        <span className="px-3 py-1 text-[10px] rounded-full bg-zinc-100 text-zinc-400">Loading...</span>
-                    </>
+                    <span className="px-3 py-1 text-[10px] rounded-full bg-zinc-100 text-zinc-400">Loading indicators...</span>
                 ) : (
                     <>
-                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700">
-                            Messages: {spaceStats?.message_count ?? 0}
-                        </span>
-                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700">
-                            Files: {spaceStats?.file_count ?? 0}
-                        </span>
-                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700">
-                            Meetings: {spaceStats?.meeting_count ?? 0}
-                        </span>
-                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700">
+                        {activityIndicators.unreadCount > 0 && (
+                            <span className="px-3 py-1 text-[10px] font-bold rounded-full bg-rose-50 border border-rose-100 text-rose-600 flex items-center gap-1.5">
+                                <div className="h-1.5 w-1.5 bg-rose-500 rounded-full animate-pulse" /> {activityIndicators.unreadCount} unread
+                            </span>
+                        )}
+                        {activityIndicators.upcomingMeetings.length > 0 && (
+                            <span className="px-3 py-1 text-[10px] font-bold rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center gap-1.5">
+                                <Calendar size={10} />
+                                {(() => {
+                                    const next = activityIndicators.upcomingMeetings[0];
+                                    const date = new Date(next.starts_at);
+                                    const isToday = date.toDateString() === new Date().toDateString();
+                                    return isToday ? `Meeting today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : `${activityIndicators.upcomingMeetings.length} upcoming meetings`;
+                                })()}
+                            </span>
+                        )}
+                        {activityIndicators.recentFilesCount > 0 && (
+                            <span className="px-3 py-1 text-[10px] font-bold rounded-full bg-blue-50 border border-blue-100 text-blue-600 flex items-center gap-1.5">
+                                <FolderClosed size={10} /> {activityIndicators.recentFilesCount} new files
+                            </span>
+                        )}
+                        {!activityIndicators.unreadCount && !activityIndicators.upcomingMeetings.length && !activityIndicators.recentFilesCount && (
+                            <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-400">No new activity</span>
+                        )}
+                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700 ml-auto">
                             Last active: {spaceStats?.last_activity_at ? new Date(spaceStats.last_activity_at).toLocaleString() : '—'}
                         </span>
                     </>
@@ -179,6 +273,64 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                     <p><span className="font-medium text-[#1D1D1D]">Visibility:</span> {space.visibility}</p>
                                     <p><span className="font-medium text-[#1D1D1D]">Role:</span> {space.role}</p>
                                     <p><span className="font-medium text-[#1D1D1D]">Status:</span> {space.status}</p>
+                                </div>
+                            </GlassCard>
+
+                            <GlassCard className="p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <Heading level={3}>Client Invite Links</Heading>
+                                    <Button variant="outline" size="sm" onClick={() => handleGenerateInvite()}>
+                                        <Plus size={14} className="mr-1" /> New Link
+                                    </Button>
+                                </div>
+                                <div className="space-y-4">
+                                    {invitesLoading ? (
+                                        <SkeletonText lines={2} />
+                                    ) : invites.length > 0 ? (
+                                        invites.map(invite => (
+                                            <div key={invite.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
+                                                <div className="min-w-0 flex-1 mr-3">
+                                                    <p className="text-xs font-mono text-zinc-500 truncate">
+                                                        ...{invite.token.substring(invite.token.length - 8)}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        {invite.email && <span className="text-[10px] text-zinc-400">{invite.email}</span>}
+                                                        <span className="px-1.5 py-0.5 bg-zinc-200 text-[8px] font-bold text-zinc-500 rounded uppercase">
+                                                            Exp: {new Date(invite.expires_at).toLocaleDateString()}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-1">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0"
+                                                        onClick={() => {
+                                                            const url = `${window.location.origin}/join?token=${invite.token}`;
+                                                            navigator.clipboard.writeText(url);
+                                                            showToast("Copied to clipboard", "success");
+                                                        }}
+                                                        title="Copy Link"
+                                                    >
+                                                        <Copy size={14} />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0"
+                                                        onClick={() => handleGenerateInvite(invite.email)}
+                                                        title="Regenerate"
+                                                    >
+                                                        <History size={14} />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-4">
+                                            <p className="text-zinc-400 text-xs italic">No active invite links.</p>
+                                        </div>
+                                    )}
                                 </div>
                             </GlassCard>
                         </div>

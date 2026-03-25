@@ -62,42 +62,73 @@ export default function OwnerDashboardView({
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
-    const [summary, setSummary] = useState<any>(null);
-    const [engagement, setEngagement] = useState<any[]>([]);
-    const [meetingIntel, setMeetingIntel] = useState<any[]>([]);
-    const [pipeline, setPipeline] = useState<any>(null);
-    const [feed, setFeed] = useState<any[]>([]);
+    const [tasksFeed, setTasksFeed] = useState<any[]>([]);
+    const [upcomingMeetings, setUpcomingMeetings] = useState<any[]>([]);
+    const [notifications, setNotifications] = useState<any[]>([]);
+    const [analytics, setAnalytics] = useState<any>({
+        activeSpaces: 0,
+        activeClients: 0,
+        totalMessagesWeek: 0,
+        meetingsMonth: 0,
+        filesMonth: 0
+    });
 
     const load = async () => {
         if (!user) return;
         setLoading(true);
         try {
-            const results = await Promise.all([
-                supabase.rpc('get_owner_dashboard_summary'),
-                supabase.rpc('get_client_engagement_scores'),
-                supabase.rpc('get_meeting_intelligence', { p_days: 30 }),
-                supabase.rpc('get_acquisition_pipeline'),
-                supabase.rpc('get_activity_feed', { p_limit: 15 })
+            const now = new Date().toISOString();
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+
+            const [tasksRes, meetingsRes, notificationsRes, analyticsRes] = await Promise.all([
+                // Widget 1: Task Management (activity_logs as tasks)
+                supabase.from('activity_logs')
+                    .select('id, action_type, space_name, created_at, actor_name')
+                    .in('action_type', ['meeting_created', 'file_uploaded'])
+                    .gt('created_at', sevenDaysAgo)
+                    .order('created_at', { ascending: false }),
+
+                // Widget 2: Calendar
+                supabase.from('meetings')
+                    .select('id, title, space_name, starts_at, status')
+                    .gt('starts_at', now)
+                    .eq('status', 'scheduled')
+                    .order('starts_at')
+                    .limit(10),
+
+                // Widget 3: Inbox / Notifications
+                supabase.from('notifications')
+                    .select('id, type, message, is_read, created_at, space_id')
+                    .eq('user_id', user.id)
+                    .eq('is_read', false)
+                    .order('created_at', { ascending: false })
+                    .limit(20),
+
+                // Widget 4: Business Analytics
+                Promise.all([
+                    supabase.from('spaces').select('id', { count: 'exact' }).eq('status', 'active'),
+                    supabase.from('space_memberships')
+                        .select('id', { count: 'exact' })
+                        .eq('role', 'client')
+                        .gt('last_activity_at', sevenDaysAgo),
+                    supabase.from('messages').select('id', { count: 'exact' }).gt('created_at', sevenDaysAgo),
+                    supabase.from('meetings').select('id', { count: 'exact' }).eq('status', 'ended').gt('ended_at', startOfMonth),
+                    supabase.from('files').select('id', { count: 'exact' }).gt('created_at', startOfMonth)
+                ])
             ]);
 
-            // Supabase rpc returns { data, error }
-            const s = results[0] as any;
-            const e = results[1] as any;
-            const mi = results[2] as any;
-            const p = results[3] as any;
-            const f = results[4] as any;
+            setTasksFeed(tasksRes.data || []);
+            setUpcomingMeetings(meetingsRes.data || []);
+            setNotifications(notificationsRes.data || []);
+            setAnalytics({
+                activeSpaces: analyticsRes[0].count || 0,
+                activeClients: analyticsRes[1].count || 0,
+                totalMessagesWeek: analyticsRes[2].count || 0,
+                meetingsMonth: analyticsRes[3].count || 0,
+                filesMonth: analyticsRes[4].count || 0
+            });
 
-            if (s.error) throw s.error;
-            if (e.error) throw e.error;
-            if (mi.error) throw mi.error;
-            if (p.error) throw p.error;
-            if (f.error) throw f.error;
-
-            setSummary(s.data || {});
-            setEngagement(e.data || []);
-            setMeetingIntel(mi.data || []);
-            setPipeline(p.data || null);
-            setFeed(f.data || []);
         } catch (err: any) {
             console.error('[OwnerDashboardView] load failed:', err);
             showToast(friendlyError(err?.message), 'error');
@@ -142,211 +173,126 @@ export default function OwnerDashboardView({
                 </div>
             </header>
 
-            {/* Zone 1 — Stat bar */}
+            {/* Widget 4: Business Analytics */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <GlassCard className="p-4 md:col-span-1">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Total Clients</Text>
-                    <div className="text-3xl font-semibold text-[#1D1D1D]">{loading ? <SkeletonLoader width="60px" height="28px" /> : totalClients}</div>
-                </GlassCard>
-                <GlassCard className="p-4 md:col-span-1">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">New This Month</Text>
-                    <div className="text-3xl font-semibold text-[#1D1D1D]">{loading ? <SkeletonLoader width="60px" height="28px" /> : newThisMonth}</div>
-                </GlassCard>
-                <GlassCard className="p-4 md:col-span-1">
+                <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Spaces</Text>
-                    <div className="text-3xl font-semibold text-[#1D1D1D]">{loading ? <SkeletonLoader width="60px" height="28px" /> : activeSpaces}</div>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
                 </GlassCard>
-                <GlassCard className="p-4 md:col-span-1">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Plan / Quota</Text>
-                    <div className="text-sm text-[#1D1D1D] mt-2">
-                        {loading ? <SkeletonLoader width="120px" height="14px" /> : planQuota ? String(planQuota) : '—'}
-                    </div>
+                <GlassCard className="p-4">
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Clients (7d)</Text>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeClients}</div>
                 </GlassCard>
-                <GlassCard className={`p-4 md:col-span-1 ${silentAlert ? 'border-rose-200 bg-rose-50/30' : ''}`}>
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Spaces Quiet</Text>
-                    <div className="text-sm text-[#1D1D1D] mt-2">
-                        {loading ? '—' : silentAlert ? `${silentCount} spaces have gone quiet` : 'No silent spaces'}
-                    </div>
+                <GlassCard className="p-4">
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Messages (7d)</Text>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.totalMessagesWeek}</div>
+                </GlassCard>
+                <GlassCard className="p-4">
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Meetings (Month)</Text>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.meetingsMonth}</div>
+                </GlassCard>
+                <GlassCard className="p-4">
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Files Shared (Month)</Text>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.filesMonth}</div>
                 </GlassCard>
             </div>
 
-            {/* Zone 2 — Engagement grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
+                    {/* Widget 1: Task Management */}
                     <GlassCard className="p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <Heading level={3}>Engagement by Space</Heading>
-                            <Button variant="ghost" size="sm">View All</Button>
-                        </div>
+                        <Heading level={3} className="mb-6">Task Management</Heading>
                         {loading ? (
+                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
+                        ) : tasksFeed.length === 0 ? (
+                            <div className="text-zinc-400 text-sm italic py-4">No recent activity tasks.</div>
+                        ) : (
                             <div className="space-y-3">
-                                {[0, 1, 2].map(i => (
-                                    <SkeletonLoader key={i} height="84px" borderRadius="16px" />
+                                {tasksFeed.map(item => (
+                                    <div key={item.id} className="p-4 border border-zinc-100 rounded-xl bg-white flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                            <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400">
+                                                {item.action_type === 'file_uploaded' ? <FileText size={18} /> : <Video size={18} />}
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-zinc-900">{item.actor_name} {ACTION_LABELS[item.action_type]}</p>
+                                                <p className="text-xs text-zinc-500">{item.space_name} • {timeAgo(item.created_at)}</p>
+                                            </div>
+                                        </div>
+                                        <Button variant="ghost" size="sm" icon={<ArrowRight size={14} />} />
+                                    </div>
                                 ))}
                             </div>
-                        ) : engagement.length === 0 ? (
-                            <div className="text-zinc-400 text-sm italic">No engagement data yet.</div>
+                        )}
+                    </GlassCard>
+
+                    {/* Widget 2: Calendar / Upcoming Schedule */}
+                    <GlassCard className="p-6">
+                        <Heading level={3} className="mb-6">Upcoming Schedule</Heading>
+                        {loading ? (
+                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
+                        ) : upcomingMeetings.length === 0 ? (
+                            <div className="text-zinc-400 text-sm italic py-4">No upcoming meetings scheduled.</div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {engagement.map((row: any) => {
-                                    const risk = row.badge || row.status || row.risk || row.engagement_status;
-                                    const isActive = risk === 'active';
-                                    const isWatching = risk === 'watching';
-                                    const isAtRisk = risk === 'at_risk';
-                                    const badgeClass = isActive
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                        : isWatching
-                                            ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                            : isAtRisk
-                                                ? 'bg-rose-50 text-rose-700 border-rose-100'
-                                                : 'bg-zinc-50 text-zinc-700 border-zinc-100';
-
-                                    const spaceId = row.space_id || row.spaceId;
-                                    const spaceName = row.space_name || row.spaceName || 'Space';
-                                    const clientName = row.client_name || row.clientName || 'Client';
-
+                            <div className="space-y-4">
+                                {upcomingMeetings.map(m => {
+                                    const startTime = new Date(m.starts_at);
+                                    const canJoin = (startTime.getTime() - Date.now()) < 30 * 60 * 1000;
                                     return (
-                                        <button
-                                            key={spaceId || spaceName}
-                                            onClick={() => spaceId && goToSpace(spaceId)}
-                                            className="w-full text-left p-4 border border-zinc-100 rounded-xl hover:border-zinc-300 transition-colors bg-white"
-                                        >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-semibold text-[#1D1D1D] truncate">{spaceName}</p>
-                                                    <p className="text-[12px] text-zinc-500 truncate mt-1">{clientName}</p>
+                                        <div key={m.id} className="flex items-center justify-between p-4 border border-zinc-100 rounded-xl">
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-center min-w-[50px]">
+                                                    <p className="text-[10px] font-black uppercase text-zinc-400">{startTime.toLocaleString('en-US', { month: 'short' })}</p>
+                                                    <p className="text-xl font-bold text-zinc-900">{startTime.getDate()}</p>
                                                 </div>
-                                                <span className={`text-[10px] font-bold uppercase tracking-wider border px-2 py-1 rounded-full ${badgeClass}`}>
-                                                    {risk || 'active'}
-                                                </span>
-                                            </div>
-                                            <div className="text-[12px] text-zinc-500 mt-3">
-                                                Last activity: {row.last_activity_at ? new Date(row.last_activity_at).toLocaleDateString() : '—'}
-                                            </div>
-                                            <div className="flex items-center gap-3 mt-3 text-[12px] text-zinc-600">
-                                                <span>{row.messages_this_week ?? 0} messages</span>
-                                                <span>•</span>
-                                                <span>{row.meetings_this_month ?? 0} meetings</span>
-                                            </div>
-                                            {row.alert_message && (
-                                                <div className="mt-3 text-[12px] bg-amber-50 border border-amber-100 text-amber-800 px-3 py-2 rounded-lg">
-                                                    {row.alert_message}
+                                                <div>
+                                                    <p className="text-sm font-bold text-zinc-900">{m.title}</p>
+                                                    <p className="text-xs text-zinc-500">{m.space_name} • {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                                 </div>
+                                            </div>
+                                            {canJoin && (
+                                                <Button variant="primary" size="sm" onClick={() => onJoin(m.id)}>Join Now</Button>
                                             )}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </GlassCard>
-
-                    {/* Zone 3 — Meeting Intelligence */}
-                    <GlassCard className="p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <Heading level={3}>Meeting Intelligence</Heading>
-                            <Button variant="ghost" size="sm">Last 30 Days</Button>
-                        </div>
-                        {loading ? (
-                            <div className="text-sm text-zinc-400">Loading...</div>
-                        ) : meetingIntel.length === 0 ? (
-                            <div className="text-sm text-zinc-400 italic">No meeting intelligence data.</div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead>
-                                        <tr className="text-[10px] uppercase tracking-wider text-zinc-500">
-                                            <th className="py-2">Space</th>
-                                            <th className="py-2">Meetings held</th>
-                                            <th className="py-2">Success %</th>
-                                            <th className="py-2">Category breakdown</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {meetingIntel.map((r: any, idx: number) => {
-                                            const successRate = Number(r.success_rate ?? r.successRate ?? 0);
-                                            return (
-                                                <tr key={r.space_id || idx} className="border-t border-zinc-100">
-                                                    <td className="py-3 font-medium text-zinc-800">{r.space_name || r.space || '—'}</td>
-                                                    <td className="py-3 text-zinc-600">{r.meetings_held ?? r.meetingsHeld ?? 0}</td>
-                                                    <td className="py-3">
-                                                        <span className={`px-2 py-1 rounded-full text-[12px] border ${successRateColor(successRate)}`}>
-                                                            {Number.isFinite(successRate) ? `${successRate}%` : '—'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-3 text-zinc-600">
-                                                        {typeof r.category_breakdown === 'string'
-                                                            ? r.category_breakdown
-                                                            : r.category_breakdown
-                                                                ? JSON.stringify(r.category_breakdown)
-                                                                : '—'}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </GlassCard>
-                </div>
-
-                {/* Zone 4 — Activity feed */}
-                <div className="space-y-6">
-                    <GlassCard className="p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <Heading level={3}>Activity Feed</Heading>
-                            <Button variant="ghost" size="sm">Recent</Button>
-                        </div>
-                        {loading ? (
-                            <div className="space-y-3">
-                                {[0, 1, 2].map(i => (
-                                    <SkeletonLoader key={i} height="56px" borderRadius="14px" />
-                                ))}
-                            </div>
-                        ) : feed.length === 0 ? (
-                            <div className="text-sm text-zinc-400 italic">No activity yet.</div>
-                        ) : (
-                            <div className="space-y-3">
-                                {feed.map((item: any) => {
-                                    const action = item.action_type || item.actionType;
-                                    const actionLabel = ACTION_LABELS[action] || action || 'did something';
-                                    const actor = item.actor_name || item.actorName || 'Someone';
-                                    const spaceName = item.space_name || item.spaceName || 'space';
-                                    const createdAt = item.created_at || item.createdAt;
-                                    return (
-                                        <div key={item.id || `${actor}-${createdAt}`} className="p-3 rounded-xl border border-zinc-100 bg-white">
-                                            <p className="text-sm text-zinc-800">
-                                                {actor} {actionLabel} in {spaceName}
-                                            </p>
-                                            <p className="text-[12px] text-zinc-500 mt-1">
-                                                {timeAgo(createdAt)}
-                                            </p>
                                         </div>
                                     );
                                 })}
                             </div>
                         )}
                     </GlassCard>
+                </div>
 
-                    {/* Small pipeline / chart hint (optional visualization) */}
+                <div className="space-y-6">
+                    {/* Widget 3: Inbox / Notifications */}
                     <GlassCard className="p-6">
-                        <Heading level={3} className="mb-3">Acquisition Signals</Heading>
-                        <Text variant="secondary" className="text-sm">
-                            {pipeline ? 'Signal snapshot loaded.' : '—'}
-                        </Text>
-                        <div className="h-[160px] w-full mt-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={[{ value: 22 }, { value: 35 }, { value: 30 }, { value: 48 }, { value: 44 }]} >
-                                    <defs>
-                                        <linearGradient id="owner-gradient" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#18181b" stopOpacity={0.12} />
-                                            <stop offset="95%" stopColor="#18181b" stopOpacity={0.02} />
-                                        </linearGradient>
-                                    </defs>
-                                    <Area type="monotone" dataKey="value" stroke="#18181b" strokeWidth={2} fill="url(#owner-gradient)" />
-                                </AreaChart>
-                            </ResponsiveContainer>
+                        <div className="flex justify-between items-center mb-6">
+                            <Heading level={3}>Inbox</Heading>
+                            <Button variant="ghost" size="sm" onClick={async () => {
+                                await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
+                                load();
+                            }}>Mark all read</Button>
                         </div>
+                        {loading ? (
+                            <div className="space-y-3"><SkeletonLoader height="50px" borderRadius="10px" /></div>
+                        ) : notifications.length === 0 ? (
+                            <div className="text-center py-10">
+                                <Activity className="mx-auto text-zinc-200 mb-2" size={32} />
+                                <p className="text-zinc-400 text-xs italic">Inbox is clear.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {notifications.map(n => (
+                                    <div key={n.id} className="p-3 bg-white border border-zinc-100 rounded-xl cursor-pointer hover:border-zinc-300 transition-colors" onClick={() => n.space_id && goToSpace(n.space_id)}>
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-zinc-400">
+                                                {n.type === 'file_uploaded' ? <FileText size={16} /> : n.type === 'message_received' ? <MessageSquare size={16} /> : <Calendar size={16} />}
+                                            </div>
+                                            <p className="text-xs text-zinc-800 line-clamp-2">{n.message}</p>
+                                        </div>
+                                        <p className="text-[10px] text-zinc-400 mt-2">{timeAgo(n.created_at)}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </GlassCard>
                 </div>
             </div>
