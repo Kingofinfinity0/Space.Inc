@@ -19,6 +19,7 @@ import {
 } from '../UI/index';
 import { FileViewerModal } from '../FileViewerModal';
 import { FileUploadModal } from '../FileUploadModal';
+import { supabase } from '../../lib/supabase';
 import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
@@ -85,21 +86,8 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                         </div>
                         <h3 className="text-xl font-bold text-zinc-900 mb-1">{client.name}</h3>
                         <p className="text-sm text-zinc-500 font-light mb-6">{client.description || 'Verified Portal Environment'}</p>
-                        <div className="grid grid-cols-3 gap-2 py-4 border-t border-zinc-50 mb-2">
-                            <div className="text-center">
-                                <p className="text-[10px] uppercase text-zinc-400 font-black">Meetings</p>
-                                <p className="text-sm font-bold text-zinc-800">{client.meeting_count || 0}</p>
-                            </div>
-                            <div className="text-center border-l border-zinc-100">
-                                <p className="text-[10px] uppercase text-zinc-400 font-black">Docs</p>
-                                <p className="text-sm font-bold text-zinc-800">{client.file_count || 0}</p>
-                            </div>
-                            <div className="text-center border-l border-zinc-100">
-                                <p className="text-[10px] uppercase text-zinc-400 font-black">Activity</p>
-                                <p className="text-sm font-bold text-zinc-800">
-                                    {client.last_activity_at ? new Date(client.last_activity_at).toLocaleDateString() : 'Never'}
-                                </p>
-                            </div>
+                        <div className="py-4 border-t border-zinc-50 mb-2">
+                            <SpaceActivityIndicators spaceId={client.id} />
                         </div>
                     </GlassCard>
                 ))}
@@ -153,6 +141,75 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                     </div>
                 </div>
             </Modal>
+        </div>
+    );
+};
+
+const SpaceActivityIndicators = ({ spaceId }: { spaceId: string }) => {
+    const [indicators, setIndicators] = useState<{
+        unreadCount: number;
+        upcomingMeetingsCount: number;
+        recentFilesCount: number;
+    }>({ unreadCount: 0, upcomingMeetingsCount: 0, recentFilesCount: 0 });
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const lastSeenAt = localStorage.getItem(`space_${spaceId}_last_seen`) || new Date(0).toISOString();
+                const [unreadRes, meetingsRes, filesRes] = await Promise.all([
+                    supabase.from('messages')
+                        .select('id', { count: 'exact' })
+                        .eq('space_id', spaceId)
+                        .gt('created_at', lastSeenAt),
+                    supabase.from('meetings')
+                        .select('id', { count: 'exact' })
+                        .eq('space_id', spaceId)
+                        .gt('starts_at', new Date().toISOString())
+                        .eq('status', 'scheduled'),
+                    supabase.from('files')
+                        .select('id', { count: 'exact' })
+                        .eq('space_id', spaceId)
+                        .eq('status', 'available')
+                        .gt('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+                ]);
+
+                setIndicators({
+                    unreadCount: unreadRes.count || 0,
+                    upcomingMeetingsCount: meetingsRes.count || 0,
+                    recentFilesCount: filesRes.count || 0
+                });
+            } catch (err) {
+                console.error('Failed to load indicators for space:', spaceId, err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, [spaceId]);
+
+    if (loading) return <div className="h-10 flex items-center justify-center"><div className="h-4 w-4 border-2 border-zinc-200 border-t-zinc-400 rounded-full animate-spin" /></div>;
+
+    return (
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            {indicators.unreadCount > 0 && (
+                <span className="flex-shrink-0 px-2 py-0.5 text-[9px] font-black uppercase bg-rose-50 text-rose-600 border border-rose-100 rounded">
+                    {indicators.unreadCount} Unread
+                </span>
+            )}
+            {indicators.upcomingMeetingsCount > 0 && (
+                <span className="flex-shrink-0 px-2 py-0.5 text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100 rounded">
+                    {indicators.upcomingMeetingsCount} Meeting{indicators.upcomingMeetingsCount > 1 ? 's' : ''}
+                </span>
+            )}
+            {indicators.recentFilesCount > 0 && (
+                <span className="flex-shrink-0 px-2 py-0.5 text-[9px] font-black uppercase bg-blue-50 text-blue-600 border border-blue-100 rounded">
+                    {indicators.recentFilesCount} New File{indicators.recentFilesCount > 1 ? 's' : ''}
+                </span>
+            )}
+            {!indicators.unreadCount && !indicators.upcomingMeetingsCount && !indicators.recentFilesCount && (
+                <span className="text-[9px] text-zinc-400 italic">No new activity</span>
+            )}
         </div>
     );
 };

@@ -25,18 +25,50 @@ const ClientPortalView = ({ client, meetings, onJoin, onLogout }: {
     onJoin: (id: string) => void, 
     onLogout: () => void 
 }) => {
-    const { profile } = useAuth();
+    const { user, profile } = useAuth();
     const { showToast } = useToast();
     
-    // Fetch real-time data for this specific client space
-    const { messages, loading: messagesLoading } = useRealtimeMessages(client.id, client.organization_id);
-    const { files, loading: filesLoading } = useRealtimeFiles(client.id);
+    const [notifications, setNotifications] = useState<any[]>([]);
+    const [activityFeed, setActivityFeed] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const recentFiles = files.filter(f => f.status === 'available').slice(0, 3);
-    const nextMeeting = meetings
+    const loadData = useCallback(async () => {
+        if (!user) return;
+        try {
+            setLoading(true);
+            const [notificationsRes, activityRes] = await Promise.all([
+                // Widget 1: Notification Centre
+                supabase.from('notifications')
+                    .select('id, type, message, is_read, created_at')
+                    .eq('user_id', user.id)
+                    .eq('is_read', false)
+                    .order('created_at', { ascending: false })
+                    .limit(10),
+
+                // Widget 3: Recent Activity Feed
+                supabase.from('activity_logs')
+                    .select('id, action_type, space_name, created_at, actor_name')
+                    .eq('space_id', client.id)
+                    .order('created_at', { ascending: false })
+                    .limit(20)
+            ]);
+
+            setNotifications(notificationsRes.data || []);
+            setActivityFeed(activityRes.data || []);
+        } catch (err) {
+            console.error('Failed to load client portal data:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [user, client.id]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    const upcomingMeetings = meetings
         .filter(m => m.status === 'scheduled')
-        .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0];
-    const lastMessage = messages[messages.length - 1];
+        .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
 
     const formatDate = (dateStr: string) => {
         const d = new Date(dateStr);
@@ -78,132 +110,104 @@ const ClientPortalView = ({ client, meetings, onJoin, onLogout }: {
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Main Feed */}
-                    <div className="md:col-span-2 space-y-6">
-                        {/* Status Guard */}
-                        <GlassCard className="p-6 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white border-none shadow-lg shadow-emerald-200/20">
-                            <div className="flex items-center gap-4">
-                                <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md">
-                                    <Shield size={24} />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-bold">Secure Workspace</h3>
-                                    <p className="text-emerald-50 font-light opacity-90">All communications and documents are protected with end-to-end encryption.</p>
-                                </div>
-                            </div>
-                        </GlassCard>
-
-                        {/* Recent Files */}
+                    <div className="md:col-span-2 space-y-8">
+                        {/* Widget 1: Notification Centre */}
                         <div className="space-y-4">
-                            <div className="flex items-center justify-between px-1">
+                            <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
-                                    <FileText size={20} className="text-zinc-400" /> Recent Documents
+                                    <Bell size={20} className="text-[#10A37F]" /> Inbox
                                 </h3>
-                                <Text variant="secondary" className="text-xs uppercase font-black tracking-widest">{files.length} Total</Text>
+                                {notifications.length > 0 && (
+                                    <Button variant="ghost" size="sm" onClick={async () => {
+                                        await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
+                                        loadData();
+                                    }}>Mark all read</Button>
+                                )}
                             </div>
                             
-                            {filesLoading ? (
+                            {loading ? (
+                                <SkeletonCard className="h-24" />
+                            ) : notifications.length > 0 ? (
                                 <div className="space-y-3">
-                                    <SkeletonLoader height="72px" borderRadius="12px" />
-                                    <SkeletonLoader height="72px" borderRadius="12px" />
-                                </div>
-                            ) : recentFiles.length > 0 ? (
-                                <div className="grid grid-cols-1 gap-3">
-                                    {recentFiles.map(file => (
-                                        <GlassCard key={file.id} className="p-4 flex justify-between items-center group hover:border-emerald-500/50 transition-all cursor-pointer">
-                                            <div className="flex items-center gap-4">
-                                                <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400 group-hover:text-emerald-500 transition-colors">
-                                                    <DocIcon size={20} />
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-sm text-zinc-900">{file.name}</p>
-                                                    <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-tight">Added {formatDate(file.created_at)}</p>
-                                                </div>
+                                    {notifications.map(n => (
+                                        <GlassCard key={n.id} className="p-4 flex items-center gap-4">
+                                            <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600">
+                                                {n.type === 'file_uploaded' ? <FileText size={18} /> : n.type === 'message_received' ? <MessageSquare size={18} /> : <Calendar size={18} />}
                                             </div>
-                                            <button
-                                                title="Download File"
-                                                onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    const { data } = await apiService.getSignedUrl(file.id, client.organization_id);
-                                                    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                                                }}
-                                                className="p-2.5 h-10 w-10 bg-zinc-50 rounded-full flex items-center justify-center text-zinc-400 hover:bg-emerald-500 hover:text-white transition-all transform hover:scale-110"
-                                            >
-                                                <Download size={18} />
-                                            </button>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm text-zinc-900">{n.message}</p>
+                                                <p className="text-[10px] text-zinc-400 mt-1">{formatTime(n.created_at)}</p>
+                                            </div>
                                         </GlassCard>
                                     ))}
                                 </div>
                             ) : (
-                                <GlassCard className="p-12 text-center border-dashed border-2">
-                                    <FolderClosed size={48} className="mx-auto text-zinc-200 mb-4" />
-                                    <p className="text-zinc-400 font-light italic">No documents have been shared with you yet.</p>
+                                <GlassCard className="p-8 text-center bg-zinc-50/50 border-dashed border-2">
+                                    <CheckSquare size={32} className="mx-auto text-zinc-200 mb-2" />
+                                    <p className="text-zinc-400 text-sm">All caught up!</p>
                                 </GlassCard>
+                            )}
+                        </div>
+
+                        {/* Widget 3: Recent Activity Feed */}
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
+                                <Activity size={20} className="text-blue-500" /> Recent Activity
+                            </h3>
+                            {loading ? (
+                                <SkeletonCard className="h-40" />
+                            ) : (
+                                <div className="space-y-3">
+                                    {activityFeed.map(item => (
+                                        <div key={item.id} className="p-4 bg-white border border-zinc-100 rounded-xl flex items-center justify-between">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400">
+                                                    {item.action_type === 'file_uploaded' ? <FileText size={18} /> : item.action_type === 'message_sent' ? <MessageSquare size={18} /> : <Video size={18} />}
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium text-zinc-900">{item.actor_name} {item.action_type === 'file_uploaded' ? 'shared a file' : item.action_type === 'message_sent' ? 'sent a message' : 'updated something'}</p>
+                                                    <p className="text-xs text-zinc-400">Added {formatDate(item.created_at)}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
                     </div>
 
-                    {/* Sidebar */}
-                    <div className="space-y-6">
-                        {/* Next Meeting */}
-                        <GlassCard className="p-6 border-zinc-100">
-                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-4">Upcoming Event</p>
-                            {nextMeeting ? (
-                                <div className="text-center">
-                                    <div className="mb-4">
-                                        <p className="text-4xl font-black text-zinc-900 tracking-tighter">
-                                            {new Date(nextMeeting.starts_at).getDate()}
-                                        </p>
-                                        <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">
-                                            {new Date(nextMeeting.starts_at).toLocaleString('en-US', { month: 'short' })}
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1 mb-6">
-                                        <p className="text-sm font-black text-zinc-800 truncate">{nextMeeting.title || 'Client Sync'}</p>
-                                        <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
-                                            <Clock size={12} /> {formatTime(nextMeeting.starts_at)}
-                                        </div>
-                                    </div>
-                                    <Button className="w-full bg-zinc-900 hover:bg-black text-white py-3" onClick={() => onJoin(nextMeeting.id)}>
-                                        <Video size={16} className="mr-2" /> Join Space
-                                    </Button>
+                    <div className="space-y-8">
+                        {/* Widget 2: Calendar */}
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
+                                <Calendar size={20} className="text-amber-500" /> Upcoming
+                            </h3>
+                            {upcomingMeetings.length > 0 ? (
+                                <div className="space-y-3">
+                                    {upcomingMeetings.map(m => (
+                                        <GlassCard key={m.id} className="p-6 text-center">
+                                            <div className="mb-4">
+                                                <p className="text-4xl font-black text-zinc-900 tracking-tighter">
+                                                    {new Date(m.starts_at).getDate()}
+                                                </p>
+                                                <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">
+                                                    {new Date(m.starts_at).toLocaleString('en-US', { month: 'short' })}
+                                                </p>
+                                            </div>
+                                            <p className="text-sm font-black text-zinc-800 mb-4">{m.title}</p>
+                                            <div className="flex items-center justify-center gap-2 text-xs text-zinc-500 mb-6">
+                                                <Clock size={12} /> {formatTime(m.starts_at)}
+                                            </div>
+                                            <Button variant="primary" className="w-full" onClick={() => onJoin(m.id)}>Join Meeting</Button>
+                                        </GlassCard>
+                                    ))}
                                 </div>
                             ) : (
-                                <div className="text-center py-6">
-                                    <div className="h-12 w-12 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-3 text-zinc-200">
-                                        <Calendar size={24} />
-                                    </div>
+                                <GlassCard className="p-8 text-center bg-zinc-50/50 border-dashed border-2">
                                     <p className="text-zinc-400 text-xs italic">No scheduled meetings.</p>
-                                </div>
+                                </GlassCard>
                             )}
-                        </GlassCard>
-
-                        {/* Chat Preview */}
-                        <GlassCard className="p-6">
-                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-4">Recent Activity</p>
-                            {messagesLoading ? (
-                                <SkeletonText lines={2} />
-                            ) : lastMessage ? (
-                                <div className="relative">
-                                    <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-4 mb-4">
-                                        <p className="text-zinc-600 text-xs leading-relaxed italic line-clamp-3">
-                                            "{lastMessage.content}"
-                                        </p>
-                                        <p className="text-[9px] text-zinc-400 mt-2 text-right font-medium">
-                                            {formatTime(lastMessage.created_at)}
-                                        </p>
-                                    </div>
-                                    <Button variant="secondary" className="w-full text-xs font-bold py-2">
-                                        Reply in Chat
-                                    </Button>
-                                </div>
-                            ) : (
-                                <div className="text-center py-4">
-                                    <MessageSquare size={32} className="mx-auto text-zinc-100 mb-2" />
-                                    <p className="text-zinc-400 text-[10px] italic">Your chat history is empty.</p>
-                                </div>
-                            )}
-                        </GlassCard>
+                        </div>
                     </div>
                 </div>
             </div>
