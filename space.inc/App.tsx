@@ -218,17 +218,6 @@ const App = () => {
                 setCurrentView(ViewState.SPACE_DETAIL);
                 fetchData();
                 showToast("Space Created Successfully!", "success");
-
-                if (data.email) {
-                    try {
-                        const invite = await apiService.generateClientInviteLink(data.email, optimisticSpace.id);
-                        setLastInviteData({ email: data.email, link: invite.invite_link });
-                        setShowInviteModal(true);
-                    } catch (inviteError) {
-                        console.error("Invite Error:", inviteError);
-                        showToast("Space created, but invite link generation failed.", "info");
-                    }
-                }
             }
         } catch (err: any) {
             showToast(`Error creating space: ${err.message}`, "error");
@@ -378,7 +367,7 @@ const App = () => {
                 return <ClientsCRMView clients={clientLifecycle} loading={isInitialLoading} />;
             case ViewState.STAFF:
                 if (!can('can_manage_team')) return <div className="p-8">Access Denied</div>;
-                return <StaffView staff={staff} spaces={clients} onInvite={() => setShowInviteModal(true)} onUpdateCapability={handleUpdateStaffCapability} />;
+                return <StaffView staff={staff} spaces={clients} onInvite={() => setShowInviteModal(true)} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />;
             case ViewState.TASKS:
                 if (!can('can_view_tasks')) return <div className="p-8">Access Denied</div>;
                 return <TaskView tasks={tasks} clients={clients} onUpdateStatus={handleTaskStatusUpdate} onCreate={handleCreateTask} />;

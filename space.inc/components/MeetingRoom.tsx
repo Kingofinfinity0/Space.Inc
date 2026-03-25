@@ -345,17 +345,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, roomUrl: in
 
                 // TASK 1: Get meeting details from backend
                 // BUT: This is for room URL/token only, NOT for UI state
-                let resolvedRoomUrl = initialRoomUrl;
-                if (!resolvedRoomUrl) {
-                    // Only call startMeeting for scheduled meetings joining from the meetings list
-                    const startRes = await apiService.startMeeting(meetingId, '');
-                    if (startRes.error) throw new Error(startRes.error.message);
-                    resolvedRoomUrl = startRes.data?.roomUrl || startRes.data?.meeting?.daily_room_url;
-                }
-
                 const tokenRes = await apiService.getMeetingToken(meetingId);
                 if (tokenRes.error) throw new Error(tokenRes.error.message);
-                const { token } = tokenRes.data;
+                const { token, roomUrl: resolvedRoomUrl } = tokenRes.data;
 
                 if (!mounted) return;
 
