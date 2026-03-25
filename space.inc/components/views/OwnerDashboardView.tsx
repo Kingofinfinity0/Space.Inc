@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
 import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle, FileText, MessageSquare } from 'lucide-react';
 import { ClientSpace, Meeting, Message, StaffMember, Task } from '../../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -141,14 +141,6 @@ export default function OwnerDashboardView({
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id]);
-
-    const silentCount = summary?.spaces_silent_14d ?? summary?.spaces_silent ?? 0;
-    const silentAlert = typeof silentCount === 'number' && silentCount > 0;
-
-    const totalClients = summary?.total_clients ?? summary?.totalClients ?? 0;
-    const newThisMonth = summary?.new_this_month ?? summary?.newThisMonth ?? 0;
-    const activeSpaces = summary?.active_spaces ?? summary?.activeSpaces ?? 0;
-    const planQuota = summary?.plan_quota ?? summary?.plan ?? summary?.quota ?? null;
 
     const goToSpace = (spaceId: string) => {
         if (onGoToSpace) return onGoToSpace(spaceId);

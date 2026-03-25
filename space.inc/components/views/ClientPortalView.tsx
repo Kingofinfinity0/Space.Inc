@@ -14,6 +14,7 @@ import {
     GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
     SkeletonLoader, SkeletonCard, SkeletonText, SkeletonImage
 } from '../UI/index';
+import { supabase } from '../../lib/supabase';
 import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
