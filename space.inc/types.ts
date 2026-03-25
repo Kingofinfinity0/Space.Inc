@@ -60,7 +60,7 @@ export interface Meeting {
   daily_room_url?: string;
   status: 'scheduled' | 'active' | 'live' | 'ended' | 'cancelled';
   recording_url?: string;
-  recording_status: 'none' | 'processing' | 'available' | 'failed';
+  recording_status: 'none' | 'processing' | 'available' | 'ready' | 'failed';
   has_recording?: boolean;
   notes?: string;
   created_by?: string;

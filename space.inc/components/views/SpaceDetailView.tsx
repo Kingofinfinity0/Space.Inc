@@ -9,7 +9,7 @@ import {
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
     Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
     GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft, History
+    Bell, Eye, Play, X, FileVideo, ChevronLeft, History, FolderClosed, File as DocIcon
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -72,6 +72,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
             console.error('Failed to load activity indicators:', err);
         }
     }, [space?.id]);
+    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Docs'>('Dashboard');
     const [invites, setInvites] = useState<any[]>([]);
     const [invitesLoading, setInvitesLoading] = useState(false);
 
@@ -154,7 +155,6 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
         );
     }
 
-    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Docs'>('Dashboard');
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     const [showTrash, setShowTrash] = useState(false);

@@ -176,9 +176,9 @@ const App = () => {
         setActiveMeetingId(meetingId);
     };
 
-    const handleUpdateStaffCapability = async (staffId: string, spaceId: string, capKey: string, allowed: boolean) => {
+    const handleUpdateStaffCapability = async (staffId: string, spaceId: string, allowed: boolean) => {
         try {
-            await apiService.updateStaffCapability(staffId, spaceId, capKey, allowed);
+            await apiService.updateStaffCapability(staffId, spaceId, allowed);
             showToast("Capability updated successfully.", "success");
             fetchData();
         } catch (err: any) {
@@ -191,8 +191,7 @@ const App = () => {
         try {
             const { data: newSpace, error } = await apiService.createSpace(
                 data.name || 'New Client',
-                `Workspace for ${data.name || 'New Client'}`,
-                organizationId || ''
+                `Workspace for ${data.name || 'New Client'}`
             );
 
             if (error) throw error;
