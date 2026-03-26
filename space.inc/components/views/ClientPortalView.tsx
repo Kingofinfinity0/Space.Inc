@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
+import { supabase } from '../../lib/supabase';
 import {
     LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,

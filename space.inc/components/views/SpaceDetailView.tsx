@@ -5,11 +5,10 @@ import { apiService } from '../../services/apiService';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
 import {
-    LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
-    Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
-    Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
-    GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft, History
+    MessageSquare, Calendar, FileText, Plus, Search,
+    LogOut, Video, Download, Upload, Clock, ArrowRight,
+    Copy, ListTodo, Trash2, ArrowLeft,
+    Activity, Shield, Eye, X, ChevronLeft, History, FolderClosed, File as DocIcon
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -72,6 +71,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
             console.error('Failed to load activity indicators:', err);
         }
     }, [space?.id]);
+    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Docs'>('Dashboard');
     const [invites, setInvites] = useState<any[]>([]);
     const [invitesLoading, setInvitesLoading] = useState(false);
 
@@ -154,7 +154,6 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
         );
     }
 
-    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Docs'>('Dashboard');
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     const [showTrash, setShowTrash] = useState(false);
@@ -265,6 +264,24 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                     </Button>
                                     <Button variant="secondary" className="w-full justify-start"><MessageSquare size={16} className="mr-2" /> Create Auto-Message</Button>
                                     <Button variant="secondary" className="w-full justify-start"><ListTodo size={16} className="mr-2" /> Create Task</Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full justify-start text-rose-600 border-rose-100 hover:bg-rose-50 hover:border-rose-200"
+                                        onClick={async () => {
+                                            if (confirm(`Are you sure you want to delete "${space.name}"? This action cannot be undone.`)) {
+                                                try {
+                                                    const res = await apiService.deleteSpace(space.id, organizationId || '');
+                                                    if (res.error) throw res.error;
+                                                    showToast("Space deleted successfully.", "success");
+                                                    onBack();
+                                                } catch (err: any) {
+                                                    showToast(friendlyError(err?.message || "Failed to delete space"), "error");
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        <Trash2 size={16} className="mr-2" /> Delete Space
+                                    </Button>
                                 </div>
                             </GlassCard>
                             <GlassCard className="p-6">

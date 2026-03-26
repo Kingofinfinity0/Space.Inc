@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
 import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle, FileText, MessageSquare } from 'lucide-react';
 import { ClientSpace, Meeting, Message, StaffMember, Task } from '../../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -142,13 +142,36 @@ export default function OwnerDashboardView({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id]);
 
-    const silentCount = summary?.spaces_silent_14d ?? summary?.spaces_silent ?? 0;
+    const summary = useMemo(() => {
+        const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+        const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+        const silentCount = clients.filter(c => {
+            const lastActivity = c.last_activity_at ? new Date(c.last_activity_at) : new Date(0);
+            return lastActivity < fourteenDaysAgo;
+        }).length;
+
+        const newThisMonth = clients.filter(c => {
+            const createdAt = new Date(c.created_at);
+            return createdAt >= startOfMonth;
+        }).length;
+
+        return {
+            spaces_silent_14d: silentCount,
+            total_clients: clients.length,
+            new_this_month: newThisMonth,
+            active_spaces: analytics.activeSpaces,
+            plan_quota: null // Not available in current context
+        };
+    }, [clients, analytics.activeSpaces]);
+
+    const silentCount = summary?.spaces_silent_14d ?? 0;
     const silentAlert = typeof silentCount === 'number' && silentCount > 0;
 
-    const totalClients = summary?.total_clients ?? summary?.totalClients ?? 0;
-    const newThisMonth = summary?.new_this_month ?? summary?.newThisMonth ?? 0;
-    const activeSpaces = summary?.active_spaces ?? summary?.activeSpaces ?? 0;
-    const planQuota = summary?.plan_quota ?? summary?.plan ?? summary?.quota ?? null;
+    const totalClients = summary?.total_clients ?? 0;
+    const newThisMonth = summary?.new_this_month ?? 0;
+    const activeSpacesVal = summary?.active_spaces ?? 0;
+    const planQuota = summary?.plan_quota ?? null;
 
     const goToSpace = (spaceId: string) => {
         if (onGoToSpace) return onGoToSpace(spaceId);
@@ -177,7 +200,7 @@ export default function OwnerDashboardView({
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Spaces</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : activeSpacesVal}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Clients (7d)</Text>
