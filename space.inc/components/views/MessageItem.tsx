@@ -164,8 +164,8 @@ export const MessageItem = ({
                     </div>
                 ) : (
                     <div>
-                        {msg.content === '[Message deleted]' ? (
-                            <p className="text-sm italic opacity-60">[Message deleted]</p>
+                        {msg.content === '[deleted]' || msg.deleted_at ? (
+                            <p className="text-sm italic text-zinc-400 opacity-60">[Message deleted]</p>
                         ) : (
                             <p className="text-sm leading-relaxed whitespace-pre-wrap">
                                 {msg.content}

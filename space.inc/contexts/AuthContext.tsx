@@ -143,7 +143,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (event === 'SIGNED_IN' && currentSession.user.app_metadata?.invitation_id) {
              console.log("[AuthContext] Found invitation in app_metadata, completing join...");
              try {
-                await apiService.acceptInvitation2(currentSession.user.app_metadata.invitation_id);
+                // apiService.acceptInvitation uses the token, but invitation_id might be stored in metadata.
+                // Assuming acceptInvitation handles the joining logic.
+                await apiService.acceptInvitation(currentSession.user.app_metadata.invitation_id);
              } catch (err) {
                 console.error("[AuthContext] Error accepting invitation during login:", err);
              }

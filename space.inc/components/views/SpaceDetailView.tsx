@@ -244,6 +244,18 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                         {!activityIndicators.unreadCount && !activityIndicators.upcomingMeetings.length && !activityIndicators.recentFilesCount && (
                             <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-400">No new activity</span>
                         )}
+                        <div className="flex gap-1.5 items-center">
+                            <span className="px-2 py-0.5 text-[9px] font-bold rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
+                                Messages: {spaceStats?.message_count ?? 0}
+                            </span>
+                            <span className="px-2 py-0.5 text-[9px] font-bold rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
+                                Files: {spaceStats?.file_count ?? 0}
+                            </span>
+                            <span className="px-2 py-0.5 text-[9px] font-bold rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
+                                Meetings: {spaceStats?.meeting_count ?? 0}
+                            </span>
+                        </div>
+
                         <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700 ml-auto">
                             Last active: {spaceStats?.last_activity_at ? new Date(spaceStats.last_activity_at).toLocaleString() : '—'}
                         </span>

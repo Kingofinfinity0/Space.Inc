@@ -28,7 +28,7 @@ const StaffView: React.FC<{
     staff: StaffMember[];
     spaces: ClientSpace[];
     onInvite: () => void;
-    onUpdateCapability: (staffId: string, spaceId: string, capKey: string, allowed: boolean) => void;
+    onUpdateCapability: (staffId: string, spaceId: string, allowed: boolean) => void;
     onRefresh?: () => void;
 }> = ({ staff, spaces, onInvite, onUpdateCapability, onRefresh }) => {
     const { showToast } = useToast();
@@ -102,15 +102,9 @@ const StaffView: React.FC<{
                                         </div>
                                         {isAssigned && (
                                             <div className="flex flex-wrap gap-2">
-                                                {['message_clients', 'manage_tasks', 'view_files'].map(cap => (
-                                                    <button
-                                                        key={cap}
-                                                        onClick={() => onUpdateCapability(member.id, space.id, cap, true)}
-                                                        className="px-2 py-1 bg-white border border-zinc-200 rounded text-[9px] font-bold text-zinc-500 hover:border-emerald-500 hover:text-emerald-600 transition-colors"
-                                                    >
-                                                        {cap.replace('_', ' ')}
-                                                    </button>
-                                                ))}
+                                                <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded text-[9px] font-bold uppercase tracking-tight">
+                                                    Full Authority
+                                                </span>
                                             </div>
                                         )}
                                     </div>
