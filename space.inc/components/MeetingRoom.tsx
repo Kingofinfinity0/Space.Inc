@@ -363,6 +363,12 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, roomUrl: in
                 setCallObject(createdCall);
                 setIsInitializing(false);
 
+                // Task 3C: START_MEETING when the Daily room loads.
+                // We don't block joining on this call.
+                apiService.startMeeting(meetingId, '').catch(err => {
+                    console.error('[MeetingRoom] START_MEETING error:', err);
+                });
+
                 // Join the call
                 // CRITICAL: We don't wait for this or set any state based on it
                 // The 'joined-meeting' event is the ONLY source of truth

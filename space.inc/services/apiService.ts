@@ -1,4 +1,4 @@
-import { supabase, EDGE_FUNCTION_BASE_URL, ANON_KEY } from '../lib/supabase';
+import { supabase, ANON_KEY } from '../lib/supabase';
 import { StaffMember, ClientLifecycle } from '../types';
 
 /**
@@ -451,7 +451,22 @@ export const apiService = {
         if (res?.error) return { data: null, error: res.error };
 
         // New response: { data: { token, roomUrl, meeting } }
+        // Note: The edge function may only return { token }
         const result = res?.data ?? res;
+
+        // If roomUrl is missing, fetch it from the database
+        if (!result.roomUrl) {
+            const { data: meetingData, error: meetingError } = await supabase
+                .from('meetings')
+                .select('daily_room_url')
+                .eq('id', meetingId)
+                .single();
+
+            if (!meetingError && meetingData) {
+                result.roomUrl = meetingData.daily_room_url;
+            }
+        }
+
         return { data: result, error: null };
     },
 

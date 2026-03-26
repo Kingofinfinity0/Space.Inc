@@ -3,9 +3,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
-import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
+import { GlassCard, Button, Heading, Text, SkeletonLoader, SkeletonCard } from '../UI/index';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle, FileText, MessageSquare } from 'lucide-react';
 import { ClientSpace, Meeting, Message, StaffMember, Task } from '../../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -65,69 +65,50 @@ export default function OwnerDashboardView({
     const [tasksFeed, setTasksFeed] = useState<any[]>([]);
     const [upcomingMeetings, setUpcomingMeetings] = useState<any[]>([]);
     const [notifications, setNotifications] = useState<any[]>([]);
-    const [analytics, setAnalytics] = useState<any>({
-        activeSpaces: 0,
-        activeClients: 0,
-        totalMessagesWeek: 0,
-        meetingsMonth: 0,
-        filesMonth: 0
-    });
+    const [summary, setSummary] = useState<any>(null);
+    const [engagement, setEngagement] = useState<any[]>([]);
+    const [meetingIntel, setMeetingIntel] = useState<any[]>([]);
+    const [pipeline, setPipeline] = useState<any>(null);
 
     const load = async () => {
         if (!user) return;
         setLoading(true);
         try {
-            const now = new Date().toISOString();
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-            const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-
-            const [tasksRes, meetingsRes, notificationsRes, analyticsRes] = await Promise.all([
-                // Widget 1: Task Management (activity_logs as tasks)
-                supabase.from('activity_logs')
-                    .select('id, action_type, space_name, created_at, actor_name')
-                    .in('action_type', ['meeting_created', 'file_uploaded'])
-                    .gt('created_at', sevenDaysAgo)
-                    .order('created_at', { ascending: false }),
-
-                // Widget 2: Calendar
+            const [
+                summaryRes,
+                engagementRes,
+                meetingIntelRes,
+                pipelineRes,
+                feedRes,
+                upcomingMeetingsRes,
+                notificationsRes
+            ] = await Promise.all([
+                supabase.rpc('get_owner_dashboard_summary'),
+                supabase.rpc('get_client_engagement_scores'),
+                supabase.rpc('get_meeting_intelligence', { p_days: 30 }),
+                supabase.rpc('get_acquisition_pipeline'),
+                supabase.rpc('get_activity_feed', { p_limit: 15 }),
                 supabase.from('meetings')
                     .select('id, title, space_name, starts_at, status')
-                    .gt('starts_at', now)
+                    .gt('starts_at', new Date().toISOString())
                     .eq('status', 'scheduled')
                     .order('starts_at')
                     .limit(10),
-
-                // Widget 3: Inbox / Notifications
                 supabase.from('notifications')
                     .select('id, type, message, is_read, created_at, space_id')
                     .eq('user_id', user.id)
                     .eq('is_read', false)
                     .order('created_at', { ascending: false })
-                    .limit(20),
-
-                // Widget 4: Business Analytics
-                Promise.all([
-                    supabase.from('spaces').select('id', { count: 'exact' }).eq('status', 'active'),
-                    supabase.from('space_memberships')
-                        .select('id', { count: 'exact' })
-                        .eq('role', 'client')
-                        .gt('last_activity_at', sevenDaysAgo),
-                    supabase.from('messages').select('id', { count: 'exact' }).gt('created_at', sevenDaysAgo),
-                    supabase.from('meetings').select('id', { count: 'exact' }).eq('status', 'ended').gt('ended_at', startOfMonth),
-                    supabase.from('files').select('id', { count: 'exact' }).gt('created_at', startOfMonth)
-                ])
+                    .limit(20)
             ]);
 
-            setTasksFeed(tasksRes.data || []);
-            setUpcomingMeetings(meetingsRes.data || []);
+            setSummary(summaryRes.data);
+            setEngagement(engagementRes.data || []);
+            setMeetingIntel(meetingIntelRes.data || []);
+            setPipeline(pipelineRes.data);
+            setTasksFeed(feedRes.data || []);
+            setUpcomingMeetings(upcomingMeetingsRes.data || []);
             setNotifications(notificationsRes.data || []);
-            setAnalytics({
-                activeSpaces: analyticsRes[0].count || 0,
-                activeClients: analyticsRes[1].count || 0,
-                totalMessagesWeek: analyticsRes[2].count || 0,
-                meetingsMonth: analyticsRes[3].count || 0,
-                filesMonth: analyticsRes[4].count || 0
-            });
 
         } catch (err: any) {
             console.error('[OwnerDashboardView] load failed:', err);
@@ -145,10 +126,10 @@ export default function OwnerDashboardView({
     const silentCount = summary?.spaces_silent_14d ?? summary?.spaces_silent ?? 0;
     const silentAlert = typeof silentCount === 'number' && silentCount > 0;
 
-    const totalClients = summary?.total_clients ?? summary?.totalClients ?? 0;
-    const newThisMonth = summary?.new_this_month ?? summary?.newThisMonth ?? 0;
-    const activeSpaces = summary?.active_spaces ?? summary?.activeSpaces ?? 0;
-    const planQuota = summary?.plan_quota ?? summary?.plan ?? summary?.quota ?? null;
+    const totalClientsCount = summary?.total_clients ?? 0;
+    const newThisMonthCount = summary?.new_this_month ?? 0;
+    const activeSpacesVal = summary?.active_spaces ?? 0;
+    const planQuota = summary?.plan_quota ?? summary?.quota ?? null;
 
     const goToSpace = (spaceId: string) => {
         if (onGoToSpace) return onGoToSpace(spaceId);
@@ -173,53 +154,176 @@ export default function OwnerDashboardView({
                 </div>
             </header>
 
-            {/* Widget 4: Business Analytics */}
+            {/* Zone 1 — Business Health Bar */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <GlassCard className="p-4">
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Total Clients</Text>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : totalClientsCount}</div>
+                </GlassCard>
+                <GlassCard className="p-4">
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">New This Month</Text>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : newThisMonthCount}</div>
+                    {pipeline?.growth_rate !== undefined && (
+                        <div className={`text-[10px] mt-1 flex items-center gap-1 ${pipeline.growth_rate >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {pipeline.growth_rate >= 0 ? '↑' : '↓'} {Math.abs(pipeline.growth_rate)}% vs last month
+                        </div>
+                    )}
+                </GlassCard>
+                <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Spaces</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : activeSpacesVal}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Clients (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeClients}</div>
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Plan / Quota</Text>
+                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : planQuota || 'N/A'}</div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Messages (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.totalMessagesWeek}</div>
+                <GlassCard className={`p-4 border-2 transition-all ${silentAlert ? 'border-rose-100 bg-rose-50/30' : 'border-transparent'}`}>
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Silent Spaces (14d)</Text>
+                    <div className={`text-2xl font-semibold mt-1 ${silentAlert ? 'text-rose-600 animate-pulse' : ''}`}>
+                        {loading ? <SkeletonLoader width="40px" height="24px" /> : silentCount}
+                    </div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Meetings (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.meetingsMonth}</div>
-                </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Files Shared (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.filesMonth}</div>
-                </GlassCard>
+            </div>
+
+            {/* Zone 2 — Client Engagement Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {loading ? (
+                    [1, 2, 3].map(i => <SkeletonCard key={i} className="h-48" />)
+                ) : engagement.length === 0 ? (
+                    <div className="col-span-full py-12 text-center bg-zinc-50 rounded-2xl border border-dashed">
+                        <Users className="mx-auto text-zinc-300 mb-2" size={40} />
+                        <p className="text-zinc-500 italic">No client engagement data available.</p>
+                    </div>
+                ) : (
+                    engagement.map(e => (
+                        <GlassCard
+                            key={e.space_id}
+                            className="p-6 cursor-pointer hover:border-zinc-300 transition-all group"
+                            onClick={() => goToSpace(e.space_id)}
+                        >
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="min-w-0">
+                                    <h4 className="font-bold text-zinc-900 truncate">{e.space_name}</h4>
+                                    <p className="text-xs text-zinc-500 truncate">{e.client_name}</p>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                    e.engagement_level === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                    e.engagement_level === 'watching' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                                    'bg-rose-50 text-rose-700 border border-rose-100'
+                                }`}>
+                                    {e.engagement_level}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 mb-4">
+                                <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                    <p className="text-[10px] text-zinc-400 font-bold uppercase">Activity</p>
+                                    <p className="text-sm font-bold text-zinc-900">{e.days_since_last_activity}d</p>
+                                </div>
+                                <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                    <p className="text-[10px] text-zinc-400 font-bold uppercase">Msgs</p>
+                                    <p className="text-sm font-bold text-zinc-900">{e.messages_this_week}</p>
+                                </div>
+                                <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                    <p className="text-[10px] text-zinc-400 font-bold uppercase">Meets</p>
+                                    <p className="text-sm font-bold text-zinc-900">{e.meetings_this_month}</p>
+                                </div>
+                            </div>
+
+                            {e.alert_message && (
+                                <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg border border-amber-100 mb-2">
+                                    <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                                    <p className="text-[10px] text-amber-800 font-medium leading-tight">{e.alert_message}</p>
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-end text-xs font-bold text-zinc-400 group-hover:text-zinc-900 transition-colors">
+                                View Space <ArrowRight size={14} className="ml-1" />
+                            </div>
+                        </GlassCard>
+                    ))
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Widget 1: Task Management */}
+                    {/* Zone 3 — Meeting Intelligence */}
                     <GlassCard className="p-6">
-                        <Heading level={3} className="mb-6">Task Management</Heading>
+                        <div className="flex justify-between items-center mb-6">
+                            <Heading level={3}>Meeting Intelligence (30d)</Heading>
+                            <Text variant="secondary" className="text-xs">Success Rate %</Text>
+                        </div>
+                        {loading ? (
+                            <div className="space-y-3"><SkeletonLoader height="150px" borderRadius="12px" /></div>
+                        ) : meetingIntel.length === 0 ? (
+                            <div className="text-zinc-400 text-sm italic py-8 text-center bg-zinc-50 rounded-xl">No recent meetings data.</div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100">
+                                            <th className="pb-3 pl-2">Space</th>
+                                            <th className="pb-3">Held</th>
+                                            <th className="pb-3">Success %</th>
+                                            <th className="pb-3 text-right pr-2">Breakdown</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-50">
+                                        {meetingIntel.map(intel => (
+                                            <tr key={intel.space_id} className="group hover:bg-zinc-50/50 transition-colors">
+                                                <td className="py-4 pl-2">
+                                                    <p className="text-sm font-bold text-zinc-900">{intel.space_name}</p>
+                                                </td>
+                                                <td className="py-4">
+                                                    <p className="text-sm text-zinc-600">{intel.total_meetings}</p>
+                                                </td>
+                                                <td className="py-4">
+                                                    <span className={`px-2 py-1 rounded-md text-xs font-black border ${successRateColor(intel.success_rate)}`}>
+                                                        {Math.round(intel.success_rate)}%
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 text-right pr-2">
+                                                    <div className="flex justify-end gap-1">
+                                                        {Object.entries(intel.category_breakdown || {}).slice(0, 3).map(([cat, count]: any) => (
+                                                            <span key={cat} title={`${cat}: ${count}`} className="text-[8px] px-1.5 py-0.5 bg-zinc-100 text-zinc-500 rounded font-bold uppercase tracking-tighter">
+                                                                {cat.split('_')[0]}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </GlassCard>
+
+                    {/* Zone 4 — Activity Feed */}
+                    <GlassCard className="p-6">
+                        <Heading level={3} className="mb-6">Executive Activity Feed</Heading>
                         {loading ? (
                             <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
                         ) : tasksFeed.length === 0 ? (
-                            <div className="text-zinc-400 text-sm italic py-4">No recent activity tasks.</div>
+                            <div className="text-zinc-400 text-sm italic py-4">No recent activity.</div>
                         ) : (
                             <div className="space-y-3">
                                 {tasksFeed.map(item => (
-                                    <div key={item.id} className="p-4 border border-zinc-100 rounded-xl bg-white flex items-center justify-between">
+                                    <div key={item.id} className="p-4 border border-zinc-100 rounded-xl bg-white flex items-center justify-between group hover:border-zinc-300 transition-all cursor-pointer" onClick={() => item.space_id && goToSpace(item.space_id)}>
                                         <div className="flex items-center gap-4">
-                                            <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400">
-                                                {item.action_type === 'file_uploaded' ? <FileText size={18} /> : <Video size={18} />}
+                                            <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400 group-hover:bg-zinc-100 transition-colors">
+                                                {item.action_type === 'file_uploaded' ? <FileText size={18} /> :
+                                                 item.action_type === 'message_sent' ? <MessageSquare size={18} /> :
+                                                 <Video size={18} />}
                                             </div>
                                             <div>
-                                                <p className="text-sm font-medium text-zinc-900">{item.actor_name} {ACTION_LABELS[item.action_type]}</p>
+                                                <p className="text-sm font-medium text-zinc-900">
+                                                    <span className="font-bold">{item.actor_name}</span> {ACTION_LABELS[item.action_type] || 'performed an action'}
+                                                </p>
                                                 <p className="text-xs text-zinc-500">{item.space_name} • {timeAgo(item.created_at)}</p>
                                             </div>
                                         </div>
-                                        <Button variant="ghost" size="sm" icon={<ArrowRight size={14} />} />
+                                        <ArrowRight size={14} className="text-zinc-200 group-hover:text-zinc-900 transition-colors" />
                                     </div>
                                 ))}
                             </div>

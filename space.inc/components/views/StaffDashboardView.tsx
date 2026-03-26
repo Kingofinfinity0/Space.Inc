@@ -15,6 +15,7 @@ import {
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
+import { AlertTriangle } from 'lucide-react';
 import {
     GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
     SkeletonLoader, SkeletonCard, SkeletonText, SkeletonImage
@@ -67,68 +68,43 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
     const [tasksFeed, setTasksFeed] = useState<any[]>([]);
     const [upcomingMeetingsList, setUpcomingMeetingsList] = useState<any[]>([]);
     const [notifications, setNotifications] = useState<any[]>([]);
-    const [analytics, setAnalytics] = useState<any>({
-        activeSpaces: 0,
-        activeClients: 0,
-        totalMessagesWeek: 0,
-        meetingsMonth: 0,
-        filesMonth: 0
-    });
+    const [summary, setSummary] = useState<any>(null);
+    const [engagement, setEngagement] = useState<any[]>([]);
 
     const loadData = useCallback(async () => {
         if (!user) return;
         try {
             setAnalyticsLoading(true);
-            const now = new Date().toISOString();
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-            const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-
-            const [tasksRes, meetingsRes, notificationsRes, analyticsRes] = await Promise.all([
-                // Widget 1: Task Management (activity_logs as tasks)
-                supabase.from('activity_logs')
-                    .select('id, action_type, space_name, created_at, actor_name, space_id')
-                    .in('action_type', ['meeting_created', 'file_uploaded'])
-                    .gt('created_at', sevenDaysAgo)
-                    .order('created_at', { ascending: false }),
-
-                // Widget 2: Calendar
+            const [
+                summaryRes,
+                engagementRes,
+                feedRes,
+                meetingsRes,
+                notificationsRes
+            ] = await Promise.all([
+                supabase.rpc('get_staff_dashboard_summary'),
+                supabase.rpc('get_client_engagement_scores'),
+                supabase.rpc('get_activity_feed', { p_limit: 10 }),
                 supabase.from('meetings')
                     .select('id, title, space_name, starts_at, status')
-                    .gt('starts_at', now)
+                    .gt('starts_at', new Date().toISOString())
                     .eq('status', 'scheduled')
                     .order('starts_at')
                     .limit(10),
-
-                // Widget 3: Inbox / Notifications
                 supabase.from('notifications')
                     .select('id, type, message, is_read, created_at, space_id')
                     .eq('user_id', user.id)
                     .eq('is_read', false)
                     .order('created_at', { ascending: false })
-                    .limit(20),
-
-                // Widget 4: Business Analytics (Scoped to my spaces)
-                Promise.all([
-                    supabase.from('space_memberships').select('space_id').eq('user_id', user.id),
-                    supabase.from('messages').select('id', { count: 'exact' }).gt('created_at', sevenDaysAgo),
-                    supabase.from('meetings').select('id', { count: 'exact' }).eq('status', 'ended').gt('ended_at', startOfMonth),
-                    supabase.from('files').select('id', { count: 'exact' }).gt('created_at', startOfMonth)
-                ])
+                    .limit(20)
             ]);
 
-            const mySpaceIds = analyticsRes[0].data?.map(m => m.space_id) || [];
-
-            setTasksFeed(tasksRes.data?.filter(t => mySpaceIds.includes(t.space_id)) || []);
+            setSummary(summaryRes.data);
+            setEngagement(engagementRes.data || []);
+            setTasksFeed(feedRes.data || []);
             setUpcomingMeetingsList(meetingsRes.data || []);
             setNotifications(notificationsRes.data || []);
 
-            setAnalytics({
-                activeSpaces: mySpaceIds.length,
-                activeClients: 0, // Simplified for staff
-                totalMessagesWeek: analyticsRes[1].count || 0,
-                meetingsMonth: analyticsRes[2].count || 0,
-                filesMonth: analyticsRes[3].count || 0
-            });
         } catch (err: any) {
             console.error('[StaffDashboardView] load failed:', err);
             showToast(friendlyError(err?.message), 'error');
@@ -172,49 +148,114 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
                 </div>
             </header>
 
-            {/* Widget 4: Business Analytics */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {/* Zone 1 — My Work Today */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">My Spaces</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Open Tasks</Text>
+                    <div className="flex items-end gap-2 mt-1">
+                        <div className="text-2xl font-semibold">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : (summary?.open_tasks ?? 0)}</div>
+                        {(summary?.overdue_tasks ?? 0) > 0 && (
+                            <span className="mb-1.5 h-2 w-2 rounded-full bg-rose-500 animate-pulse" title={`${summary.overdue_tasks} overdue`} />
+                        )}
+                    </div>
                 </GlassCard>
                 <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Clients Active (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeClients}</div>
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Meetings (Week)</Text>
+                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : (summary?.meetings_this_week ?? 0)}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Messages (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.totalMessagesWeek}</div>
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Tasks Done (Week)</Text>
+                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : (summary?.tasks_completed_week ?? 0)}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Meetings (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.meetingsMonth}</div>
+                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">My Spaces</Text>
+                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : (summary?.spaces_managed ?? 0)}</div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Files (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.filesMonth}</div>
-                </GlassCard>
+            </div>
+
+            {/* Zone 2 — My Spaces (Engagement) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {analyticsLoading ? (
+                    [1, 2, 3].map(i => <SkeletonCard key={i} className="h-48" />)
+                ) : engagement.length === 0 ? (
+                    <div className="col-span-full py-12 text-center bg-zinc-50 rounded-2xl border border-dashed">
+                        <Users className="mx-auto text-zinc-300 mb-2" size={40} />
+                        <p className="text-zinc-500 italic">No assigned spaces found.</p>
+                    </div>
+                ) : (
+                    engagement.map(e => (
+                        <GlassCard
+                            key={e.space_id}
+                            className="p-6 cursor-pointer hover:border-zinc-300 transition-all group"
+                            onClick={() => onGoToSpace?.(e.space_id)}
+                        >
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="min-w-0">
+                                    <h4 className="font-bold text-zinc-900 truncate">{e.space_name}</h4>
+                                    <p className="text-xs text-zinc-500 truncate">{e.client_name}</p>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                    e.engagement_level === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                    e.engagement_level === 'watching' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                                    'bg-rose-50 text-rose-700 border border-rose-100'
+                                }`}>
+                                    {e.engagement_level}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 mb-4">
+                                <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                    <p className="text-[10px] text-zinc-400 font-bold uppercase">Activity</p>
+                                    <p className="text-sm font-bold text-zinc-900">{e.days_since_last_activity}d</p>
+                                </div>
+                                <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                    <p className="text-[10px] text-zinc-400 font-bold uppercase">Msgs</p>
+                                    <p className="text-sm font-bold text-zinc-900">{e.messages_this_week}</p>
+                                </div>
+                                <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                    <p className="text-[10px] text-zinc-400 font-bold uppercase">Meets</p>
+                                    <p className="text-sm font-bold text-zinc-900">{e.meetings_this_month}</p>
+                                </div>
+                            </div>
+
+                            {e.alert_message && (
+                                <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg border border-amber-100 mb-2">
+                                    <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                                    <p className="text-[10px] text-amber-800 font-medium leading-tight">{e.alert_message}</p>
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-end text-xs font-bold text-zinc-400 group-hover:text-zinc-900 transition-colors">
+                                Open Workspace <ArrowRight size={14} className="ml-1" />
+                            </div>
+                        </GlassCard>
+                    ))
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Widget 1: Task Management */}
+                    {/* Zone 3 — My Activity Feed */}
                     <GlassCard className="p-6">
-                        <Heading level={3} className="mb-6">Task Management</Heading>
+                        <Heading level={3} className="mb-6">Recent Activity (Assigned Spaces)</Heading>
                         {analyticsLoading ? (
                             <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
                         ) : tasksFeed.length === 0 ? (
-                            <div className="text-zinc-400 text-sm italic py-4">No recent activity tasks.</div>
+                            <div className="text-zinc-400 text-sm italic py-4">No recent activity.</div>
                         ) : (
                             <div className="space-y-3">
                                 {tasksFeed.map(item => (
                                     <div key={item.id} className="p-4 border border-zinc-100 rounded-xl bg-white flex items-center justify-between cursor-pointer hover:border-zinc-300 transition-colors" onClick={() => item.space_id && onGoToSpace?.(item.space_id)}>
                                         <div className="flex items-center gap-4">
-                                            <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400">
-                                                {item.action_type === 'file_uploaded' ? <FileText size={18} /> : <Video size={18} />}
+                                            <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400 group-hover:bg-zinc-100 transition-colors">
+                                                {item.action_type === 'file_uploaded' ? <FileText size={18} /> :
+                                                 item.action_type === 'message_sent' ? <MessageSquare size={18} /> :
+                                                 <Video size={18} />}
                                             </div>
                                             <div>
-                                                <p className="text-sm font-medium text-zinc-900">{item.actor_name} {ACTION_LABELS[item.action_type]}</p>
+                                                <p className="text-sm font-medium text-zinc-900">
+                                                    <span className="font-bold">{item.actor_name}</span> {ACTION_LABELS[item.action_type] || 'performed an action'}
+                                                </p>
                                                 <p className="text-xs text-zinc-500">{item.space_name} • {timeAgo(item.created_at)}</p>
                                             </div>
                                         </div>
