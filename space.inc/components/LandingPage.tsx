@@ -1,325 +1,293 @@
-
-import React, { useEffect } from 'react';
-import { Layers, Zap, Shield, Check } from 'lucide-react';
+import React from 'react';
+import {
+  ArrowRight,
+  Check,
+  MessageSquare,
+  Video,
+  FileText,
+  Layers,
+  Zap,
+  Shield,
+  Users,
+  Clock,
+  Layout,
+  Rocket
+} from 'lucide-react';
+import { Button } from './UI/Button';
+import { GlassCard } from './UI/GlassCard';
+import { Heading } from './UI/Heading';
 
 interface LandingPageProps {
   onStartOnboarding: () => void;
 }
 
-// This component is no longer used but kept for reference
-const Navbar = () => (
-  <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4">
-    <div className="max-w-7xl mx-auto flex justify-between items-center rounded-full px-6 py-3 shadow-lg bg-[#ffefcb] border border-[#0b2519]/10">
+const Navbar = ({ onStartOnboarding }: LandingPageProps) => (
+  <nav className="fixed top-0 left-0 right-0 z-50 bg-[#ffefcb]/80 backdrop-blur-md border-b border-[#0b2519]/5">
+    <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-[#0b2519] rounded-lg flex items-center justify-center">
-          <span className="font-bold text-[#ffefcb]">N</span>
-        </div>
-        <span className="font-medium text-[#0b2519] tracking-tight">Nexus</span>
+        <div className="w-8 h-8 bg-[#0b2519] rounded-lg flex items-center justify-center text-[#ffefcb] font-bold">S</div>
+        <span className="text-xl font-bold tracking-tighter text-[#0b2519]">Space.inc</span>
       </div>
-      <div className="hidden md:flex items-center gap-8 text-sm font-medium text-[#0b2519]/80">
-        <a href="#features" className="hover:text-[#0b2519] transition-colors">Philosophy</a>
-        <a href="#pricing" className="hover:text-[#0b2519] transition-colors">Pricing</a>
-        <a href="#manifesto" className="hover:text-[#0b2519] transition-colors">Manifesto</a>
+      <div className="hidden md:flex items-center gap-8">
+        <a href="#features" className="text-sm font-medium text-[#0b2519]/60 hover:text-[#0b2519] transition-colors">Features</a>
+        <a href="#comparison" className="text-sm font-medium text-[#0b2519]/60 hover:text-[#0b2519] transition-colors">Why Us</a>
+        <a href="#pricing" className="text-sm font-medium text-[#0b2519]/60 hover:text-[#0b2519] transition-colors">Pricing</a>
       </div>
-      <div className="bg-[#0b2519] text-[#ffefcb] px-5 py-2 rounded-full text-sm font-semibold inline-block">
-        Loading...
+      <div className="flex items-center gap-4">
+        <button
+          onClick={onStartOnboarding}
+          className="text-sm font-bold uppercase tracking-widest text-[#0b2519] hover:opacity-70 transition-opacity"
+        >
+          Sign In
+        </button>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={onStartOnboarding}
+          className="bg-[#0b2519] text-[#ffefcb] hover:bg-[#0b2519]/90 font-bold uppercase tracking-widest text-[10px] px-6"
+        >
+          Get Started
+        </Button>
       </div>
     </div>
   </nav>
 );
 
-// This component is no longer used but kept for reference
-const Hero = () => (
-  <section className="relative min-h-screen flex flex-col items-center justify-center pt-20 overflow-hidden bg-[#ffefcb]">
-    <div className="relative z-10 text-center max-w-4xl mx-auto px-6">
-      <h1 className="text-5xl md:text-7xl lg:text-8xl font-medium text-[#0b2519] tracking-tight leading-[1.1] mb-8 animate-fade-in-up">
-        One Space.<br />
-        <span className="text-[#0b2519]">
-          Total Clarity.
-        </span>
-      </h1>
-
-      <p className="text-lg md:text-xl text-[#0b2519]/90 max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-in-up delay-100">
-        Ditch the 12-tool sprawl. One link for every client relationship.
-        Simpler. Faster. Human.
-      </p>
-
-      <div className="flex items-center justify-center animate-fade-in-up delay-200">
-        <div className="w-full sm:w-auto px-8 py-4 bg-[#0b2519]/90 text-[#ffefcb] rounded-full font-semibold text-lg flex items-center justify-center gap-2">
-          Loading...
+const Hero = ({ onStartOnboarding }: LandingPageProps) => (
+  <section className="pt-40 pb-20 md:pt-52 md:pb-32 px-6 bg-[#ffefcb] overflow-hidden">
+    <div className="max-w-7xl mx-auto">
+      <div className="text-center max-w-4xl mx-auto mb-16">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0b2519]/5 border border-[#0b2519]/10 mb-6">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#0b2519]/60">Beta Access Now Open</span>
         </div>
-      </div>
-    </div>
-
-    {/* Floating UI Element */}
-    <div className="mt-20 relative w-full max-w-5xl mx-auto animate-float hidden md:block px-6">
-      <div className="glass-panel rounded-2xl border border-zinc-800/50 shadow-2xl overflow-hidden aspect-[16/9] relative group">
-        <div className="absolute inset-0 bg-gradient-to-tr from-zinc-900 via-zinc-900 to-zinc-800 opacity-90"></div>
-
-        {/* Abstract UI representation */}
-        <div className="absolute inset-0 flex">
-          <div className="w-64 border-r border-white/5 p-6 space-y-4">
-            <div className="h-8 w-8 bg-zinc-800 rounded-lg mb-8"></div>
-            <div className="h-4 w-3/4 bg-zinc-800/50 rounded"></div>
-            <div className="h-4 w-1/2 bg-zinc-800/50 rounded"></div>
-            <div className="mt-auto h-20 bg-zinc-800/20 rounded-xl"></div>
-          </div>
-          <div className="flex-1 p-8">
-            <div className="flex justify-between mb-8">
-              <div className="h-8 w-48 bg-zinc-800/50 rounded"></div>
-              <div className="h-8 w-24 bg-zinc-800/50 rounded"></div>
-            </div>
-            <div className="grid grid-cols-3 gap-6">
-              <div className="aspect-square bg-zinc-800/20 rounded-2xl border border-white/5"></div>
-              <div className="aspect-square bg-zinc-800/20 rounded-2xl border border-white/5"></div>
-              <div className="aspect-square bg-zinc-800/20 rounded-2xl border border-white/5"></div>
-            </div>
-          </div>
-        </div>
-
-        {/* Glow effect on hover */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none"></div>
-      </div>
-    </div>
-  </section>
-);
-
-const AntiClickUpManifesto = () => (
-  <section className="py-24 bg-[#0b2519] text-[#ffefcb] relative overflow-hidden">
-    <div className="max-w-7xl mx-auto px-6 relative z-10">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-        <div>
-          <h2 className="text-4xl md:text-5xl font-medium mb-6 leading-tight">
-            Productivity apps became the noise.
-          </h2>
-          <p className="text-lg md:text-xl text-[#ffefcb]/80 mb-8 max-w-2xl">
-            We saw ClickUp try to be "everything" and fail the mission.
-            Feature bloat kills focus. Nexus removes the noise so you can scale the human connection.
+        <h1 className="text-5xl md:text-7xl font-medium tracking-tight text-[#0b2519] mb-8 leading-[0.95]">
+          Your Entire Client Relationship, <br/>
+          <span className="italic font-light">In One Space.</span>
+        </h1>
+        <p className="text-lg md:text-xl text-[#0b2519]/70 font-light leading-relaxed mb-10 max-w-2xl mx-auto">
+          Stop juggling tabs. Space.inc unifies your communication, files, and meetings
+          into a single, beautiful dashboard for every client.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={onStartOnboarding}
+            className="w-full sm:w-auto bg-[#0b2519] text-[#ffefcb] hover:bg-[#0b2519]/90 py-6 px-10 rounded-2xl text-sm font-black uppercase tracking-[0.2em] shadow-xl shadow-[#0b2519]/10"
+          >
+            Create Your First Space <ArrowRight size={18} className="ml-2" />
+          </Button>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#0b2519]/40">
+            Free for up to 3 clients
           </p>
-          <div className="flex items-center text-[#ffefcb]/60">
-            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <span className="text-sm font-medium">Built for the scaling entrepreneur</span>
-          </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 gap-6">
-          {/* Tool Sprawl Card */}
-          <div className="bg-[#0b2519] border border-[#ffefcb]/10 rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
-                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-              </div>
-              <h3 className="text-xl font-medium">THE TOOL SPRAWL</h3>
-            </div>
-            <ul className="space-y-3">
-              {["Fragmented communication", "Endless context switching", "Multiple logins & tabs", "Lost client history", "No single source of truth"].map((item) => (
-                <li key={item} className="flex items-center text-[#ffefcb]/80">
-                  <svg className="w-5 h-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                  </svg>
-                  {item}
-                </li>
-              ))}
-            </ul>
+      <div className="relative max-w-5xl mx-auto">
+        <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 to-[#0b2519]/20 rounded-[2.5rem] blur-2xl" />
+        <GlassCard className="relative border-[#0b2519]/10 p-2 rounded-[2.5rem] shadow-2xl">
+          <div className="rounded-[2rem] overflow-hidden border border-[#0b2519]/5 bg-white shadow-inner">
+            <img
+              src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=2426&ixlib=rb-4.0.3"
+              alt="Space.inc Dashboard"
+              className="w-full h-auto opacity-90 mix-blend-multiply grayscale hover:grayscale-0 transition-all duration-700"
+            />
           </div>
-
-          {/* Nexus Space Card */}
-          <div className="bg-[#ffefcb] border border-[#0b2519]/10 rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-              </div>
-              <h3 className="text-xl font-medium text-[#0b2519]">THE NEXUS SPACE</h3>
-            </div>
-            <ul className="space-y-3">
-              {["Unified communication", "One link, one space", "Client-first design", "Complete history", "Single source of truth"].map((item) => (
-                <li key={item} className="flex items-center text-[#0b2519]/80">
-                  <svg className="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                  </svg>
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+        </GlassCard>
       </div>
     </div>
   </section>
 );
 
-const FeatureCard = ({ icon: Icon, title, desc, isCheck = true }: { icon: any, title: string, desc: string, isCheck?: boolean }) => (
-  <div className="p-8 rounded-3xl bg-white/50 border border-[#0b2519]/10 hover:border-[#0b2519]/30 transition-all hover:bg-white/70 group">
-    <div className="h-12 w-12 bg-[#0b2519] rounded-2xl flex items-center justify-center mb-6 text-[#ffefcb] group-hover:scale-110 transition-transform duration-300">
+const Comparison = () => (
+  <section id="comparison" className="py-32 bg-white">
+    <div className="max-w-7xl mx-auto px-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+        <div>
+          <h2 className="text-4xl md:text-5xl font-medium tracking-tight text-[#0b2519] mb-6">
+            The friction of the <br/>
+            Status Quo.
+          </h2>
+          <p className="text-[#0b2519]/70 font-light mb-10 text-lg">
+            Fragmented communication breaks trust. When your client has to check Slack, Email,
+            Zoom, and Drive just to see an update, you've already lost the momentum.
+          </p>
+
+          <div className="space-y-4">
+            {[
+              "Buried email threads",
+              "Lost file versions",
+              "Meeting fatigue",
+              "Context switching costs"
+            ].map(item => (
+              <div key={item} className="flex items-center gap-3 text-red-500/80">
+                <div className="w-5 h-5 rounded-full bg-red-50 flex items-center justify-center">
+                  <Clock size={12} />
+                </div>
+                <span className="text-sm font-medium uppercase tracking-wider">{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <GlassCard className="p-8 md:p-12 bg-[#ffefcb]/30 border-[#0b2519]/10 rounded-[2.5rem]">
+          <h3 className="text-2xl font-bold text-[#0b2519] mb-8 uppercase tracking-tighter">The Space Way</h3>
+          <div className="space-y-6">
+            {[
+              { title: "Unified Context", desc: "Every message, file, and meeting in one timeline." },
+              { title: "Instant Trust", desc: "Give clients a dedicated portal they actually want to use." },
+              { title: "Zero Noise", desc: "Separate internal strategy from client-facing delivery." }
+            ].map(item => (
+              <div key={item.title} className="group">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                    <Check size={14} />
+                  </div>
+                  <h4 className="font-black uppercase tracking-widest text-xs text-[#0b2519]">{item.title}</h4>
+                </div>
+                <p className="pl-9 text-sm text-[#0b2519]/60 font-light">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      </div>
+    </div>
+  </section>
+);
+
+const FeatureCard = ({ icon: Icon, title, desc }: { icon: any, title: string, desc: string }) => (
+  <div className="p-8 rounded-[2rem] bg-[#ffefcb]/20 border border-[#0b2519]/5 hover:border-[#0b2519]/20 transition-all group">
+    <div className="w-12 h-12 rounded-2xl bg-[#0b2519] flex items-center justify-center text-[#ffefcb] mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg shadow-[#0b2519]/10">
       <Icon size={24} strokeWidth={1.5} />
     </div>
-    <h3 className="text-xl font-medium text-[#0b2519] mb-3">{title}</h3>
-    <p className="text-[#0b2519]/80 leading-relaxed font-light">{desc}</p>
+    <h3 className="text-lg font-bold text-[#0b2519] mb-3 uppercase tracking-tight">{title}</h3>
+    <p className="text-[#0b2519]/60 text-sm leading-relaxed font-light">{desc}</p>
   </div>
 );
 
 const Features = () => (
-  <section id="features" className="py-32 bg-[#ffefcb] relative">
+  <section id="features" className="py-32 bg-white">
     <div className="max-w-7xl mx-auto px-6">
-      <div className="mb-20 text-center max-w-3xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-medium text-[#0b2519] mb-6 tracking-tight">Productivity apps became the noise.</h2>
-        <p className="text-[#0b2519]/80 text-lg font-light">
-          The Status Quo: Multiple tabs, fragmented history, and management overhead.
-          The Nexus Way: One space, total clarity, and meaningful connections.
+      <div className="text-center max-w-3xl mx-auto mb-20">
+        <h2 className="text-3xl md:text-5xl font-medium text-[#0b2519] mb-6 tracking-tight">Everything you need, <br/>nothing you don't.</h2>
+        <p className="text-[#0b2519]/60 text-lg font-light">
+          We stripped away the complexity of traditional CRMs and project management tools
+          to focus on what matters: the relationship.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="space-y-6">
-          <FeatureCard
-            icon={Layers}
-            title="The Lie"
-            desc="More features equal more productivity. The truth? They create more complexity and less clarity."
-            isCheck={false}
-          />
-          <div className="p-6 bg-red-50/50 border-l-4 border-red-500 rounded-r-lg">
-            <h4 className="font-medium text-red-800 mb-2">Trust-Eroding Friction</h4>
-            <p className="text-red-700/80 text-sm">Fragmented communication breaks trust and slows progress.</p>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <FeatureCard
-            icon={Zap}
-            title="The Signal"
-            desc="Nexus cuts through the noise with one space for every client relationship."
-          />
-          <div className="p-6 bg-emerald-50/50 border-l-4 border-emerald-500 rounded-r-lg">
-            <h4 className="font-medium text-emerald-800 mb-2">Context Cohesion</h4>
-            <p className="text-emerald-700/80 text-sm">All communication in one place means no more digging for context.</p>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <FeatureCard
-            icon={Shield}
-            title="The Result"
-            desc="Clarity for you, simplicity for your clients, and growth for your business."
-          />
-          <div className="p-6 bg-amber-50/50 border-l-4 border-amber-500 rounded-r-lg">
-            <h4 className="font-medium text-amber-800 mb-2">Effortless Scaling</h4>
-            <p className="text-amber-700/80 text-sm">More clients, less chaos. Scale without the overhead.</p>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <FeatureCard
+          icon={MessageSquare}
+          title="Unified Inbox"
+          desc="Real-time messaging with distinct client and internal channels. Keep strategy private, results public."
+        />
+        <FeatureCard
+          icon={Video}
+          title="Integrated Meetings"
+          desc="Launch video calls instantly. Record outcomes and track engagement automatically."
+        />
+        <FeatureCard
+          icon={FileText}
+          title="Smart Files"
+          desc="Version-controlled document management. No more 'v2_final_final' email attachments."
+        />
+        <FeatureCard
+          icon={Layers}
+          title="Task Tracking"
+          desc="Simple, transparent task lists that keep projects moving without the bloat."
+        />
       </div>
     </div>
   </section>
 );
 
-const PricingCard = ({ title, price, description, features, highlight = false, isPopular = false }: any) => (
+const PricingCard = ({ title, price, desc, features, isPopular, onStartOnboarding }: any) => (
   <div className={`
-    relative p-8 rounded-3xl border flex flex-col h-full transition-all duration-300
-    bg-white/50 border-[#0b2519]/10 hover:border-[#0b2519]/30 hover:bg-white/70
-    ${highlight ? 'shadow-2xl scale-105 z-10' : ''}
+    p-10 rounded-[2.5rem] border flex flex-col h-full transition-all duration-500
+    ${isPopular
+      ? 'bg-[#0b2519] text-[#ffefcb] border-[#0b2519] shadow-2xl scale-105 z-10'
+      : 'bg-white text-[#0b2519] border-[#0b2519]/10 hover:border-[#0b2519]/30'}
   `}>
-    {isPopular && (
-      <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-[#0b2519] to-[#1a4731] text-[#ffefcb] text-xs font-bold uppercase tracking-wider rounded-full shadow-lg">
-        Most Popular
-      </div>
-    )}
     <div className="mb-8">
-      <h3 className="text-lg font-medium text-[#0b2519] mb-2">{title}</h3>
-      <div className="flex items-baseline gap-1 mb-2">
-        <span className="text-4xl font-light text-[#0b2519]">${price}</span>
-        <span className="text-sm text-[#0b2519]/60">/month</span>
+      <div className="flex justify-between items-start mb-4">
+        <h3 className="text-sm font-black uppercase tracking-[0.2em] opacity-80">{title}</h3>
+        {isPopular && (
+          <span className="bg-[#ffefcb] text-[#0b2519] text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded">Best Value</span>
+        )}
       </div>
-      <p className="text-sm text-[#0b2519]/80 font-light min-h-[40px]">{description}</p>
+      <div className="flex items-baseline gap-1 mb-4">
+        <span className="text-5xl font-medium tracking-tighter">${price}</span>
+        <span className="text-xs opacity-60 font-medium">/mo</span>
+      </div>
+      <p className="text-sm opacity-70 font-light leading-relaxed">{desc}</p>
     </div>
 
-    <div className="space-y-4 mb-8 flex-1">
-      {features.map((feat: string, i: number) => (
-        <div key={i} className="flex items-start gap-3 text-sm text-[#0b2519]/80">
-          <Check size={16} className="text-[#0b2519] mt-0.5 shrink-0" />
-          <span className="font-light">{feat}</span>
+    <div className="space-y-4 mb-10 flex-1">
+      {features.map((feat: string) => (
+        <div key={feat} className="flex items-center gap-3 text-xs font-medium">
+          <Check size={14} className={isPopular ? 'text-emerald-400' : 'text-emerald-600'} />
+          <span className="opacity-80">{feat}</span>
         </div>
       ))}
     </div>
 
-    <a
-      href="https://buy.polar.sh/polar_cl_cugYS6Kfcy651OZLVk1jvxp6gl3KOGikSe6aa3HNqdq"
-      target="_blank"
-      rel="noopener noreferrer"
+    <Button
+      variant={isPopular ? 'secondary' : 'primary'}
+      size="lg"
+      onClick={onStartOnboarding}
       className={`
-        w-full py-3 rounded-xl font-medium text-sm transition-all text-center block
-        bg-[#0b2519] text-[#ffefcb] hover:bg-[#0b2519]/90
+        w-full py-6 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px]
+        ${isPopular
+          ? 'bg-[#ffefcb] text-[#0b2519] hover:bg-white shadow-xl shadow-black/20'
+          : 'bg-[#0b2519] text-[#ffefcb] hover:bg-[#0b2519]/90'}
       `}
     >
-      Get Started
-    </a>
+      Select Plan
+    </Button>
   </div>
 );
 
-const Pricing = () => (
-  <section id="pricing" className="py-32 bg-[#ffefcb] relative overflow-hidden">
-    <div className="max-w-7xl mx-auto px-6 relative z-10">
-      <div className="mb-20 text-center">
-        <h2 className="text-3xl md:text-5xl font-medium text-[#0b2519] mb-6">Honest Pricing. Select Your Rank.</h2>
-        <p className="text-[#0b2519]/80 text-lg font-light max-w-xl mx-auto">
-          Simple, transparent pricing that grows with your business.
-          No hidden fees. Cancel anytime.
+const Pricing = ({ onStartOnboarding }: LandingPageProps) => (
+  <section id="pricing" className="py-32 bg-[#ffefcb]/50">
+    <div className="max-w-7xl mx-auto px-6">
+      <div className="text-center max-w-2xl mx-auto mb-20">
+        <h2 className="text-4xl md:text-5xl font-medium text-[#0b2519] mb-6 tracking-tight">Scale your agency.</h2>
+        <p className="text-[#0b2519]/60 text-lg font-light">
+          Simple, transparent pricing that grows as you add more clients.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <PricingCard
           title="Starter"
           price="29"
-          description="For the solo operator aiming for higher ranks."
-          features={[
-            "3 Client Spaces",
-            "1 Staff Seat",
-            "5 GB Storage",
-            "500 Video Minutes",
-            "Basic Analytics"
-          ]}
+          desc="Perfect for solo operators."
+          features={["3 Client Spaces", "1 Staff Seat", "5GB Storage", "500 Meeting Mins"]}
+          onStartOnboarding={onStartOnboarding}
         />
         <PricingCard
           title="Growth"
           price="79"
-          description="Optimized for agency scaling."
+          desc="Ideal for small teams."
           isPopular={true}
-          features={[
-            "10 Client Spaces",
-            "3 Staff Seats",
-            "20 GB Storage",
-            "2,000 Video Minutes",
-            "AI Summaries"
-          ]}
+          features={["10 Client Spaces", "3 Staff Seats", "20GB Storage", "2,000 Meeting Mins"]}
+          onStartOnboarding={onStartOnboarding}
         />
         <PricingCard
           title="Scale"
           price="199"
-          description="For established agencies."
-          features={[
-            "30 Client Spaces",
-            "10 Staff Seats",
-            "100 GB Storage",
-            "10,000 Video Minutes",
-            "Automation Rules"
-          ]}
+          desc="For growing agencies."
+          features={["30 Client Spaces", "10 Staff Seats", "100GB Storage", "10,000 Meeting Mins"]}
+          onStartOnboarding={onStartOnboarding}
         />
         <PricingCard
-          title="Pro Agency"
+          title="Pro"
           price="399"
-          description="Maximum power. Total domination."
-          features={[
-            "50 Client Spaces",
-            "20 Staff Seats",
-            "250 GB Storage",
-            "20,000 Video Minutes",
-            "Priority Support"
-          ]}
+          desc="The ultimate powerhouse."
+          features={["50 Client Spaces", "20 Staff Seats", "250GB Storage", "Unlimited Meetings"]}
+          onStartOnboarding={onStartOnboarding}
         />
       </div>
     </div>
@@ -327,33 +295,56 @@ const Pricing = () => (
 );
 
 const Footer = () => (
-  <footer className="bg-[#0b2519] py-12">
-    <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center">
-      <div className="flex items-center gap-2 mb-4 md:mb-0">
-        <div className="w-6 h-6 bg-[#ffefcb] rounded flex items-center justify-center text-xs text-[#0b2519] font-bold">N</div>
-        <span className="text-[#ffefcb]/80 text-sm">Nexus Inc. © 2024</span>
+  <footer className="bg-[#0b2519] py-20 text-[#ffefcb]">
+    <div className="max-w-7xl mx-auto px-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-20">
+        <div className="col-span-1 md:col-span-2">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-8 h-8 bg-[#ffefcb] rounded-lg flex items-center justify-center text-[#0b2519] font-bold">S</div>
+            <span className="text-2xl font-bold tracking-tighter">Space.inc</span>
+          </div>
+          <p className="text-[#ffefcb]/60 font-light max-w-sm leading-relaxed">
+            The nexus for high-performance client relationships.
+            Built for those who value clarity, trust, and speed.
+          </p>
+        </div>
+        <div>
+          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] mb-6 opacity-40">Product</h4>
+          <ul className="space-y-4 text-sm font-medium opacity-80">
+            <li><a href="#features" className="hover:opacity-100 transition-opacity">Features</a></li>
+            <li><a href="#pricing" className="hover:opacity-100 transition-opacity">Pricing</a></li>
+            <li><a href="#" className="hover:opacity-100 transition-opacity">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] mb-6 opacity-40">Company</h4>
+          <ul className="space-y-4 text-sm font-medium opacity-80">
+            <li><a href="#" className="hover:opacity-100 transition-opacity">About</a></li>
+            <li><a href="#" className="hover:opacity-100 transition-opacity">Privacy</a></li>
+            <li><a href="#" className="hover:opacity-100 transition-opacity">Terms</a></li>
+          </ul>
+        </div>
       </div>
-      <div className="flex gap-6 text-sm text-[#ffefcb]/60">
-        <a href="#" className="hover:text-[#ffefcb] transition-colors">Privacy</a>
-        <a href="#" className="hover:text-[#ffefcb] transition-colors">Terms</a>
-        <a href="#" className="hover:text-[#ffefcb] transition-colors">Twitter</a>
+      <div className="pt-8 border-t border-[#ffefcb]/10 flex flex-col md:flex-row justify-between items-center gap-4">
+        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">© 2024 Space.inc. All rights reserved.</p>
+        <div className="flex gap-6 opacity-40 text-xs font-bold uppercase tracking-widest">
+          <a href="#" className="hover:opacity-100 transition-opacity">Twitter</a>
+          <a href="#" className="hover:opacity-100 transition-opacity">LinkedIn</a>
+        </div>
       </div>
     </div>
   </footer>
 );
 
 export const LandingPage = ({ onStartOnboarding }: LandingPageProps) => {
-  // Auto-navigate to dashboard when component mounts
-  useEffect(() => {
-    onStartOnboarding();
-  }, [onStartOnboarding]);
-
   return (
-    <div className="min-h-screen bg-white text-[#1D1D1D] flex items-center justify-center font-sans">
-      <div className="text-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#10A37F] border-t-transparent mx-auto mb-6"></div>
-        <p className="text-sm font-medium text-[#565869]">Initializing your workspace...</p>
-      </div>
+    <div className="min-h-screen bg-[#ffefcb] font-sans selection:bg-[#0b2519] selection:text-[#ffefcb]">
+      <Navbar onStartOnboarding={onStartOnboarding} />
+      <Hero onStartOnboarding={onStartOnboarding} />
+      <Comparison />
+      <Features />
+      <Pricing onStartOnboarding={onStartOnboarding} />
+      <Footer />
     </div>
   );
 };
