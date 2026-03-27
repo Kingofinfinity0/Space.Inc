@@ -1,36 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../contexts/ToastContext';
-import { apiService } from '../../services/apiService';
+import React, { useState } from 'react';
 import {
-    LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
-    Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
-    Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
-    GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft
+    Plus, Search, ArrowRight, Clock, Users, Video, Download, Play, Calendar, X
 } from 'lucide-react';
 import {
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
-import {
-    GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
-    SkeletonLoader, SkeletonCard, SkeletonText, SkeletonImage
+    GlassCard, Button, Heading, Text, Input, Modal, Toggle
 } from '../UI/index';
-import { FileViewerModal } from '../FileViewerModal';
-import { FileUploadModal } from '../FileUploadModal';
-import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
-import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
-import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
+import { ClientSpace, Meeting } from '../../types';
+import { apiService } from '../../services/apiService';
 
-
-// 4. Meeting Hub
 const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMeet }: { meetings: Meeting[], clients: ClientSpace[], onSchedule: (m: any) => void, onJoin: (id: string) => void, onInstantMeet: (spaceId: string) => void }) => {
     const [tab, setTab] = useState<'Upcoming' | 'History'>('Upcoming');
     const [isScheduleOpen, setIsScheduleOpen] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
 
-    // Schedule Form State
     const [newMeetingSpace, setNewMeetingSpace] = useState(clients[0]?.id || '');
     const [newMeetingDate, setNewMeetingDate] = useState('');
     const [newMeetingTime, setNewMeetingTime] = useState('');
@@ -48,10 +30,6 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
             category: newMeetingCategory
         });
         setIsScheduleOpen(false);
-    };
-
-    const joinRoom = async (meetingId: string) => {
-        onJoin(meetingId);
     };
 
     return (
@@ -92,7 +70,7 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                                     </div>
                                 </div>
                             </div>
-                            <Button variant="secondary" size="sm" onClick={() => joinRoom(meeting.id)}>
+                            <Button variant="secondary" size="sm" onClick={() => onJoin(meeting.id)}>
                                 Join Room <ArrowRight size={14} className="ml-1" />
                             </Button>
                         </GlassCard>
@@ -115,8 +93,8 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                                 </div>
                             </div>
                             <div className="flex gap-2">
-                                {(meeting.has_recording ?? !!meeting.recording_url) &&
-                                    (meeting.recording_status === 'ready' || meeting.recording_status === 'available') && (
+                                {(meeting.has_recording || !!meeting.recording_url) &&
+                                    ((meeting.recording_status as any) === 'ready' || (meeting.recording_status as any) === 'available') && (
                                         <div className="px-2 py-1 bg-red-50 text-red-600 rounded text-xs">Rec</div>
                                     )}
                                 {meeting.notes && <div className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs">Notes</div>}
@@ -126,7 +104,6 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                 </div>
             )}
 
-            {/* Schedule Modal */}
             <Modal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} title="Schedule Meeting">
                 <div className="space-y-4">
                     <div>
@@ -176,55 +153,29 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                 </div>
             </Modal>
 
-            {/* Post-Meeting Summary Modal */}
             <Modal isOpen={!!selectedMeeting} onClose={() => setSelectedMeeting(null)} title="Meeting Summary">
                 {selectedMeeting && (
                     <div className="space-y-6">
-                        {/*
-                          Task 3E: show recording only when backend marks it ready.
-                          We support both legacy ('available') and newer ('ready') values for recording_status.
-                        */}
-                        {(() => {
-                            const isRecordingReady =
-                                selectedMeeting.recording_status === 'ready' || selectedMeeting.recording_status === 'available';
-                            const hasRecording = selectedMeeting.has_recording ?? !!selectedMeeting.recording_url;
-                            const canViewRecording = isRecordingReady && hasRecording && !!selectedMeeting.recording_url;
-
-                            return (
-                                <>
-                                    {/* Header Info */}
-                                    {/* Recording Section */}
-                                    <div className="bg-zinc-900 rounded-lg p-1 overflow-hidden">
-                                        {canViewRecording ? (
-                                            <div
-                                                className="relative group cursor-pointer"
-                                                onClick={() => selectedMeeting.recording_url && window.open(selectedMeeting.recording_url, '_blank')}
-                                            >
-                                                <div className="aspect-video bg-zinc-800 rounded flex items-center justify-center relative overflow-hidden">
-                                                    <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 opacity-50" />
-
-                                                    <div className="h-16 w-16 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-white/20 transition-all z-10">
-                                                        <Play size={32} className="text-white ml-2" />
-                                                    </div>
-                                                    <div className="absolute bottom-4 left-4 z-10">
-                                                        <p className="text-white font-medium text-sm">Watch Recording</p>
-                                                        <p className="text-zinc-400 text-xs">Click to open in new tab</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="aspect-video bg-zinc-800 rounded flex flex-col items-center justify-center text-zinc-500 gap-2">
-                                                <Video size={32} className="opacity-20" />
-                                                <p className="text-sm">No recording available</p>
-                                            </div>
-                                        )}
+                        <div className="bg-zinc-900 rounded-lg p-1 overflow-hidden">
+                            {(selectedMeeting.recording_status as any) === 'ready' || (selectedMeeting.recording_status as any) === 'available' ? (
+                                <div
+                                    className="relative group cursor-pointer"
+                                    onClick={() => selectedMeeting.recording_url && window.open(selectedMeeting.recording_url, '_blank')}
+                                >
+                                    <div className="aspect-video bg-zinc-800 rounded flex items-center justify-center relative overflow-hidden">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 opacity-50" />
+                                        <div className="h-16 w-16 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-white/20 transition-all z-10">
+                                            <Play size={32} className="text-white ml-2" />
+                                        </div>
                                     </div>
-
-                                    {/* Notes & Transcript Tabs */}
-                                </>
-                            );
-                        })()}
-                        {/* Header Info */}
+                                </div>
+                            ) : (
+                                <div className="aspect-video bg-zinc-800 rounded flex flex-col items-center justify-center text-zinc-500 gap-2">
+                                    <Video size={32} className="opacity-20" />
+                                    <p className="text-sm">No recording available</p>
+                                </div>
+                            )}
+                        </div>
                         <div className="flex justify-between items-start">
                             <div>
                                 <h3 className="text-xl font-medium text-[#1D1D1D] mb-1">{selectedMeeting.title}</h3>
@@ -234,28 +185,20 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                                     <Clock size={14} /> {new Date(selectedMeeting.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </p>
                             </div>
-                            <div className="px-3 py-1 bg-zinc-100 rounded-full text-xs font-semibold text-zinc-600">
-                                {selectedMeeting.duration_minutes ? `${selectedMeeting.duration_minutes} min` : 'Ended'}
-                            </div>
                         </div>
-
-                        {/* Notes & Transcript Tabs */}
                         <div className="space-y-3">
                             <h4 className="text-sm font-medium text-zinc-900 uppercase tracking-wider">Meeting Notes</h4>
                             <div className="p-4 bg-zinc-50 border border-zinc-100 rounded-lg text-sm text-zinc-600 leading-relaxed min-h-[100px]">
-                                {selectedMeeting.notes || <span className="text-zinc-400 italic">No notes were taken during this session.</span>}
+                                {selectedMeeting.notes || <span className="text-zinc-400 italic">No notes.</span>}
                             </div>
                         </div>
-
                         <div className="flex gap-3 pt-2">
                             <Button className="flex-1" variant="secondary" onClick={() => setSelectedMeeting(null)}>Close</Button>
-                            {(selectedMeeting.has_recording ?? !!selectedMeeting.recording_url) &&
-                                (selectedMeeting.recording_status === 'ready' || selectedMeeting.recording_status === 'available') &&
-                                selectedMeeting.recording_url && (
-                                    <Button className="flex-1" onClick={() => window.open(selectedMeeting.recording_url, '_blank')}>
-                                        <Download size={16} className="mr-2" /> Download Recording
-                                    </Button>
-                                )}
+                            {selectedMeeting.recording_url && (
+                                <Button className="flex-1" onClick={() => window.open(selectedMeeting.recording_url, '_blank')}>
+                                    <Download size={16} className="mr-2" /> Download
+                                </Button>
+                            )}
                         </div>
                     </div>
                 )}

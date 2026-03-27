@@ -108,6 +108,7 @@ export interface Message {
   created_at: string;
   updated_at?: string;
   is_unread?: boolean;
+  idempotency_key?: string;
   space_id: string;
   sender?: {
     full_name: string;

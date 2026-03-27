@@ -1,22 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { supabase } from '../../lib/supabase';
+import { apiService } from '../../services/apiService';
 import { friendlyError } from '../../utils/errors';
-import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { ClientSpace, Meeting, Message, StaffMember, Task } from '../../types';
+import { GlassCard, Heading, Text, SkeletonLoader } from '../UI/index';
+import { Video, Activity, AlertTriangle, FileText, TrendingUp, TrendingDown, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 type OwnerDashboardProps = {
-    clients: ClientSpace[];
-    messages: Message[];
-    meetings: Meeting[];
-    tasks: Task[];
-    profile: any;
-    onJoin: (id: string) => void;
-    onInstantMeet?: () => void;
     onGoToSpace?: (spaceId: string) => void;
 };
 
@@ -48,13 +39,6 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export default function OwnerDashboardView({
-    clients,
-    messages,
-    meetings,
-    tasks,
-    profile,
-    onJoin,
-    onInstantMeet,
     onGoToSpace
 }: OwnerDashboardProps) {
     const { user } = useAuth();
@@ -62,72 +46,35 @@ export default function OwnerDashboardView({
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
-    const [tasksFeed, setTasksFeed] = useState<any[]>([]);
-    const [upcomingMeetings, setUpcomingMeetings] = useState<any[]>([]);
-    const [notifications, setNotifications] = useState<any[]>([]);
-    const [analytics, setAnalytics] = useState<any>({
-        activeSpaces: 0,
-        activeClients: 0,
-        totalMessagesWeek: 0,
-        meetingsMonth: 0,
-        filesMonth: 0
-    });
+    const [summary, setSummary] = useState<any>(null);
+    const [engagement, setEngagement] = useState<any[]>([]);
+    const [meetingIntel, setMeetingIntel] = useState<any[]>([]);
+    const [pipeline, setPipeline] = useState<any>(null);
+    const [activityFeed, setActivityFeed] = useState<any[]>([]);
 
     const load = async () => {
         if (!user) return;
         setLoading(true);
         try {
-            const now = new Date().toISOString();
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-            const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-
-            const [tasksRes, meetingsRes, notificationsRes, analyticsRes] = await Promise.all([
-                // Widget 1: Task Management (activity_logs as tasks)
-                supabase.from('activity_logs')
-                    .select('id, action_type, space_name, created_at, actor_name')
-                    .in('action_type', ['meeting_created', 'file_uploaded'])
-                    .gt('created_at', sevenDaysAgo)
-                    .order('created_at', { ascending: false }),
-
-                // Widget 2: Calendar
-                supabase.from('meetings')
-                    .select('id, title, space_name, starts_at, status')
-                    .gt('starts_at', now)
-                    .eq('status', 'scheduled')
-                    .order('starts_at')
-                    .limit(10),
-
-                // Widget 3: Inbox / Notifications
-                supabase.from('notifications')
-                    .select('id, type, message, is_read, created_at, space_id')
-                    .eq('user_id', user.id)
-                    .eq('is_read', false)
-                    .order('created_at', { ascending: false })
-                    .limit(20),
-
-                // Widget 4: Business Analytics
-                Promise.all([
-                    supabase.from('spaces').select('id', { count: 'exact' }).eq('status', 'active'),
-                    supabase.from('space_memberships')
-                        .select('id', { count: 'exact' })
-                        .eq('role', 'client')
-                        .gt('last_activity_at', sevenDaysAgo),
-                    supabase.from('messages').select('id', { count: 'exact' }).gt('created_at', sevenDaysAgo),
-                    supabase.from('meetings').select('id', { count: 'exact' }).eq('status', 'ended').gt('ended_at', startOfMonth),
-                    supabase.from('files').select('id', { count: 'exact' }).gt('created_at', startOfMonth)
-                ])
+            const [summaryRes, engagementRes, intelRes, pipelineRes, feedRes] = await Promise.all([
+                apiService.getOwnerDashboardSummary(),
+                apiService.getClientEngagementScores(),
+                apiService.getMeetingIntelligence(30),
+                apiService.getAcquisitionPipeline(),
+                apiService.getActivityFeed(15)
             ]);
 
-            setTasksFeed(tasksRes.data || []);
-            setUpcomingMeetings(meetingsRes.data || []);
-            setNotifications(notificationsRes.data || []);
-            setAnalytics({
-                activeSpaces: analyticsRes[0].count || 0,
-                activeClients: analyticsRes[1].count || 0,
-                totalMessagesWeek: analyticsRes[2].count || 0,
-                meetingsMonth: analyticsRes[3].count || 0,
-                filesMonth: analyticsRes[4].count || 0
-            });
+            if (summaryRes.error) throw summaryRes.error;
+            if (engagementRes.error) throw engagementRes.error;
+            if (intelRes.error) throw intelRes.error;
+            if (pipelineRes.error) throw pipelineRes.error;
+            if (feedRes.error) throw feedRes.error;
+
+            setSummary(summaryRes.data);
+            setEngagement(engagementRes.data || []);
+            setMeetingIntel(intelRes.data || []);
+            setPipeline(pipelineRes.data);
+            setActivityFeed(feedRes.data || []);
 
         } catch (err: any) {
             console.error('[OwnerDashboardView] load failed:', err);
@@ -139,156 +86,213 @@ export default function OwnerDashboardView({
 
     useEffect(() => {
         load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id]);
-
-    const silentCount = summary?.spaces_silent_14d ?? summary?.spaces_silent ?? 0;
-    const silentAlert = typeof silentCount === 'number' && silentCount > 0;
-
-    const totalClients = summary?.total_clients ?? summary?.totalClients ?? 0;
-    const newThisMonth = summary?.new_this_month ?? summary?.newThisMonth ?? 0;
-    const activeSpaces = summary?.active_spaces ?? summary?.activeSpaces ?? 0;
-    const planQuota = summary?.plan_quota ?? summary?.plan ?? summary?.quota ?? null;
 
     const goToSpace = (spaceId: string) => {
         if (onGoToSpace) return onGoToSpace(spaceId);
-        // Fallback: rely on route config only if you have a route; otherwise no-op.
         navigate(`/spaces/${spaceId}`);
     };
 
     const successRateColor = (rate: number) => {
-        if (rate >= 60) return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-        if (rate >= 40) return 'bg-amber-50 text-amber-700 border-amber-100';
-        return 'bg-rose-50 text-rose-700 border-rose-100';
+        if (rate >= 60) return 'text-emerald-500';
+        if (rate >= 40) return 'text-amber-500';
+        return 'text-rose-500';
     };
 
     return (
-        <div className="space-y-6">
-            <header className="flex justify-between items-end mb-8">
+        <div className="space-y-8 animate-[fadeIn_0.5s_ease-out]">
+            <header className="flex justify-between items-end mb-4">
                 <div>
-                    <Heading level={1}>Executive Analytics</Heading>
-                    <Text variant="secondary" className="mt-1">
-                        Real engagement, meetings, and activity signals.
+                    <Heading level={1} className="tracking-tight font-black uppercase text-3xl">Executive Analytics</Heading>
+                    <Text variant="secondary" className="mt-1 font-medium">
+                        Real-time relationship health and engagement signals.
                     </Text>
                 </div>
             </header>
 
-            {/* Widget 4: Business Analytics */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Spaces</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
+                <GlassCard className="p-5 border-zinc-200/50 shadow-sm">
+                    <Text variant="secondary" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Clients</Text>
+                    <div className="text-3xl font-bold mt-1 text-zinc-900">{loading ? <SkeletonLoader width="40px" height="32px" /> : summary?.total_clients || 0}</div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Clients (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeClients}</div>
+                <GlassCard className="p-5 border-zinc-200/50 shadow-sm">
+                    <Text variant="secondary" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">New (Month)</Text>
+                    <div className="text-3xl font-bold mt-1 text-zinc-900">{loading ? <SkeletonLoader width="40px" height="32px" /> : summary?.clients_acquired_this_month || 0}</div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Messages (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.totalMessagesWeek}</div>
+                <GlassCard className="p-5 border-zinc-200/50 shadow-sm">
+                    <Text variant="secondary" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Active Spaces</Text>
+                    <div className="text-3xl font-bold mt-1 text-zinc-900">{loading ? <SkeletonLoader width="40px" height="32px" /> : summary?.active_spaces || 0}</div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Meetings (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.meetingsMonth}</div>
+                <GlassCard className="p-5 border-zinc-200/50 shadow-sm">
+                    <Text variant="secondary" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Plan Quota</Text>
+                    <div className="text-xl font-bold mt-2 text-zinc-600">{loading ? <SkeletonLoader width="60px" height="24px" /> : `${summary?.active_spaces || 0} / 10`}</div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Files Shared (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.filesMonth}</div>
+                <GlassCard className={`p-5 border-zinc-200/50 shadow-sm ${summary?.spaces_silent_14d > 0 ? 'ring-2 ring-rose-500/20' : ''}`}>
+                    <Text variant="secondary" className="text-[10px] font-black uppercase tracking-widest text-rose-500">Silent 14d+</Text>
+                    <div className={`text-3xl font-bold mt-1 ${summary?.spaces_silent_14d > 0 ? 'text-rose-600' : 'text-zinc-300'}`}>
+                        {loading ? <SkeletonLoader width="40px" height="32px" /> : summary?.spaces_silent_14d || 0}
+                    </div>
                 </GlassCard>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                    {/* Widget 1: Task Management */}
-                    <GlassCard className="p-6">
-                        <Heading level={3} className="mb-6">Task Management</Heading>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-8">
+                    <section>
+                        <div className="flex items-center gap-2 mb-6">
+                            <Activity className="text-indigo-500" size={20} />
+                            <Heading level={3} className="text-sm font-black uppercase tracking-widest text-zinc-400">Relationship Health</Heading>
+                        </div>
                         {loading ? (
-                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
-                        ) : tasksFeed.length === 0 ? (
-                            <div className="text-zinc-400 text-sm italic py-4">No recent activity tasks.</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <SkeletonLoader height="160px" borderRadius="16px" className="w-full" />
+                                <SkeletonLoader height="160px" borderRadius="16px" className="w-full" />
+                            </div>
                         ) : (
-                            <div className="space-y-3">
-                                {tasksFeed.map(item => (
-                                    <div key={item.id} className="p-4 border border-zinc-100 rounded-xl bg-white flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400">
-                                                {item.action_type === 'file_uploaded' ? <FileText size={18} /> : <Video size={18} />}
-                                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {engagement.map((space: any) => (
+                                    <GlassCard
+                                        key={space.space_id}
+                                        className="p-6 cursor-pointer hover:border-indigo-300 transition-all hover:shadow-md group"
+                                        onClick={() => goToSpace(space.space_id)}
+                                    >
+                                        <div className="flex justify-between items-start mb-4">
                                             <div>
-                                                <p className="text-sm font-medium text-zinc-900">{item.actor_name} {ACTION_LABELS[item.action_type]}</p>
-                                                <p className="text-xs text-zinc-500">{item.space_name} • {timeAgo(item.created_at)}</p>
+                                                <h4 className="font-bold text-zinc-900 group-hover:text-indigo-600 transition-colors">{space.space_name}</h4>
+                                                <p className="text-xs text-zinc-400 font-medium">Last active: {space.days_since_activity === 0 ? 'Today' : `${space.days_since_activity}d ago`}</p>
+                                            </div>
+                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
+                                                space.engagement_level === 'active' ? 'bg-emerald-50 text-emerald-600' :
+                                                space.engagement_level === 'watching' ? 'bg-amber-50 text-amber-600' :
+                                                'bg-rose-50 text-rose-600'
+                                            }`}>
+                                                {space.engagement_level}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2 mb-4">
+                                            <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                                <p className="text-[10px] font-black text-zinc-400 uppercase">Msg/wk</p>
+                                                <p className="text-sm font-bold text-zinc-700">{space.messages_this_week}</p>
+                                            </div>
+                                            <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                                <p className="text-[10px] font-black text-zinc-400 uppercase">Meet/mo</p>
+                                                <p className="text-sm font-bold text-zinc-700">{space.meetings_this_month}</p>
+                                            </div>
+                                            <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                                <p className="text-[10px] font-black text-zinc-400 uppercase">Score</p>
+                                                <p className={`text-sm font-bold ${successRateColor(space.engagement_score)}`}>{space.engagement_score}</p>
                                             </div>
                                         </div>
-                                        <Button variant="ghost" size="sm" icon={<ArrowRight size={14} />} />
-                                    </div>
+                                        {space.alert_message && (
+                                            <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 text-[10px] font-bold">
+                                                <AlertTriangle size={12} />
+                                                {space.alert_message}
+                                            </div>
+                                        )}
+                                    </GlassCard>
                                 ))}
                             </div>
                         )}
-                    </GlassCard>
+                    </section>
 
-                    {/* Widget 2: Calendar / Upcoming Schedule */}
-                    <GlassCard className="p-6">
-                        <Heading level={3} className="mb-6">Upcoming Schedule</Heading>
+                    <GlassCard className="p-8 border-zinc-200/50">
+                        <div className="flex items-center justify-between mb-8">
+                            <div className="flex items-center gap-2">
+                                <Video className="text-emerald-500" size={20} />
+                                <Heading level={3} className="text-sm font-black uppercase tracking-widest text-zinc-400">Meeting Intelligence (30d)</Heading>
+                            </div>
+                        </div>
                         {loading ? (
-                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
-                        ) : upcomingMeetings.length === 0 ? (
-                            <div className="text-zinc-400 text-sm italic py-4">No upcoming meetings scheduled.</div>
+                            <SkeletonLoader height="200px" borderRadius="16px" />
                         ) : (
-                            <div className="space-y-4">
-                                {upcomingMeetings.map(m => {
-                                    const startTime = new Date(m.starts_at);
-                                    const canJoin = (startTime.getTime() - Date.now()) < 30 * 60 * 1000;
-                                    return (
-                                        <div key={m.id} className="flex items-center justify-between p-4 border border-zinc-100 rounded-xl">
-                                            <div className="flex items-center gap-4">
-                                                <div className="text-center min-w-[50px]">
-                                                    <p className="text-[10px] font-black uppercase text-zinc-400">{startTime.toLocaleString('en-US', { month: 'short' })}</p>
-                                                    <p className="text-xl font-bold text-zinc-900">{startTime.getDate()}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-zinc-900">{m.title}</p>
-                                                    <p className="text-xs text-zinc-500">{m.space_name} • {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                                </div>
-                                            </div>
-                                            {canJoin && (
-                                                <Button variant="primary" size="sm" onClick={() => onJoin(m.id)}>Join Now</Button>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="border-b border-zinc-100">
+                                            <th className="pb-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Space</th>
+                                            <th className="pb-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Total</th>
+                                            <th className="pb-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Success %</th>
+                                            <th className="pb-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Primary Type</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-50">
+                                        {meetingIntel.map((intel: any) => (
+                                            <tr key={intel.space_id} className="group hover:bg-zinc-50/50 transition-colors">
+                                                <td className="py-4 text-sm font-bold text-zinc-800">{intel.space_name}</td>
+                                                <td className="py-4 text-sm font-medium text-zinc-500 text-center">{intel.total_meetings}</td>
+                                                <td className={`py-4 text-sm font-black text-center ${successRateColor(intel.success_rate)}`}>
+                                                    {intel.success_rate}%
+                                                </td>
+                                                <td className="py-4">
+                                                    <span className="px-2 py-0.5 bg-zinc-100 text-[10px] font-bold text-zinc-500 rounded uppercase">
+                                                        {Object.entries(intel.category_breakdown || {}).sort((a:any, b:any) => b[1] - a[1])[0]?.[0]?.replace('_', ' ') || 'General'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         )}
                     </GlassCard>
                 </div>
 
-                <div className="space-y-6">
-                    {/* Widget 3: Inbox / Notifications */}
-                    <GlassCard className="p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <Heading level={3}>Inbox</Heading>
-                            <Button variant="ghost" size="sm" onClick={async () => {
-                                await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
-                                load();
-                            }}>Mark all read</Button>
-                        </div>
+                <div className="space-y-8">
+                    <GlassCard className="p-6 bg-zinc-900 text-white border-zinc-800 shadow-xl">
+                        <Heading level={3} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-6">Growth Pipeline</Heading>
                         {loading ? (
-                            <div className="space-y-3"><SkeletonLoader height="50px" borderRadius="10px" /></div>
-                        ) : notifications.length === 0 ? (
+                            <SkeletonLoader height="120px" borderRadius="12px" className="bg-zinc-800" />
+                        ) : (
+                            <div className="space-y-6">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-3xl font-black">{pipeline?.new_spaces_this_month || 0}</p>
+                                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mt-1">New Spaces (MoM)</p>
+                                    </div>
+                                    <div className={`flex items-center gap-1 ${pipeline?.growth_rate >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {pipeline?.growth_rate >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                                        <span className="text-sm font-black">{Math.abs(pipeline?.growth_rate || 0)}%</span>
+                                    </div>
+                                </div>
+                                <div className="pt-4 border-t border-zinc-800">
+                                    <div className="flex justify-between text-xs mb-2">
+                                        <span className="text-zinc-500 font-bold uppercase">Invite Acceptance</span>
+                                        <span className="text-white font-black">{pipeline?.invite_acceptance_rate || 0}%</span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                                        <div className="h-full bg-indigo-500" style={{ width: `${pipeline?.invite_acceptance_rate || 0}%` }} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </GlassCard>
+
+                    <GlassCard className="p-6 border-zinc-200/50">
+                        <Heading level={3} className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-6">Live Activity Feed</Heading>
+                        {loading ? (
+                            <div className="space-y-4"><SkeletonLoader height="40px" borderRadius="8px" /></div>
+                        ) : activityFeed.length === 0 ? (
                             <div className="text-center py-10">
                                 <Activity className="mx-auto text-zinc-200 mb-2" size={32} />
-                                <p className="text-zinc-400 text-xs italic">Inbox is clear.</p>
+                                <p className="text-zinc-400 text-xs italic font-medium">No recent signals.</p>
                             </div>
                         ) : (
-                            <div className="space-y-3">
-                                {notifications.map(n => (
-                                    <div key={n.id} className="p-3 bg-white border border-zinc-100 rounded-xl cursor-pointer hover:border-zinc-300 transition-colors" onClick={() => n.space_id && goToSpace(n.space_id)}>
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-zinc-400">
-                                                {n.type === 'file_uploaded' ? <FileText size={16} /> : n.type === 'message_received' ? <MessageSquare size={16} /> : <Calendar size={16} />}
-                                            </div>
-                                            <p className="text-xs text-zinc-800 line-clamp-2">{n.message}</p>
+                            <div className="space-y-4">
+                                {activityFeed.map((log: any) => (
+                                    <div key={log.id} className="flex gap-3 group">
+                                        <div className="h-8 w-8 rounded-lg bg-zinc-50 flex items-center justify-center text-zinc-400 shrink-0 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors">
+                                            {log.action_type.includes('message') ? <MessageSquare size={14} /> :
+                                             log.action_type.includes('file') ? <FileText size={14} /> :
+                                             log.action_type.includes('meeting') ? <Video size={14} /> :
+                                             <Activity size={14} />}
                                         </div>
-                                        <p className="text-[10px] text-zinc-400 mt-2">{timeAgo(n.created_at)}</p>
+                                        <div className="min-w-0">
+                                            <p className="text-xs text-zinc-800 font-medium leading-tight">
+                                                <span className="font-bold">{log.actor_name}</span> {ACTION_LABELS[log.action_type] || log.action_type}
+                                            </p>
+                                            <p className="text-[10px] text-zinc-400 font-bold uppercase mt-1">
+                                                {log.space_name} • {timeAgo(log.created_at)}
+                                            </p>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -299,4 +303,3 @@ export default function OwnerDashboardView({
         </div>
     );
 }
-
