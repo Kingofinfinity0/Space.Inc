@@ -1,0 +1,45 @@
+<<<<<<< SEARCH
+import LoginPage from './src/views/LoginPage';
+import SignupPage from './src/views/SignupPage';
+import { apiService } from './services/apiService';
+=======
+import LoginPage from './src/views/LoginPage';
+import SignupPage from './src/views/SignupPage';
+import { LandingPage } from './components/LandingPage';
+import { apiService } from './services/apiService';
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+    // Sidebar/View State
+=======
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [isOnboardingFlow, setIsOnboardingFlow] = useState(false);
+
+    // Sidebar/View State
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        <Routes>
+            <Route path="/join" element={<JoinView />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="*" element={
+                (() => {
+                    if (!isAuthenticated) {
+                        return <LoginPage />;
+                    }
+=======
+        <Routes>
+            <Route path="/join" element={<JoinView />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/" element={<LandingPage onStartOnboarding={() => setIsOnboardingFlow(true)} />} />
+            <Route path="*" element={
+                (() => {
+                    if (!isAuthenticated) {
+                        if (isOnboardingFlow) return <LoginPage />;
+                        return <LandingPage onStartOnboarding={() => setIsOnboardingFlow(true)} />;
+                    }
+>>>>>>> REPLACE

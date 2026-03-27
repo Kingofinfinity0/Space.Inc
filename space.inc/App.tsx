@@ -3,6 +3,7 @@ import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
 import LoginPage from './src/views/LoginPage';
 import SignupPage from './src/views/SignupPage';
+import { LandingPage } from './components/LandingPage';
 import { apiService } from './services/apiService';
 import {
     ChevronRight,
@@ -84,6 +85,7 @@ const App = () => {
     const { showToast, removeToast } = useToast();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [isOnboardingFlow, setIsOnboardingFlow] = useState(false);
 
     // Sidebar/View State
     const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
@@ -178,7 +180,8 @@ const App = () => {
 
     const handleUpdateStaffCapability = async (staffId: string, spaceId: string, capKey: string, allowed: boolean) => {
         try {
-            await apiService.updateStaffCapability(staffId, spaceId, capKey, allowed);
+            // capKey is currently ignored by the RPC, but we keep it for signature compatibility
+            await apiService.updateStaffCapability(staffId, spaceId, allowed);
             showToast("Capability updated successfully.", "success");
             fetchData();
         } catch (err: any) {
@@ -426,10 +429,12 @@ const App = () => {
             <Route path="/join" element={<JoinView />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route path="/" element={<LandingPage onStartOnboarding={() => setIsOnboardingFlow(true)} />} />
             <Route path="*" element={
                 (() => {
                     if (!isAuthenticated) {
-                        return <LoginPage />;
+                        if (isOnboardingFlow) return <LoginPage />;
+                        return <LandingPage onStartOnboarding={() => setIsOnboardingFlow(true)} />;
                     }
 
                     if (userRole === 'client') {
