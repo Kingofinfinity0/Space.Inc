@@ -237,6 +237,37 @@ export const apiService = {
     },
 
     // --- Activity Logs ---
+    // --- Analytics & Dashboards ---
+    async getOwnerDashboardSummary() {
+        const { data, error } = await supabase.rpc("get_owner_dashboard_summary");
+        return { data, error };
+    },
+
+    async getClientEngagementScores() {
+        const { data, error } = await supabase.rpc("get_client_engagement_scores");
+        return { data, error };
+    },
+
+    async getMeetingIntelligence(days: number = 30) {
+        const { data, error } = await supabase.rpc("get_meeting_intelligence", { p_days: days });
+        return { data, error };
+    },
+
+    async getAcquisitionPipeline() {
+        const { data, error } = await supabase.rpc("get_acquisition_pipeline");
+        return { data, error };
+    },
+
+    async getActivityFeed(limit: number = 15) {
+        const { data, error } = await supabase.rpc("get_activity_feed", { p_limit: limit });
+        return { data, error };
+    },
+
+    async getStaffDashboardSummary() {
+        const { data, error } = await supabase.rpc("get_staff_dashboard_summary");
+        return { data, error };
+    },
+
     async getActivityLogs(spaceId?: string) {
         const slug = spaceId ? `activity-logs-api?space_id=${spaceId}` : 'activity-logs-api';
         const { data, error } = await supabase.functions.invoke(slug, {

@@ -1,29 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
-import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
 import {
-    LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
-    Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
-    Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
-    GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft
+    MessageSquare, Calendar, FileText, Video, Activity, ArrowRight,
+    ListTodo, Clock, FilePlus as FilePlus2, Users, AlertTriangle
 } from 'lucide-react';
 import {
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
-import {
-    GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
-    SkeletonLoader, SkeletonCard, SkeletonText, SkeletonImage
+    GlassCard, Button, Heading, Text, Modal, SkeletonLoader
 } from '../UI/index';
-import { FileViewerModal } from '../FileViewerModal';
 import { FileUploadModal } from '../FileUploadModal';
-import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
-import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
-import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
+import { ClientSpace } from '../../types';
 
 function timeAgo(dateStr?: string) {
     if (!dateStr) return '';
@@ -52,314 +40,257 @@ const ACTION_LABELS: Record<string, string> = {
     task_completed: 'completed a task',
 };
 
-
-// 1. Staff Dashboard
-const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoin, onInstantMeet, onGoToSpace }: { clients: ClientSpace[], messages: Message[], meetings: Meeting[], tasks: Task[], profile: any, onJoin: (id: string) => void, onInstantMeet?: () => void, onGoToSpace?: (spaceId: string) => void }) => {
+const StaffDashboardView = ({ clients, onJoin, onGoToSpace, onInstantMeet }: { clients: ClientSpace[], onJoin: (id: string) => void, onInstantMeet?: () => void, onGoToSpace?: (spaceId: string) => void }) => {
+    const { user, organizationId } = useAuth();
     const { showToast } = useToast();
-    const { organizationId } = useAuth();
+
+    const [loading, setLoading] = useState(true);
+    const [summary, setSummary] = useState<any>(null);
+    const [engagement, setEngagement] = useState<any[]>([]);
+    const [activityFeed, setActivityFeed] = useState<any[]>([]);
+
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [isInternalUploadModalOpen, setIsInternalUploadModalOpen] = useState(false);
     const [selectedSpaceForUpload, setSelectedSpaceForUpload] = useState<string>(clients[0]?.id || '');
     const [uploading, setUploading] = useState(false);
 
-    const { user } = useAuth();
-    const [analyticsLoading, setAnalyticsLoading] = useState(true);
-    const [tasksFeed, setTasksFeed] = useState<any[]>([]);
-    const [upcomingMeetingsList, setUpcomingMeetingsList] = useState<any[]>([]);
-    const [notifications, setNotifications] = useState<any[]>([]);
-    const [analytics, setAnalytics] = useState<any>({
-        activeSpaces: 0,
-        activeClients: 0,
-        totalMessagesWeek: 0,
-        meetingsMonth: 0,
-        filesMonth: 0
-    });
-
-    const loadData = useCallback(async () => {
+    const load = useCallback(async () => {
         if (!user) return;
+        setLoading(true);
         try {
-            setAnalyticsLoading(true);
-            const now = new Date().toISOString();
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-            const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-
-            const [tasksRes, meetingsRes, notificationsRes, analyticsRes] = await Promise.all([
-                // Widget 1: Task Management (activity_logs as tasks)
-                supabase.from('activity_logs')
-                    .select('id, action_type, space_name, created_at, actor_name, space_id')
-                    .in('action_type', ['meeting_created', 'file_uploaded'])
-                    .gt('created_at', sevenDaysAgo)
-                    .order('created_at', { ascending: false }),
-
-                // Widget 2: Calendar
-                supabase.from('meetings')
-                    .select('id, title, space_name, starts_at, status')
-                    .gt('starts_at', now)
-                    .eq('status', 'scheduled')
-                    .order('starts_at')
-                    .limit(10),
-
-                // Widget 3: Inbox / Notifications
-                supabase.from('notifications')
-                    .select('id, type, message, is_read, created_at, space_id')
-                    .eq('user_id', user.id)
-                    .eq('is_read', false)
-                    .order('created_at', { ascending: false })
-                    .limit(20),
-
-                // Widget 4: Business Analytics (Scoped to my spaces)
-                Promise.all([
-                    supabase.from('space_memberships').select('space_id').eq('user_id', user.id),
-                    supabase.from('messages').select('id', { count: 'exact' }).gt('created_at', sevenDaysAgo),
-                    supabase.from('meetings').select('id', { count: 'exact' }).eq('status', 'ended').gt('ended_at', startOfMonth),
-                    supabase.from('files').select('id', { count: 'exact' }).gt('created_at', startOfMonth)
-                ])
+            const [summaryRes, engagementRes, feedRes] = await Promise.all([
+                apiService.getStaffDashboardSummary(),
+                apiService.getClientEngagementScores(),
+                apiService.getActivityFeed(10)
             ]);
 
-            const mySpaceIds = analyticsRes[0].data?.map(m => m.space_id) || [];
+            if (summaryRes.error) throw summaryRes.error;
+            if (engagementRes.error) throw engagementRes.error;
+            if (feedRes.error) throw feedRes.error;
 
-            setTasksFeed(tasksRes.data?.filter(t => mySpaceIds.includes(t.space_id)) || []);
-            setUpcomingMeetingsList(meetingsRes.data || []);
-            setNotifications(notificationsRes.data || []);
-
-            setAnalytics({
-                activeSpaces: mySpaceIds.length,
-                activeClients: 0, // Simplified for staff
-                totalMessagesWeek: analyticsRes[1].count || 0,
-                meetingsMonth: analyticsRes[2].count || 0,
-                filesMonth: analyticsRes[3].count || 0
-            });
+            setSummary(summaryRes.data);
+            setEngagement(engagementRes.data || []);
+            setActivityFeed(feedRes.data || []);
         } catch (err: any) {
             console.error('[StaffDashboardView] load failed:', err);
             showToast(friendlyError(err?.message), 'error');
         } finally {
-            setAnalyticsLoading(false);
+            setLoading(false);
         }
     }, [user, showToast]);
 
     useEffect(() => {
-        loadData();
-    }, [loadData]);
-
-    const upcomingMeetings = (meetings || [])
-        .filter(m => {
-            const isLive = m.status === 'active' || m.status === 'live';
-            const isScheduled = m.status === 'scheduled';
-            // Guardrail: If live, MUST have a room URL.
-            if (isLive && !m.daily_room_url) return false;
-            return isLive || isScheduled;
-        })
-        .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
-        .slice(0, 3);
-
-    const pendingTasks = (tasks || [])
-        .filter(t => t.status !== 'done')
-        .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
-        .slice(0, 3);
+        load();
+    }, [load]);
 
     return (
-        <div className="space-y-6">
-            <header className="flex justify-between items-end mb-8">
+        <div className="space-y-8 animate-[fadeIn_0.5s_ease-out]">
+            <header className="flex justify-between items-end mb-4">
                 <div>
-                    <Heading level={1}>Overview</Heading>
-                    <Text variant="secondary" className="mt-1">Workspaces and activity summary.</Text>
-                </div>
-                <div className="flex gap-3">
-                    <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-[#F7F7F8] rounded-md border border-[#D1D5DB]">
-                        <div className="w-2 h-2 rounded-full bg-[#10A37F]"></div>
-                        <span className="text-[10px] font-bold text-[#565869] uppercase tracking-wider">Cloud Sync Active</span>
-                    </div>
+                    <Heading level={1} className="tracking-tight font-black uppercase text-3xl">Workday Overview</Heading>
+                    <Text variant="secondary" className="mt-1 font-medium">Your spaces, tasks, and client engagement signals.</Text>
                 </div>
             </header>
 
-            {/* Widget 4: Business Analytics */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">My Spaces</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <GlassCard className="p-5 border-zinc-200/50 shadow-sm">
+                    <Text variant="secondary" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Open Tasks</Text>
+                    <div className="flex items-center gap-3 mt-1">
+                        <div className="text-3xl font-bold text-zinc-900">{loading ? <SkeletonLoader width="40px" height="32px" /> : summary?.open_tasks || 0}</div>
+                        {summary?.overdue_tasks > 0 && (
+                            <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" title="Overdue tasks present" />
+                        )}
+                    </div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Clients Active (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeClients}</div>
+                <GlassCard className="p-5 border-zinc-200/50 shadow-sm">
+                    <Text variant="secondary" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Meetings (Week)</Text>
+                    <div className="text-3xl font-bold mt-1 text-zinc-900">{loading ? <SkeletonLoader width="40px" height="32px" /> : summary?.upcoming_meetings_week || 0}</div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Messages (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.totalMessagesWeek}</div>
+                <GlassCard className="p-5 border-zinc-200/50 shadow-sm">
+                    <Text variant="secondary" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tasks Done (Week)</Text>
+                    <div className="text-3xl font-bold mt-1 text-zinc-900">{loading ? <SkeletonLoader width="40px" height="32px" /> : summary?.tasks_completed_week || 0}</div>
                 </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Meetings (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.meetingsMonth}</div>
-                </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Files (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{analyticsLoading ? <SkeletonLoader width="40px" height="24px" /> : analytics.filesMonth}</div>
+                <GlassCard className="p-5 border-zinc-200/50 shadow-sm">
+                    <Text variant="secondary" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Managed Spaces</Text>
+                    <div className="text-3xl font-bold mt-1 text-zinc-900">{loading ? <SkeletonLoader width="40px" height="32px" /> : summary?.spaces_managed || 0}</div>
                 </GlassCard>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                    {/* Widget 1: Task Management */}
-                    <GlassCard className="p-6">
-                        <Heading level={3} className="mb-6">Task Management</Heading>
-                        {analyticsLoading ? (
-                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
-                        ) : tasksFeed.length === 0 ? (
-                            <div className="text-zinc-400 text-sm italic py-4">No recent activity tasks.</div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-8">
+                    <section>
+                        <div className="flex items-center gap-2 mb-6">
+                            <Users className="text-indigo-500" size={20} />
+                            <Heading level={3} className="text-sm font-black uppercase tracking-widest text-zinc-400">My Client Health</Heading>
+                        </div>
+                        {loading ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <SkeletonLoader height="160px" borderRadius="16px" className="w-full" />
+                                <SkeletonLoader height="160px" borderRadius="16px" className="w-full" />
+                            </div>
+                        ) : engagement.length === 0 ? (
+                            <GlassCard className="p-12 text-center border-dashed border-2">
+                                <p className="text-zinc-400 text-sm italic">No assigned spaces with activity yet.</p>
+                            </GlassCard>
                         ) : (
-                            <div className="space-y-3">
-                                {tasksFeed.map(item => (
-                                    <div key={item.id} className="p-4 border border-zinc-100 rounded-xl bg-white flex items-center justify-between cursor-pointer hover:border-zinc-300 transition-colors" onClick={() => item.space_id && onGoToSpace?.(item.space_id)}>
-                                        <div className="flex items-center gap-4">
-                                            <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400">
-                                                {item.action_type === 'file_uploaded' ? <FileText size={18} /> : <Video size={18} />}
-                                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {engagement.map((space: any) => (
+                                    <GlassCard
+                                        key={space.space_id}
+                                        className="p-6 cursor-pointer hover:border-indigo-300 transition-all hover:shadow-md group"
+                                        onClick={() => onGoToSpace?.(space.space_id)}
+                                    >
+                                        <div className="flex justify-between items-start mb-4">
                                             <div>
-                                                <p className="text-sm font-medium text-zinc-900">{item.actor_name} {ACTION_LABELS[item.action_type]}</p>
-                                                <p className="text-xs text-zinc-500">{item.space_name} • {timeAgo(item.created_at)}</p>
+                                                <h4 className="font-bold text-zinc-900 group-hover:text-indigo-600 transition-colors">{space.space_name}</h4>
+                                                <p className="text-xs text-zinc-400 font-medium">Last active: {space.days_since_activity === 0 ? 'Today' : `${space.days_since_activity}d ago`}</p>
+                                            </div>
+                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
+                                                space.engagement_level === 'active' ? 'bg-emerald-50 text-emerald-600' :
+                                                space.engagement_level === 'watching' ? 'bg-amber-50 text-amber-600' :
+                                                'bg-rose-50 text-rose-600'
+                                            }`}>
+                                                {space.engagement_level}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2 mb-4">
+                                            <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                                <p className="text-[10px] font-black text-zinc-400 uppercase">Msg/wk</p>
+                                                <p className="text-sm font-bold text-zinc-700">{space.messages_this_week}</p>
+                                            </div>
+                                            <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                                <p className="text-[10px] font-black text-zinc-400 uppercase">Meet/mo</p>
+                                                <p className="text-sm font-bold text-zinc-700">{space.meetings_this_month}</p>
+                                            </div>
+                                            <div className="text-center p-2 bg-zinc-50 rounded-lg">
+                                                <p className="text-[10px] font-black text-zinc-400 uppercase">Score</p>
+                                                <p className={`text-sm font-bold ${space.engagement_score >= 60 ? 'text-emerald-500' : space.engagement_score >= 40 ? 'text-amber-500' : 'text-rose-500'}`}>
+                                                    {space.engagement_score}
+                                                </p>
                                             </div>
                                         </div>
-                                        <ArrowRight size={14} className="text-zinc-300" />
-                                    </div>
+                                        {space.alert_message && (
+                                            <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 text-[10px] font-bold">
+                                                <AlertTriangle size={12} />
+                                                {space.alert_message}
+                                            </div>
+                                        )}
+                                    </GlassCard>
                                 ))}
                             </div>
                         )}
-                    </GlassCard>
+                    </section>
 
-                    {/* Widget 2: Calendar / Upcoming Schedule */}
-                    <GlassCard className="p-6">
-                        <Heading level={3} className="mb-6">Upcoming Schedule</Heading>
-                        {analyticsLoading ? (
-                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
-                        ) : upcomingMeetingsList.length === 0 ? (
-                            <div className="text-zinc-400 text-sm italic py-4">No upcoming meetings.</div>
+                    <GlassCard className="p-8 border-zinc-200/50">
+                        <div className="flex items-center gap-2 mb-8">
+                            <Activity className="text-indigo-500" size={20} />
+                            <Heading level={3} className="text-sm font-black uppercase tracking-widest text-zinc-400">My Activity Feed</Heading>
+                        </div>
+                        {loading ? (
+                            <div className="space-y-4"><SkeletonLoader height="48px" borderRadius="12px" /></div>
+                        ) : activityFeed.length === 0 ? (
+                            <div className="text-center py-10">
+                                <p className="text-zinc-400 text-sm italic">No recent activity in your spaces.</p>
+                            </div>
                         ) : (
                             <div className="space-y-4">
-                                {upcomingMeetingsList.map(m => {
-                                    const startTime = new Date(m.starts_at);
-                                    const canJoin = (startTime.getTime() - Date.now()) < 30 * 60 * 1000;
-                                    return (
-                                        <div key={m.id} className="flex items-center justify-between p-4 border border-zinc-100 rounded-xl">
-                                            <div className="flex items-center gap-4">
-                                                <div className="text-center min-w-[50px]">
-                                                    <p className="text-[10px] font-black uppercase text-zinc-400">{startTime.toLocaleString('en-US', { month: 'short' })}</p>
-                                                    <p className="text-xl font-bold text-zinc-900">{startTime.getDate()}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-zinc-900">{m.title}</p>
-                                                    <p className="text-xs text-zinc-500">{m.space_name} • {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                                </div>
+                                {activityFeed.map((log: any) => (
+                                    <div key={log.id} className="p-4 border border-zinc-100 rounded-xl bg-white flex items-center justify-between group hover:border-indigo-200 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors">
+                                                {log.action_type.includes('message') ? <MessageSquare size={18} /> :
+                                                 log.action_type.includes('file') ? <FileText size={18} /> :
+                                                 log.action_type.includes('meeting') ? <Video size={18} /> :
+                                                 <Activity size={18} />}
                                             </div>
-                                            {canJoin && (
-                                                <Button variant="primary" size="sm" onClick={() => onJoin(m.id)}>Join Now</Button>
-                                            )}
+                                            <div>
+                                                <p className="text-sm font-bold text-zinc-900">
+                                                    {log.actor_id === user?.id ? 'You' : log.actor_name} {ACTION_LABELS[log.action_type] || log.action_type}
+                                                </p>
+                                                <p className="text-xs text-zinc-500 font-medium">{log.space_name} • {timeAgo(log.created_at)}</p>
+                                            </div>
                                         </div>
-                                    );
-                                })}
+                                        <Button variant="ghost" size="sm" icon={<ArrowRight size={14} />} onClick={() => onGoToSpace?.(log.space_id)} />
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </GlassCard>
                 </div>
 
-                <div className="space-y-6">
-                    {/* Widget 3: Inbox / Notifications */}
-                    <GlassCard className="p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <Heading level={3}>Inbox</Heading>
-                            <Button variant="ghost" size="sm" onClick={async () => {
-                                await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
-                                loadData();
-                            }}>Mark all read</Button>
-                        </div>
-                        {analyticsLoading ? (
-                            <div className="space-y-3"><SkeletonLoader height="50px" borderRadius="10px" /></div>
-                        ) : notifications.length === 0 ? (
-                            <div className="text-center py-10">
-                                <Activity className="mx-auto text-zinc-200 mb-2" size={32} />
-                                <p className="text-zinc-400 text-xs italic">Inbox is clear.</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {notifications.map(n => (
-                                    <div key={n.id} className="p-3 bg-white border border-zinc-100 rounded-xl cursor-pointer hover:border-zinc-300 transition-colors" onClick={() => n.space_id && onGoToSpace?.(n.space_id)}>
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-zinc-400">
-                                                {n.type === 'file_uploaded' ? <FileText size={16} /> : n.type === 'message_received' ? <MessageSquare size={16} /> : <Calendar size={16} />}
-                                            </div>
-                                            <p className="text-xs text-zinc-800 line-clamp-2">{n.message}</p>
-                                        </div>
-                                        <p className="text-[10px] text-zinc-400 mt-2">{timeAgo(n.created_at)}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </GlassCard>
-
-                    <GlassCard className="p-6">
-                        <Heading level={3} className="mb-4">Quick Actions</Heading>
+                <div className="space-y-8">
+                    <GlassCard className="p-6 border-zinc-200/50">
+                        <Heading level={3} className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-6">Staff Terminal</Heading>
                         <div className="space-y-2">
                             <button
                                 onClick={() => onInstantMeet?.()}
-                                className="w-full flex items-center gap-3 p-3 rounded-md border border-amber-100 bg-amber-50/50 hover:bg-amber-100/50 transition-colors text-left group"
+                                className="w-full flex items-center gap-4 p-4 rounded-xl border border-amber-100 bg-amber-50/50 hover:bg-amber-100/50 transition-all text-left group"
                             >
-                                <div className="bg-amber-100 p-2 rounded-lg text-amber-600 group-hover:scale-110 transition-transform">
-                                    <Video size={16} />
+                                <div className="bg-amber-100 p-2.5 rounded-lg text-amber-600 group-hover:scale-110 transition-transform">
+                                    <Video size={20} />
                                 </div>
                                 <div>
-                                    <span className="text-sm font-semibold text-amber-900 block">Meet Now</span>
-                                    <span className="text-[10px] text-amber-700 font-medium">Start an instant video call</span>
+                                    <span className="text-sm font-black text-amber-900 block uppercase tracking-tight">Meet Now</span>
+                                    <span className="text-[10px] text-amber-700 font-bold uppercase">Launch Video War Room</span>
                                 </div>
                             </button>
                             <button
                                 onClick={() => setIsUploadModalOpen(true)}
-                                className="w-full flex items-center gap-3 p-3 rounded-md hover:bg-zinc-50 transition-colors border border-transparent hover:border-zinc-200 text-left"
+                                className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-zinc-50 transition-all border border-transparent hover:border-zinc-200 text-left group"
                             >
-                                <div className="bg-zinc-100 p-2 rounded-lg text-zinc-600">
-                                    <FilePlus2 size={16} />
+                                <div className="bg-zinc-100 p-2.5 rounded-lg text-zinc-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                                    <FilePlus2 size={20} />
                                 </div>
-                                <span className="text-sm font-medium">Upload Document</span>
+                                <div>
+                                    <span className="text-sm font-bold text-zinc-800 block">Deliver Document</span>
+                                    <span className="text-[10px] text-zinc-400 font-bold uppercase">Share secure file</span>
+                                </div>
                             </button>
-                            <button className="w-full flex items-center gap-3 p-3 rounded-md hover:bg-zinc-50 transition-colors border border-transparent hover:border-zinc-200 text-left">
-                                <div className="bg-zinc-100 p-2 rounded-lg text-zinc-600">
-                                    <Clock size={16} />
+                            <button className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-zinc-50 transition-all border border-transparent hover:border-zinc-200 text-left group">
+                                <div className="bg-zinc-100 p-2.5 rounded-lg text-zinc-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                                    <Clock size={20} />
                                 </div>
-                                <span className="text-sm font-medium">Schedule Meeting</span>
+                                <div>
+                                    <span className="text-sm font-bold text-zinc-800 block">Schedule Sync</span>
+                                    <span className="text-[10px] text-zinc-400 font-bold uppercase">Calendarize touchpoint</span>
+                                </div>
                             </button>
-                            <button className="w-full flex items-center gap-3 p-3 rounded-md hover:bg-zinc-50 transition-colors border border-transparent hover:border-zinc-200 text-left">
-                                <div className="bg-zinc-100 p-2 rounded-lg text-zinc-600">
-                                    <ListTodo size={16} />
+                            <button className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-zinc-50 transition-all border border-transparent hover:border-zinc-200 text-left group">
+                                <div className="bg-zinc-100 p-2.5 rounded-lg text-zinc-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                                    <ListTodo size={20} />
                                 </div>
-                                <span className="text-sm font-medium">Assign Global Task</span>
+                                <div>
+                                    <span className="text-sm font-bold text-zinc-800 block">Create Task</span>
+                                    <span className="text-[10px] text-zinc-400 font-bold uppercase">Assign delivery item</span>
+                                </div>
                             </button>
                         </div>
                     </GlassCard>
                 </div>
             </div>
 
-            {/* Global Upload Modal with Space Selector */}
-            <Modal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} title="Upload to Client Space">
+            <Modal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} title="Select Destination">
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-zinc-700 mb-1">Select Destination Space</label>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Destination Space</label>
                         <select
-                            title="Select Destination Space"
-                            className="w-full bg-white/40 border border-zinc-200 rounded-lg px-5 py-3 text-zinc-800 text-sm focus:outline-none"
+                            title="Select Space"
+                            className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none"
                             value={selectedSpaceForUpload}
                             onChange={(e) => setSelectedSpaceForUpload(e.target.value)}
                         >
                             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                     </div>
-                    <div className="pt-2">
-                        <Button
-                            className="w-full"
-                            onClick={() => {
-                                setIsUploadModalOpen(false);
-                                setIsInternalUploadModalOpen(true);
-                            }}
-                        >
-                            Continue to Upload
-                        </Button>
-                    </div>
+                    <Button
+                        className="w-full py-4 uppercase font-black tracking-widest text-xs mt-2"
+                        onClick={() => {
+                            setIsUploadModalOpen(false);
+                            setIsInternalUploadModalOpen(true);
+                        }}
+                    >
+                        Continue to Upload
+                    </Button>
                 </div>
             </Modal>
 
@@ -381,10 +312,10 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
                             organizationId
                         );
                         setIsInternalUploadModalOpen(false);
-                        showToast("File uploaded successfully to the selected space.", "success");
+                        showToast("File delivered successfully.", "success");
                     } catch (err) {
                         console.error("Global upload error:", err);
-                        showToast("Failed to upload file. Please try again.", "error");
+                        showToast("Delivery failed.", "error");
                     } finally {
                         setUploading(false);
                     }

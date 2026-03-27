@@ -1,3 +1,4 @@
+import { FolderClosed, File as DocIcon } from "lucide-react";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -30,6 +31,7 @@ import SpaceChatPanel from './SpaceChatPanel';
 // 3. Space Detail View
 const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstantMeet }: { space: ClientSpace | undefined, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void }) => {
     const { user, profile, organizationId } = useAuth();
+    const [activeTab, setActiveTab] = useState<"Dashboard" | "Chat" | "Meetings" | "Docs">("Dashboard");
     const { showToast } = useToast();
 
     const [spaceStats, setSpaceStats] = useState<any>(null);
@@ -154,7 +156,6 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
         );
     }
 
-    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Docs'>('Dashboard');
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     const [showTrash, setShowTrash] = useState(false);

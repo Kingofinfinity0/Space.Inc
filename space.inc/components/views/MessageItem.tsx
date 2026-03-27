@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Message } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
-import { File as DocIconLucide, Download as DownloadIcon, Check as CheckIcon, X as XIcon, Edit2 as EditIcon, Trash2 as TrashIcon, MoreVertical as MoreVerticalIcon } from 'lucide-react';
+import { File as DocIconLucide, Download as DownloadIcon, Check as CheckIcon, X as XIcon, Edit2 as EditIcon, Trash2 as TrashIcon, MoreVertical as MoreVerticalIcon, Clock } from 'lucide-react';
 import { apiService } from '../../services/apiService';
 
 export const MessageItem = ({ 
@@ -11,7 +11,7 @@ export const MessageItem = ({
     organizationId, 
     theme = 'inbox'
 }: { 
-    msg: Message, 
+    msg: any, // Using any to support custom 'status' flag for optimistic UI
     currentUserId: string, 
     organizationId: string, 
     theme?: 'inbox' | 'panel'
@@ -22,6 +22,7 @@ export const MessageItem = ({
     const menuRef = useRef<HTMLDivElement>(null);
 
     const isOwner = msg.sender_id === currentUserId;
+    const isPending = msg.status === 'sending';
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -34,7 +35,7 @@ export const MessageItem = ({
     }, []);
 
     const handleContextMenu = (e: React.MouseEvent) => {
-        if (!isOwner || msg.content === '[Message deleted]') return;
+        if (!isOwner || msg.content === '[Message deleted]' || isPending) return;
         e.preventDefault();
         setShowMenu(true);
     };
@@ -46,7 +47,7 @@ export const MessageItem = ({
         }
         const { error } = await supabase.rpc('edit_message', { p_message_id: msg.id, p_new_content: editContent });
         if (error) {
-            alert(friendlyError(error.message)); // Using alert as fallback if no toast available
+            alert(friendlyError(error.message));
         }
         setIsEditing(false);
         setShowMenu(false);
@@ -64,9 +65,7 @@ export const MessageItem = ({
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
-    // Style variations
-    const isSenderStaff = msg.sender_type === 'staff';
-    const alignRight = msg.sender_type === 'staff'; // Matches InboxView and SpaceChatPanel.
+    const alignRight = isOwner;
 
     let bubbleClass = '';
     if (msg.channel === 'internal') {
@@ -76,31 +75,27 @@ export const MessageItem = ({
             ? 'bg-[#1D1D1D] text-white rounded-br-none group'
             : 'bg-white shadow-sm border border-zinc-100 rounded-bl-none text-[#1D1D1D] group';
     } else {
-        // panel theme
         bubbleClass = alignRight
             ? 'bg-[#10A37F] text-white group'
             : 'bg-[#F7F7F8] text-[#1D1D1D] border border-[#D1D5DB]/30 group';
     }
 
     return (
-        <div className={`flex ${alignRight ? 'justify-end' : 'justify-start'} relative mb-4`}>
+        <div className={`flex ${alignRight ? 'justify-end' : 'justify-start'} relative mb-4 ${isPending ? 'opacity-60' : ''}`}>
             <div 
                 onContextMenu={handleContextMenu}
-                className={`max-w-[80%] md:max-w-[70%] p-3 md:p-4 rounded-lg text-sm relative ${bubbleClass}`}
+                className={`max-w-[80%] md:max-w-[70%] p-3 md:p-4 rounded-lg text-sm relative ${bubbleClass} transition-opacity duration-200`}
             >
-                {/* Context Menu Button for touch/mobile (visible on hover) */}
-                {isOwner && msg.content !== '[Message deleted]' && !isEditing && (
+                {isOwner && msg.content !== '[Message deleted]' && !isEditing && !isPending && (
                     <button 
                         onClick={() => setShowMenu(!showMenu)}
                         title="More options"
-                        aria-label="More options"
                         className={`absolute top-2 ${alignRight ? '-left-8' : '-right-8'} p-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-zinc-500 rounded-full shadow-sm border border-zinc-200`}
                     >
                         <MoreVerticalIcon size={14} />
                     </button>
                 )}
 
-                {/* Context Menu */}
                 {showMenu && (
                     <div ref={menuRef} className={`absolute z-10 top-0 ${alignRight ? 'right-full mr-2' : 'left-full ml-2'} bg-white border border-zinc-200 shadow-lg rounded-md overflow-hidden text-zinc-700 w-28`}>
                         <button onClick={() => { setIsEditing(true); setShowMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2">
@@ -146,8 +141,7 @@ export const MessageItem = ({
                 ) : isEditing ? (
                     <div className="flex flex-col gap-2 mt-1 min-w-[200px]">
                         <input 
-                            title="Edit message content"
-                            aria-label="Edit message content"
+                            title="Edit message"
                             className="w-full text-zinc-900 bg-white border border-zinc-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             value={editContent}
                             onChange={e => setEditContent(e.target.value)}
@@ -158,8 +152,8 @@ export const MessageItem = ({
                             autoFocus
                         />
                         <div className="flex justify-end gap-1">
-                            <button title="Cancel Edit" aria-label="Cancel Edit" onClick={() => setIsEditing(false)} className="p-1 rounded hover:bg-zinc-200/50 text-zinc-500"><XIcon size={14}/></button>
-                            <button title="Save Edit" aria-label="Save Edit" onClick={handleEditSave} className="p-1 rounded hover:bg-indigo-500/20 text-indigo-500"><CheckIcon size={14}/></button>
+                            <button onClick={() => setIsEditing(false)} className="p-1 rounded hover:bg-zinc-200/50 text-zinc-500"><XIcon size={14}/></button>
+                            <button onClick={handleEditSave} className="p-1 rounded hover:bg-indigo-500/20 text-indigo-500"><CheckIcon size={14}/></button>
                         </div>
                     </div>
                 ) : (
@@ -177,9 +171,12 @@ export const MessageItem = ({
                     </div>
                 )}
 
-                <p className={`text-[10px] mt-1 text-right ${alignRight ? 'text-zinc-400' : 'text-zinc-400'}`}>
-                    {formatTime(msg.created_at)}
-                </p>
+                <div className="flex items-center justify-end gap-1 mt-1">
+                    <p className={`text-[10px] ${alignRight ? 'text-zinc-400' : 'text-zinc-400'}`}>
+                        {formatTime(msg.created_at)}
+                    </p>
+                    {isPending && <Clock size={10} className="text-zinc-400 animate-pulse" />}
+                </div>
             </div>
         </div>
     );

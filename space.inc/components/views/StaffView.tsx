@@ -1,43 +1,27 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../contexts/ToastContext';
-import { apiService } from '../../services/apiService';
+import React from 'react';
 import {
-    LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
-    Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
-    Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
-    GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft
+    Users, UserPlus, User, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import {
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
-import {
-    GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
-    SkeletonLoader, SkeletonCard, SkeletonText, SkeletonImage
+    GlassCard, Button, Toggle
 } from '../UI/index';
-import { FileViewerModal } from '../FileViewerModal';
-import { FileUploadModal } from '../FileUploadModal';
-import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
-import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
-import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
-
+import { ClientSpace, StaffMember } from '../../types';
+import { apiService } from '../../services/apiService';
+import { useToast } from '../../contexts/ToastContext';
 
 const StaffView: React.FC<{
     staff: StaffMember[];
     spaces: ClientSpace[];
     onInvite: () => void;
-    onUpdateCapability: (staffId: string, spaceId: string, capKey: string, allowed: boolean) => void;
+    onUpdateCapability: (staffId: string, spaceId: string, allowed: boolean) => void;
     onRefresh?: () => void;
-}> = ({ staff, spaces, onInvite, onUpdateCapability, onRefresh }) => {
+}> = ({ staff, spaces, onInvite, onRefresh }) => {
     const { showToast } = useToast();
 
     const handleToggleSpace = async (staffUserId: string, spaceId: string, currentValue: boolean) => {
         try {
             await apiService.updateStaffCapability(staffUserId, spaceId, !currentValue);
             showToast("Staff capability updated successfully.", "success");
-            // Refresh staff list after update
             if (onRefresh) onRefresh();
         } catch (err) {
             console.error('Failed to update staff capability:', err);
@@ -78,9 +62,6 @@ const StaffView: React.FC<{
                                 </div>
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            <Button variant="outline" size="sm">Edit</Button>
-                        </div>
                     </div>
 
                     <div className="space-y-4">
@@ -100,19 +81,6 @@ const StaffView: React.FC<{
                                                 onChange={() => handleToggleSpace(member.id, space.id, isAssigned)}
                                             />
                                         </div>
-                                        {isAssigned && (
-                                            <div className="flex flex-wrap gap-2">
-                                                {['message_clients', 'manage_tasks', 'view_files'].map(cap => (
-                                                    <button
-                                                        key={cap}
-                                                        onClick={() => onUpdateCapability(member.id, space.id, cap, true)}
-                                                        className="px-2 py-1 bg-white border border-zinc-200 rounded text-[9px] font-bold text-zinc-500 hover:border-emerald-500 hover:text-emerald-600 transition-colors"
-                                                    >
-                                                        {cap.replace('_', ' ')}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
                                     </div>
                                 );
                             })}
