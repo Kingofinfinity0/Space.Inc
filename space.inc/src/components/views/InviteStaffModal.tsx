@@ -7,12 +7,13 @@ import { useToast } from '../../contexts/ToastContext';
 interface InviteStaffModalProps {
     isOpen: boolean;
     onClose: () => void;
+    organizationId: string;
     spaces: any[];
 }
 
 type ExpiryOption = '1' | '3' | '7' | '14' | '30' | 'custom';
 
-export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onClose, spaces }) => {
+export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onClose, organizationId, spaces }) => {
     const { showToast } = useToast();
     const [email, setEmail] = useState('');
     const [role, setRole] = useState<'staff' | 'admin'>('staff');
@@ -103,7 +104,7 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
 
         setLoading(true);
         try {
-            const data = await apiService.generateStaffInviteLink(email.trim(), role, spaceAssignments, expiresAt);
+            const data = await apiService.generateStaffInviteLink(email.trim(), role, organizationId, spaceAssignments, expiresAt);
             setInviteLink(data.invite_link);
             setSentEmail(email.trim());
             // Format nice date for display

@@ -76,58 +76,27 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
     });
 
     const loadData = useCallback(async () => {
-        if (!user) return;
+        if (!user || !organizationId) return;
         try {
             setAnalyticsLoading(true);
             const now = new Date().toISOString();
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-            const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
             const [tasksRes, meetingsRes, notificationsRes, analyticsRes] = await Promise.all([
-                // Widget 1: Task Management (activity_logs as tasks)
-                supabase.from('activity_logs')
-                    .select('id, action_type, space_name, created_at, actor_name, space_id')
-                    .in('action_type', ['meeting_created', 'file_uploaded'])
-                    .gt('created_at', sevenDaysAgo)
-                    .order('created_at', { ascending: false }),
-
-                // Widget 2: Calendar
-                supabase.from('meetings')
-                    .select('id, title, space_name, starts_at, status')
-                    .gt('starts_at', now)
-                    .eq('status', 'scheduled')
-                    .order('starts_at')
-                    .limit(10),
-
-                // Widget 3: Inbox / Notifications
-                supabase.from('notifications')
-                    .select('id, type, message, is_read, created_at, space_id')
-                    .eq('user_id', user.id)
-                    .eq('is_read', false)
-                    .order('created_at', { ascending: false })
-                    .limit(20),
-
-                // Widget 4: Business Analytics (Scoped to my spaces)
-                Promise.all([
-                    supabase.from('space_memberships').select('space_id').eq('user_id', user.id),
-                    supabase.from('messages').select('id', { count: 'exact' }).gt('created_at', sevenDaysAgo),
-                    supabase.from('meetings').select('id', { count: 'exact' }).eq('status', 'ended').gt('ended_at', startOfMonth),
-                    supabase.from('files').select('id', { count: 'exact' }).gt('created_at', startOfMonth)
-                ])
+                apiService.getDashboardFeed(organizationId),
+                apiService.getMeetings(organizationId), // Scoped by organizationId
+                apiService.getUnifiedNotifications(organizationId, user.id),
+                apiService.getDashboardMetrics(organizationId)
             ]);
 
-            const mySpaceIds = analyticsRes[0].data?.map(m => m.space_id) || [];
-
-            setTasksFeed(tasksRes.data?.filter(t => mySpaceIds.includes(t.space_id)) || []);
-            setUpcomingMeetingsList(meetingsRes.data || []);
+            setTasksFeed(tasksRes.data || []);
+            setUpcomingMeetingsList((meetingsRes.data || []).filter((m: any) => m.starts_at > now && m.status === 'scheduled').slice(0, 10));
             setNotifications(notificationsRes.data || []);
-
-            setAnalytics({
-                activeSpaces: mySpaceIds.length,
-                activeClients: 0, // Simplified for staff
-                totalMessagesWeek: analyticsRes[1].count || 0,
-                meetingsMonth: analyticsRes[2].count || 0,
-                filesMonth: analyticsRes[3].count || 0
+            setAnalytics(analyticsRes.data || {
+                activeSpaces: 0,
+                activeClients: 0,
+                totalMessagesWeek: 0,
+                meetingsMonth: 0,
+                filesMonth: 0
             });
         } catch (err: any) {
             console.error('[StaffDashboardView] load failed:', err);
@@ -135,7 +104,7 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
         } finally {
             setAnalyticsLoading(false);
         }
-    }, [user, showToast]);
+    }, [user, organizationId, showToast]);
 
     useEffect(() => {
         loadData();

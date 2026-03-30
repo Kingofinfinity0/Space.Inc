@@ -4,16 +4,17 @@ import { apiService } from '../services/apiService';
 
 import { SpaceFile } from '../types';
 
-export const useRealtimeFiles = (spaceId: string, showDeleted: boolean = false) => {
+export const useRealtimeFiles = (spaceId: string, organizationId: string, showDeleted: boolean = false) => {
     const [files, setFiles] = useState<SpaceFile[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // If spaceId is not provided, we might still want to fetch all files (e.g. for GlobalFilesView)
-        // However, if the user explicitly wants to wait for a spaceId, we handle that.
-        // For now, let's allow it to fetch all if spaceId is null/undefined/empty string?
-        // Actually, let's make it more explicit. If spaceId is 'ALL' or explicitly omitted.
+        if (!organizationId) {
+            console.warn('[useRealtimeFiles] Missing organizationId, skipping fetch');
+            setLoading(false);
+            return;
+        }
 
         const fetchFiles = async () => {
             try {
@@ -21,6 +22,7 @@ export const useRealtimeFiles = (spaceId: string, showDeleted: boolean = false) 
                 let query = supabase
                     .from('files')
                     .select('*')
+                    .eq('organization_id', organizationId)
                     .order('created_at', { ascending: false });
 
                 if (spaceId) {
@@ -56,10 +58,11 @@ export const useRealtimeFiles = (spaceId: string, showDeleted: boolean = false) 
                     event: '*',
                     schema: 'public',
                     table: 'files',
-                    ...(spaceId ? { filter: `space_id=eq.${spaceId}` } : {})
+                    filter: spaceId ? `space_id=eq.${spaceId}` : `organization_id=eq.${organizationId}`
                 },
                 (payload) => {
                     const newFile = payload.new as SpaceFile;
+                    if (newFile.organization_id !== organizationId) return; // Defense-in-depth
 
                     if (payload.eventType === 'INSERT') {
                         const isMatch = showDeleted ? (newFile.status === 'deleted' && newFile.deleted_at) : (newFile.status === 'available' && !newFile.deleted_at);

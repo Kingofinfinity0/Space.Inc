@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
+import { supabase } from '../../lib/supabase';
 import {
     LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
@@ -33,34 +34,25 @@ const ClientPortalView = ({ client, meetings, onJoin, onLogout }: {
     const [loading, setLoading] = useState(true);
 
     const loadData = useCallback(async () => {
-        if (!user) return;
+        const orgId = profile?.organization_id;
+        if (!user || !orgId) return;
         try {
             setLoading(true);
             const [notificationsRes, activityRes] = await Promise.all([
-                // Widget 1: Notification Centre
-                supabase.from('notifications')
-                    .select('id, type, message, is_read, created_at')
-                    .eq('user_id', user.id)
-                    .eq('is_read', false)
-                    .order('created_at', { ascending: false })
-                    .limit(10),
-
-                // Widget 3: Recent Activity Feed
-                supabase.from('activity_logs')
-                    .select('id, action_type, space_name, created_at, actor_name')
-                    .eq('space_id', client.id)
-                    .order('created_at', { ascending: false })
-                    .limit(20)
+                apiService.getUnifiedNotifications(orgId, user.id),
+                apiService.getDashboardFeed(orgId, 20)
             ]);
 
             setNotifications(notificationsRes.data || []);
-            setActivityFeed(activityRes.data || []);
+            // Filter activity feed to only show logs for this specific space
+            const filteredActivity = (activityRes.data || []).filter((log: any) => log.space_id === client.id);
+            setActivityFeed(filteredActivity);
         } catch (err) {
             console.error('Failed to load client portal data:', err);
         } finally {
             setLoading(false);
         }
-    }, [user, client.id]);
+    }, [user, profile?.organization_id, client.id]);
 
     useEffect(() => {
         loadData();

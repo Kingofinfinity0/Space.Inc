@@ -35,9 +35,9 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
     const [viewingFile, setViewingFile] = useState<SpaceFile | null>(null);
     const [versioningFile, setVersioningFile] = useState<SpaceFile | null>(null);
     const [showTrash, setShowTrash] = useState(false);
-    const { files: realtimeFiles, loading: filesLoading } = useRealtimeFiles('', showTrash);
-    const { showToast } = useToast();
     const { organizationId } = useAuth();
+    const { files: realtimeFiles, loading: filesLoading } = useRealtimeFiles('', organizationId || '', showTrash);
+    const { showToast } = useToast();
 
     // Group files by client
     const groupedFiles = clients.map(client => ({
@@ -116,7 +116,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                     onClick={async () => {
                                                         if (confirm('Are you sure you want to move this file to trash?')) {
                                                             try {
-                                                                await apiService.deleteFile(file.id);
+                                                                await apiService.deleteFile(file.id, organizationId || '');
                                                                 showToast('File moved to trash.', "success");
                                                             } catch (err: any) {
                                                                 showToast(friendlyError(err?.message), "error");
@@ -134,7 +134,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                     variant="ghost"
                                                     onClick={async () => {
                                                         try {
-                                                            await apiService.restoreFile(file.id);
+                                                            await apiService.restoreFile(file.id, organizationId || '');
                                                             showToast('File restored.', "success");
                                                         } catch (err: any) {
                                                             showToast(friendlyError(err?.message), "error");
@@ -150,7 +150,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                     onClick={async () => {
                                                         if (confirm('PERMANENT DELETE: Are you sure? This cannot be undone.')) {
                                                             try {
-                                                                await apiService.hardDeleteFile(file.id);
+                                                                await apiService.hardDeleteFile(file.id, organizationId || '');
                                                                 showToast('File permanently deleted.', "success");
                                                             } catch (err: any) {
                                                             showToast(friendlyError(err?.message), "error");

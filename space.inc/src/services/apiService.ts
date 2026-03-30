@@ -58,8 +58,88 @@ export const apiService = {
         if (error && error.code !== 'PGRST116') {
             return { data: null, error };
         }
-        return { data: data || {}, error: null };
+        return { data: data || { }, error: null };
     },
+
+    async getSpaceById(spaceId: string, organizationId: string) {
+        const { data, error } = await supabase
+            .from('spaces')
+            .select('*')
+            .eq('id', spaceId)
+            .eq('organization_id', organizationId)
+            .single();
+        return { data, error };
+    },
+
+    async getSpaceInvitations(spaceId: string, organizationId: string) {
+        const { data, error } = await supabase
+            .from('invitations')
+            .select('id, token, expires_at, email, status, created_at')
+            .eq('space_id', spaceId)
+            .eq('organization_id', organizationId)
+            .eq('status', 'pending')
+            .gt('expires_at', new Date().toISOString())
+            .order('created_at', { ascending: false });
+        return { data: data || [], error };
+    },
+
+    // --- Analytics & Aggregates ---
+    async getDashboardMetrics(organizationId: string) {
+        const { data, error } = await supabase.rpc('get_dashboard_metrics', {
+            p_organization_id: organizationId
+        });
+        if (error) return { data: null, error };
+        return { data, error: null };
+    },
+
+    async getSpaceDashboardData(spaceId: string, organizationId: string) {
+        const { data, error } = await supabase.rpc('get_space_dashboard_data', {
+            p_space_id: spaceId,
+            p_organization_id: organizationId
+        });
+        if (error) return { data: null, error };
+        return { data, error: null };
+    },
+
+    async getSpaceStats(spaceId: string, organizationId: string) {
+        const { data, error } = await supabase
+            .from('space_stats')
+            .select('message_count, file_count, meeting_count, last_activity_at')
+            .eq('space_id', spaceId)
+            .eq('organization_id', organizationId)
+            .single();
+        return { data, error };
+    },
+
+    async getDashboardFeed(organizationId: string, limit: number = 10) {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { data, error } = await supabase
+            .from('activity_logs')
+            .select('id, action_type, space_name, created_at, actor_name')
+            .eq('organization_id', organizationId)
+            .in('action_type', ['meeting_created', 'file_uploaded'])
+            .gt('created_at', sevenDaysAgo)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+        
+        if (error) return { data: null, error };
+        return { data: data || [], error: null };
+    },
+
+    async getUnifiedNotifications(organizationId: string, userId: string, limit: number = 20) {
+        const { data, error } = await supabase
+            .from('notifications')
+            .select('id, type, message, is_read, created_at, space_id')
+            .eq('organization_id', organizationId)
+            .eq('user_id', userId)
+            .eq('is_read', false)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+        
+        if (error) return { data: null, error };
+        return { data: data || [], error: null };
+    },
+
 
     async updateOrganizationPolicies(orgId: string, policies: any) {
         const { data, error } = await supabase
@@ -107,11 +187,13 @@ export const apiService = {
         return { data, error: null };
     },
 
-    // --- Spaces (Direct Supabase Access) ---
-    async getSpaces() {
+    // --- Spaces (Hardened Access) ---
+    async getSpaces(organizationId: string) {
+        if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
         const { data, error } = await supabase
             .from('spaces')
             .select('*')
+            .eq('organization_id', organizationId)
             .order('created_at', { ascending: false });
 
         return { data: data || [], error: error };
@@ -168,22 +250,22 @@ export const apiService = {
      * @param email   - Invitee email address
      * @param role    - 'staff' | 'client' (default: 'client')
      */
-    async generateClientInviteLink(spaceId: string, email?: string) {
+    async generateClientInviteLink(spaceId: string, organizationId: string, email?: string) {
         const { data, error } = await supabase.rpc('generate_client_invite_link', {
             p_space_id: spaceId,
+            p_organization_id: organizationId,
             p_email: email ?? null
         });
         if (error) throw error;
         // The RPC returns { token, invite_id, expires_at, invite_url }
-        // The backend already handles invite_url construction if needed,
-        // but let's ensure it's returned as requested.
         return data as { token: string; invite_id: string; expires_at: string; invite_url: string };
     },
 
-    async generateStaffInviteLink(email: string, role: string, spaceAssignments: any[] = [], expiresAt?: string) {
+    async generateStaffInviteLink(email: string, role: string, organizationId: string, spaceAssignments: any[] = [], expiresAt?: string) {
         const { data, error } = await supabase.rpc('generate_staff_invite_link', {
             p_email: email,
             p_role: role,
+            p_organization_id: organizationId,
             p_space_assignments: spaceAssignments,
             p_expires_at: expiresAt
         });
@@ -237,8 +319,9 @@ export const apiService = {
     },
 
     // --- Activity Logs ---
-    async getActivityLogs(spaceId?: string) {
-        const slug = spaceId ? `activity-logs-api?space_id=${spaceId}` : 'activity-logs-api';
+    async getActivityLogs(organizationId: string, spaceId?: string) {
+        if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
+        const slug = spaceId ? `activity-logs-api?space_id=${spaceId}&organization_id=${organizationId}` : `activity-logs-api?organization_id=${organizationId}`;
         const { data, error } = await supabase.functions.invoke(slug, {
             method: 'GET'
         });
@@ -246,8 +329,11 @@ export const apiService = {
         return { data: data?.data || data || [], error: null };
     },
 
-    async getUnifiedInbox(): Promise<any[]> {
-        const { data, error } = await supabase.rpc('get_unified_inbox');
+    async getUnifiedInbox(organizationId: string): Promise<any[]> {
+        if (!organizationId) return [];
+        const { data, error } = await supabase.rpc('get_unified_inbox', {
+            p_organization_id: organizationId
+        });
         if (error) throw error;
         return data || [];
     },
@@ -274,16 +360,21 @@ export const apiService = {
         return data;
     },
 
-    async getStaffMembers(): Promise<StaffMember[]> {
-        const { data, error } = await supabase.rpc('get_staff_members');
+    async getStaffMembers(organizationId: string): Promise<StaffMember[]> {
+        if (!organizationId) return [];
+        const { data, error } = await supabase.rpc('get_staff_members', {
+            p_organization_id: organizationId
+        });
         if (error) throw error;
         return data || [];
     },
 
-    async getClientLifecycle(): Promise<ClientLifecycle[]> {
+    async getClientLifecycle(organizationId: string): Promise<ClientLifecycle[]> {
+        if (!organizationId) return [];
         const { data, error } = await supabase
             .from('client_lifecycle_view')
-            .select('*');
+            .select('*')
+            .eq('organization_id', organizationId);
         if (error) throw error;
         return data || [];
     },
@@ -304,35 +395,41 @@ export const apiService = {
     },
 
     // --- Messaging ---
-    async getMessages(spaceId: string) {
-        const { data, error } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('space_id', spaceId)
-            .order('created_at', { ascending: true });
-        return { data: data || [], error };
+    async getMessages(spaceId: string, organizationId: string) {
+        const { data, error } = await supabase.functions.invoke(`messaging-api?space_id=${spaceId}&organization_id=${organizationId}`, {
+            method: 'GET'
+        });
+        if (error || data?.error) return { data: [], error: data?.error || error };
+        return { data: data?.data || [], error: null };
     },
 
-    async sendMessage(spaceId: string, content: string, extension: string = 'chat', payload: any = {}, channel: 'general' | 'internal' = 'general', organizationId?: string) {
-        const idempotencyKey = crypto.randomUUID();
-        const { data, error } = await supabase.rpc('send_message', {
-            p_space_id: spaceId,
-            p_content: content,
-            p_channel: channel,
-            p_extension: extension,
-            p_payload: payload,
-            p_idempotency_key: idempotencyKey
+    async sendMessage(spaceId: string, content: string, extension: string = 'chat', payload: any = {}, channel: 'general' | 'internal' = 'general', organizationId: string) {
+        if (!organizationId) throw new Error('organizationId is required for sendMessage');
+        
+        const { data, error } = await supabase.functions.invoke('messaging-api', {
+            method: 'POST',
+            body: { 
+                space_id: spaceId, 
+                organization_id: organizationId,
+                content, 
+                extension, 
+                payload, 
+                channel 
+            }
         });
-        if (error) return { data: null, error };
-        if (!data?.success) return { data: null, error: { message: data?.error_code || 'Send failed' } };
+
+        if (error) return { data: null, error: { message: error.message } };
+        if (data?.error) return { data: null, error: data.error };
         return { data: data.data, error: null };
     },
 
     // --- Tasks ---
-    async getTasks(spaceId?: string) {
+    async getTasks(organizationId: string, spaceId?: string) {
+        if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
         let query = supabase
             .from('tasks')
             .select('*')
+            .eq('organization_id', organizationId)
             .order('created_at', { ascending: false });
 
         if (spaceId) {
@@ -363,10 +460,12 @@ export const apiService = {
     },
 
     // --- Meetings ---
-    async getMeetings(spaceId?: string) {
+    async getMeetings(organizationId: string, spaceId?: string) {
+        if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
         let query = supabase
             .from('meetings')
             .select('*')
+            .eq('organization_id', organizationId)
             .order('starts_at', { ascending: true });
 
         if (spaceId) {
@@ -445,14 +544,23 @@ export const apiService = {
     async getMeetingToken(meetingId: string) {
         const { data: res, error } = await supabase.functions.invoke('meetings-api', {
             method: 'POST',
-            body: { action: 'GET_TOKEN', meetingId }
+            body: { action: 'GET_TOKEN', meeting_id: meetingId }
         });
         if (error) return { data: null, error: { message: error.message } };
         if (res?.error) return { data: null, error: res.error };
 
-        // New response: { data: { token, roomUrl, meeting } }
+        // New response: { data: { token, roomUrl, meetingId } }
         const result = res?.data ?? res;
         return { data: result, error: null };
+    },
+
+    async recordParticipantExit(meetingId: string) {
+        const { data, error } = await supabase.functions.invoke('meetings-api', {
+            method: 'POST',
+            body: { action: 'RECORD_PARTICIPANT_EXIT', meeting_id: meetingId }
+        });
+        if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to record exit' } };
+        return { data, error: null };
     },
 
     async updateMeeting(meetingId: string, updates: any) {
@@ -485,10 +593,12 @@ export const apiService = {
 
 
     // --- Files ---
-    async getFiles(spaceId?: string) {
+    async getFiles(organizationId: string, spaceId?: string) {
+        if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
         let query = supabase
             .from('files')
             .select('*')
+            .eq('organization_id', organizationId)
             // Only fetch latest versions (or unversioned) at the top level
             .order('created_at', { ascending: false });
 
@@ -518,7 +628,7 @@ export const apiService = {
     async getSignedUrl(file_id: string, organizationId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'SIGN_URL', file_id }
+            body: { action: 'SIGN_URL', file_id, organization_id: organizationId }
         });
         if (error) return { data: null, error: { message: error.message } };
         if (data?.error) return { data: null, error: data.error };
@@ -547,7 +657,8 @@ export const apiService = {
                 file_name,
                 content_type,
                 file_size: file_size?.toString(),
-                checksum
+                checksum,
+                organization_id: organizationId
             }
         });
 
@@ -673,28 +784,28 @@ export const apiService = {
     },
 
 
-    async deleteFile(file_id: string) {
+    async deleteFile(file_id: string, organizationId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'SOFT_DELETE', file_id }
+            body: { action: 'SOFT_DELETE', file_id, organization_id: organizationId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to delete file' } };
         return { data, error: null };
     },
 
-    async restoreFile(file_id: string) {
+    async restoreFile(file_id: string, organizationId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'RESTORE', file_id }
+            body: { action: 'RESTORE', file_id, organization_id: organizationId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to restore file' } };
         return { data, error: null };
     },
 
-    async hardDeleteFile(file_id: string) {
+    async hardDeleteFile(file_id: string, organizationId: string) {
         const { data, error } = await supabase.functions.invoke('files-api', {
             method: 'POST',
-            body: { action: 'HARD_DELETE', file_id }
+            body: { action: 'HARD_DELETE', file_id, organization_id: organizationId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to permanently delete file' } };
         return { data, error: null };

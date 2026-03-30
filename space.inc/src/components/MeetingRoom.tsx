@@ -160,6 +160,11 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
             console.log('[MeetingRoom] 🚪 Leaving meeting...');
             setMeetingState(prev => ({ ...prev, state: MeetingState.LEAVING }));
 
+            // Record exit in DB for participants
+            apiService.recordParticipantExit(meetingId).catch(err => {
+                console.warn('[MeetingRoom] Failed to record participant exit:', err);
+            });
+
             await callObject.leave();
             // Note: 'left-meeting' event will handle state transition to LEFT
 

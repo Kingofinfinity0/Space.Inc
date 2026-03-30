@@ -9,7 +9,7 @@ import {
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
     Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
     GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft, History
+    Bell, Eye, Play, X, FileVideo, ChevronLeft, History, FolderClosed, File as DocIcon
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -28,9 +28,12 @@ import SpaceChatPanel from './SpaceChatPanel';
 
 
 // 3. Space Detail View
-const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstantMeet }: { space: ClientSpace | undefined, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void }) => {
+const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void }) => {
     const { user, profile, organizationId } = useAuth();
     const { showToast } = useToast();
+
+    const [space, setSpace] = useState<ClientSpace | undefined>(initialSpace);
+    const [spaceLoading, setSpaceLoading] = useState(!initialSpace);
 
     const [spaceStats, setSpaceStats] = useState<any>(null);
     const [spaceStatsLoading, setSpaceStatsLoading] = useState(false);
@@ -40,53 +43,31 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
         recentFilesCount: number;
     }>({ unreadCount: 0, upcomingMeetings: [], recentFilesCount: 0 });
 
-    const loadActivityIndicators = useCallback(async () => {
-        if (!space?.id) return;
-        try {
-            const lastSeenAt = localStorage.getItem(`space_${space.id}_last_seen`) || new Date(0).toISOString();
-            const [unreadRes, meetingsRes, filesRes] = await Promise.all([
-                supabase.from('messages')
-                    .select('id', { count: 'exact' })
-                    .eq('space_id', space.id)
-                    .gt('created_at', lastSeenAt),
-                supabase.from('meetings')
-                    .select('id, title, starts_at')
-                    .eq('space_id', space.id)
-                    .gt('starts_at', new Date().toISOString())
-                    .eq('status', 'scheduled')
-                    .order('starts_at')
-                    .limit(3),
-                supabase.from('files')
-                    .select('id', { count: 'exact' })
-                    .eq('space_id', space.id)
-                    .eq('status', 'available')
-                    .gt('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-            ]);
+    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Docs'>('Dashboard');
+    const [invites, setInvites] = useState<any[]>([]);
+    const [invitesLoading, setInvitesLoading] = useState(false);
 
+    const loadActivityIndicators = useCallback(async () => {
+        if (!spaceId || !organizationId) return;
+        try {
+            const { data, error } = await apiService.getSpaceDashboardData(spaceId, organizationId);
+            if (error) throw error;
+            
             setActivityIndicators({
-                unreadCount: unreadRes.count || 0,
-                upcomingMeetings: meetingsRes.data || [],
-                recentFilesCount: filesRes.count || 0
+                unreadCount: data.unread_messages || 0,
+                upcomingMeetings: data.upcoming_meetings || [],
+                recentFilesCount: data.recent_files || 0
             });
         } catch (err) {
             console.error('Failed to load activity indicators:', err);
         }
-    }, [space?.id]);
-    const [invites, setInvites] = useState<any[]>([]);
-    const [invitesLoading, setInvitesLoading] = useState(false);
+    }, [spaceId, organizationId]);
 
     const loadInvites = useCallback(async () => {
-        if (!space?.id) return;
+        if (!spaceId || !organizationId) return;
         try {
             setInvitesLoading(true);
-            const { data, error } = await supabase
-                .from('space_invites')
-                .select('id, token, expires_at, email, status, created_at')
-                .eq('space_id', space.id)
-                .eq('status', 'pending')
-                .gt('expires_at', new Date().toISOString())
-                .order('created_at', { ascending: false });
-
+            const { data, error } = await apiService.getSpaceInvitations(spaceId, organizationId);
             if (error) throw error;
             setInvites(data || []);
         } catch (err) {
@@ -94,12 +75,12 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
         } finally {
             setInvitesLoading(false);
         }
-    }, [space?.id]);
+    }, [spaceId, organizationId]);
 
     const handleGenerateInvite = async (email?: string) => {
-        if (!space?.id) return;
+        if (!spaceId) return;
         try {
-            await apiService.generateClientInviteLink(space.id, email);
+            await apiService.generateClientInviteLink(spaceId, organizationId || '', email);
             showToast("Invite link generated successfully.", "success");
             await loadInvites();
         } catch (err: any) {
@@ -109,16 +90,32 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
     };
 
     useEffect(() => {
-        if (!space?.id) return;
+        if (!spaceId) return;
         let cancelled = false;
+
+        const loadSpaceFull = async () => {
+            if (!spaceId || !organizationId) return;
+            if (!initialSpace) {
+                setSpaceLoading(true);
+                try {
+                    const { data, error } = await apiService.getSpaceById(spaceId, organizationId);
+                    if (!error && !cancelled) setSpace(data as ClientSpace);
+                } catch (err) {
+                    console.error('Error fetching space directly:', err);
+                } finally {
+                    if (!cancelled) setSpaceLoading(false);
+                }
+            } else {
+                setSpace(initialSpace);
+                setSpaceLoading(false);
+            }
+        };
+
         const loadStats = async () => {
+            if (!spaceId || !organizationId) return;
             try {
                 setSpaceStatsLoading(true);
-                const { data, error } = await supabase
-                    .from('space_stats')
-                    .select('message_count, file_count, meeting_count, last_activity_at')
-                    .eq('space_id', space.id)
-                    .single();
+                const { data, error } = await apiService.getSpaceStats(spaceId, organizationId);
                 if (error) throw error;
                 if (!cancelled) setSpaceStats(data);
             } catch (err: any) {
@@ -127,34 +124,48 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                 if (!cancelled) setSpaceStatsLoading(false);
             }
         };
+
+        loadSpaceFull();
         loadStats();
         loadInvites();
         loadActivityIndicators();
         return () => {
             cancelled = true;
         };
-    }, [space?.id, loadInvites, loadActivityIndicators]);
+    }, [spaceId, initialSpace, loadInvites, loadActivityIndicators]);
 
     useEffect(() => {
-        if (activeTab === 'Chat' && space?.id) {
-            localStorage.setItem(`space_${space.id}_last_seen`, new Date().toISOString());
+        if (activeTab === 'Chat' && spaceId) {
+            localStorage.setItem(`space_${spaceId}_last_seen`, new Date().toISOString());
         }
-    }, [activeTab, space?.id]);
+    }, [activeTab, spaceId]);
 
-    if (!space) {
+    if (spaceLoading && !space) {
         return (
             <div className="flex flex-col items-center justify-center h-full py-20 bg-white">
                 <div className="h-12 w-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-4" />
-                <Heading level={2}>Loading Space...</Heading>
-                <Text variant="secondary">Preparing your workspace environments.</Text>
+                <Heading level={2}>Entering Space...</Heading>
+                <Text variant="secondary">Preparing your secure environment.</Text>
                 <Button variant="ghost" className="mt-6" onClick={onBack}>
-                    <ChevronLeft size={16} className="mr-2" /> Back to Dashboard
+                    <ChevronLeft size={16} className="mr-2" /> Back
                 </Button>
             </div>
         );
     }
 
-    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Docs'>('Dashboard');
+    if (!space) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full py-20 bg-white text-center">
+                <Shield size={48} className="text-zinc-200 mb-4" />
+                <Heading level={2}>Space Not Found</Heading>
+                <Text variant="secondary" className="max-w-xs mx-auto mt-2">The requested workspace could not be located or you don't have access.</Text>
+                <Button variant="primary" className="mt-8" onClick={onBack}>
+                    Return to Spaces
+                </Button>
+            </div>
+        );
+    }
+
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     const [showTrash, setShowTrash] = useState(false);
@@ -183,8 +194,8 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
         setIsScheduleModalOpen(false);
     };
 
-    const { files, loading: filesLoading } = useRealtimeFiles(space.id, showTrash);
-    const { sendFile, loading: uploadLoading } = useRealtimeMessages(space.id);
+    const { files, loading: filesLoading } = useRealtimeFiles(space.id, organizationId || '', showTrash);
+    const { sendFile, loading: uploadLoading } = useRealtimeMessages(space.id, organizationId || profile?.organization_id);
 
     const handleFileUpload = async (file: File) => {
         if (!organizationId) return;
@@ -504,7 +515,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                         onClick={async () => {
                                                             if (confirm('Are you sure you want to move this file to trash?')) {
                                                                  try {
-                                                                     await apiService.deleteFile(file.id);
+                                                                     await apiService.deleteFile(file.id, organizationId || '');
                                                                      showToast('File moved to trash.', "success");
                                                                  } catch (err: any) {
                                                                     showToast(friendlyError(err?.message), "error");
@@ -522,7 +533,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                         variant="ghost"
                                                         onClick={async () => {
                                                             try {
-                                                                await apiService.restoreFile(file.id);
+                                                                await apiService.restoreFile(file.id, organizationId || '');
                                                                 showToast('File restored.', "success");
                                                             } catch (err: any) {
                                                                     showToast(friendlyError(err?.message), "error");
@@ -538,7 +549,7 @@ const SpaceDetailView = ({ space, meetings, onBack, onJoin, onSchedule, onInstan
                                                         onClick={async () => {
                                                             if (confirm('PERMANENT DELETE: Are you sure? This cannot be undone.')) {
                                                                 try {
-                                                                    await apiService.hardDeleteFile(file.id);
+                                                                    await apiService.hardDeleteFile(file.id, organizationId || '');
                                                                     showToast('File permanently deleted.', "success");
                                                                 } catch (err: any) {
                                                                     showToast(friendlyError(err?.message), "error");

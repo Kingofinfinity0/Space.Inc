@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { apiService } from '../../services/apiService';
-import '../../src/styles/JoinView.css';
+import '../../styles/JoinView.css';
 
 type PageStatus = 'loading' | 'valid' | 'invalid' | 'authing' | 'done' | 'error';
 

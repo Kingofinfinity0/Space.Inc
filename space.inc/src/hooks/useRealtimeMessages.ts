@@ -17,8 +17,11 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
     };
 
     useEffect(() => {
-        if (!spaceId) {
-            setMessages([]);
+        // Immediate cleanup of messages when spaceId or orgId changes
+        // This prevents showing "old" data from the previous context
+        setMessages([]);
+
+        if (!spaceId || !orgId) {
             setLoading(false);
             return;
         }
@@ -29,11 +32,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
         // 1. Fetch initial messages
         const fetchMessages = async () => {
             try {
-                const { data, error: fetchError } = await supabase
-                    .from('messages')
-                    .select('*')
-                    .eq('space_id', spaceId)
-                    .order('created_at', { ascending: true });
+                const { data, error: fetchError } = await apiService.getMessages(spaceId, orgId);
 
                 if (fetchError) {
                     throw fetchError;
@@ -51,8 +50,9 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
         fetchMessages();
 
         // 2. Subscribe to realtime inserts
+        // We filter by both space_id AND organization_id for multi-tenant security
         const channel = supabase
-            .channel(`space-chat:${spaceId}`)
+            .channel(`space-chat:${spaceId}:${orgId}`)
             .on(
                 'postgres_changes',
                 {
@@ -63,6 +63,14 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
                 },
                 (payload) => {
                     const newMessage = payload.new as Message;
+                    
+                    // Defense-in-depth: Manual verification of organization_id in callback
+                    // In some edge cases, Supabase filters might be bypassable if not correctly configured in the dashboard
+                    if (newMessage.organization_id !== orgId) {
+                        console.warn('[useRealtimeMessages] Ignoring message from different tenant:', newMessage.organization_id);
+                        return;
+                    }
+
                     setMessages(prev => {
                         // Avoid duplicates (in case we already have it from optimistic update)
                         if (prev.find(m => m.id === newMessage.id)) return prev;
@@ -76,7 +84,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [spaceId]);
+    }, [spaceId, orgId]);
 
     // Auto-scroll when messages change
     useEffect(() => {

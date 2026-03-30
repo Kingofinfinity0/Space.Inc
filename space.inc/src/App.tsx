@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
-import LoginPage from './src/views/LoginPage';
-import SignupPage from './src/views/SignupPage';
+import LoginPage from './views/LoginPage';
+import SignupPage from './views/SignupPage';
 import { apiService } from './services/apiService';
 import {
     ChevronRight,
@@ -119,10 +119,14 @@ const App = () => {
     }, [user, loading]);
 
     useEffect(() => {
-        if (isAuthenticated) {
+        if (isAuthenticated && organizationId) {
+            console.log('[App] Auth and Tenant ready, initiating data fetch...');
             fetchData();
+        } else if (!loading && !user) {
+            // If we're not loading and there's no user, we're on the login/signup page
+            setIsInitialLoading(false);
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, organizationId, loading, user]);
 
     useEffect(() => {
         if (!user || !profile) return;
@@ -144,29 +148,56 @@ const App = () => {
         };
     }, [user, profile, showToast]);
 
-    const fetchData = async () => {
-        if (!user) return;
-        setIsInitialLoading(true);
+    const fetchData = async (silent = false) => {
+        if (!user || !organizationId) {
+            if (!silent && !loading && !user) setIsInitialLoading(false);
+            return;
+        }
+        
+        if (!silent) setIsInitialLoading(true);
+        const startTime = Date.now();
+        console.log('[App] Fetching organization data for:', organizationId);
+
         try {
-            const [spacesRes, tasksRes, meetingsRes, staffRes, lifecycleRes, logsRes, inboxRes] = await Promise.all([
-                apiService.getSpaces(),
-                apiService.getTasks(),
-                apiService.getMeetings(),
-                apiService.getStaffMembers(),
-                apiService.getClientLifecycle(),
-                apiService.getActivityLogs(),
-                apiService.getUnifiedInbox()
+            // Phase 1: Critical UI Data (Spaces, Tasks, Meetings)
+            // We fetch these first to get the main dashboard ready
+            const [spacesRes, tasksRes, meetingsRes] = await Promise.all([
+                apiService.getSpaces(organizationId),
+                apiService.getTasks(organizationId),
+                apiService.getMeetings(organizationId)
             ]);
 
             if (spacesRes.data) setClients(spacesRes.data);
             if (tasksRes.data) setTasks(tasksRes.data);
             if (meetingsRes.data) setMeetings(meetingsRes.data);
-            if (staffRes) setStaff(staffRes);
-            if (lifecycleRes) setClientLifecycle(lifecycleRes);
-            if (logsRes.data) setLogs(logsRes.data);
-            if (inboxRes) setInboxData(inboxRes);
+
+            // Phase 2: Peripheral Data (Staff, Lifecycle, Logs, Inbox)
+            // We use allSettled so that if one (like the heavy Unified Inbox or Logs) fails or is slow,
+            // the rest of the app still functions.
+            const peripheralResults = await Promise.allSettled([
+                apiService.getStaffMembers(organizationId),
+                apiService.getClientLifecycle(organizationId),
+                apiService.getActivityLogs(organizationId),
+                apiService.getUnifiedInbox(organizationId)
+            ]);
+
+            // Handle results individually
+            if (peripheralResults[0].status === 'fulfilled') setStaff(peripheralResults[0].value as StaffMember[]);
+            if (peripheralResults[1].status === 'fulfilled') setClientLifecycle(peripheralResults[1].value as ClientLifecycle[]);
+            
+            const logsRes = peripheralResults[2];
+            if (logsRes.status === 'fulfilled' && (logsRes.value as any).data) {
+                setLogs((logsRes.value as any).data);
+            }
+
+            if (peripheralResults[3].status === 'fulfilled') {
+                setInboxData(peripheralResults[3].value as any[]);
+            }
+
+            console.log(`[App] Data fetch completed in ${Date.now() - startTime}ms`);
         } catch (error) {
-            console.error("Error fetching data:", error);
+            console.error("[App] Critical error fetching system data:", error);
+            showToast("Failed to sync some data. Please check your connection.", "error");
         } finally {
             setIsInitialLoading(false);
         }
@@ -176,11 +207,11 @@ const App = () => {
         setActiveMeetingId(meetingId);
     };
 
-    const handleUpdateStaffCapability = async (staffId: string, spaceId: string, capKey: string, allowed: boolean) => {
+    const handleUpdateStaffCapability = async (staffId: string, spaceId: string, allowed: boolean) => {
         try {
-            await apiService.updateStaffCapability(staffId, spaceId, capKey, allowed);
+            await apiService.updateStaffCapability(staffId, spaceId, allowed);
             showToast("Capability updated successfully.", "success");
-            fetchData();
+            fetchData(true);
         } catch (err: any) {
             showToast(`Error updating capability: ${err.message}`, "error");
         }
@@ -276,7 +307,7 @@ const App = () => {
                 setActiveMeetingId(data.meeting.id);
                 setActiveMeetingRoomUrl(data.roomUrl || data.meeting?.daily_room_url || null);
                 setIsInstantMeetingModalOpen(false);
-                fetchData();
+                fetchData(true);
             } else {
                 showToast('Meeting created but no ID returned', 'error');
                 console.error('[handleInstantMeeting] Unexpected response shape:', data);
@@ -284,6 +315,24 @@ const App = () => {
         } catch (err) {
             console.error('[handleInstantMeeting] failed:', err);
             showToast('Failed to create meeting', 'error');
+        }
+    };
+
+    const handleDeleteMeeting = async (meetingId: string) => {
+        // Optimistic removal — no reload needed
+        setMeetings(prev => prev.filter(m => m.id !== meetingId));
+        try {
+            const { error } = await apiService.cancelMeeting(meetingId);
+            if (error) {
+                // Revert optimistic update on error
+                fetchData(true);
+                showToast('Failed to delete meeting. Please try again.', 'error');
+            } else {
+                showToast('Meeting deleted.', 'success');
+            }
+        } catch (err: any) {
+            fetchData(true);
+            showToast(friendlyError(err?.message || 'Failed to delete meeting'), 'error');
         }
     };
 
@@ -300,7 +349,7 @@ const App = () => {
             if (error) throw error;
             if (newMeeting) {
                 setMeetings([newMeeting, ...meetings]);
-                fetchData();
+                fetchData(true);
             }
         } catch (err: any) {
             showToast(friendlyError(err?.message || String(err)), "error");
@@ -358,7 +407,7 @@ const App = () => {
                 if (!can('can_view_all_spaces')) return <div className="p-8">Access Denied</div>;
                 return <SpacesView clients={clients} onSelect={(id) => { setSelectedSpaceId(id); setCurrentView(ViewState.SPACE_DETAIL); }} onCreate={handleCreateSpace} />;
             case ViewState.SPACE_DETAIL:
-                return <SpaceDetailView space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setCurrentView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} />;
+                return <SpaceDetailView spaceId={selectedSpaceId!} space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setCurrentView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} />;
             case ViewState.INBOX:
                 if (!can('can_view_dashboard')) return <div className="p-8">Access Denied</div>;
                 return <InboxView clients={clients} inboxData={inboxData} />;
@@ -373,7 +422,7 @@ const App = () => {
                 return <TaskView tasks={tasks} clients={clients} onUpdateStatus={handleTaskStatusUpdate} onCreate={handleCreateTask} />;
             case ViewState.MEETINGS:
                 if (!can('can_view_meetings')) return <div className="p-8">Access Denied</div>;
-                return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} />;
+                return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} onDeleteMeeting={handleDeleteMeeting} />;
             case ViewState.FILES:
                 if (!can('can_view_files')) return <div className="p-8">Access Denied</div>;
                 return <GlobalFilesView clients={clients} profile={profile} />;
@@ -388,33 +437,39 @@ const App = () => {
         }
     };
 
-    if (loading || (isAuthenticated && isInitialLoading)) {
+    // Only show full-screen skeleton on the very first load if we have no data yet
+    if (loading || (isAuthenticated && isInitialLoading && clients.length === 0)) {
         return (
-            <div className="flex h-screen w-full bg-white dark:bg-black overflow-hidden">
-                <aside className="w-64 bg-white dark:bg-black border-r border-zinc-200 dark:border-zinc-800 flex flex-col justify-between p-4 z-20">
-                    <div className="space-y-6">
-                        <div className="flex items-center gap-3 px-4 mb-10 mt-2">
-                            <SkeletonLoader width="32px" height="32px" borderRadius="8px" />
-                            <SkeletonText lines={1} width="60px" />
+            <div className="flex h-screen w-full bg-white font-sans animate-pulse">
+                <aside className="w-64 bg-[#ECECF1] border-r border-[#D1D5DB] flex flex-col justify-between p-4 z-20">
+                    <div className="space-y-8">
+                        <div className="flex items-center gap-3 px-3 mb-8 mt-2">
+                            <div className="h-8 w-8 bg-zinc-200 rounded-md"></div>
+                            <div className="h-5 w-24 bg-zinc-200 rounded"></div>
                         </div>
-                        <div className="space-y-2">
-                             {[1, 2, 3, 4, 5, 6].map((i) => <SkeletonLoader key={i} height="44px" borderRadius="12px" className="w-full" />)}
+                        <div className="space-y-3 px-2">
+                            {[1, 2, 3, 4, 5, 6].map((i) => (
+                                <div key={i} className="h-10 bg-white/50 border border-zinc-100 rounded-md w-full"></div>
+                            ))}
                         </div>
-                    </div>
-                    <div className="p-2">
-                        <SkeletonLoader height="56px" borderRadius="12px" />
                     </div>
                 </aside>
-                <main className="flex-1 p-8 space-y-8 overflow-hidden">
-                    <div className="flex justify-between items-end">
-                        <div className="space-y-3">
-                            <SkeletonLoader width="200px" height="40px" borderRadius="8px" />
-                            <SkeletonText lines={1} width="300px" />
+                <main className="flex-1 bg-zinc-50/30 p-8 flex flex-col">
+                    <header className="h-16 border-b border-zinc-100 flex items-center justify-between px-8 bg-white/50 -mx-8 -mt-8 mb-8">
+                        <div className="h-4 w-48 bg-zinc-100 rounded"></div>
+                    </header>
+                    <div className="max-w-7xl mx-auto w-full space-y-8">
+                        <div className="flex justify-between items-end">
+                            <div className="space-y-2">
+                                <div className="h-10 w-64 bg-zinc-200 rounded-lg"></div>
+                                <div className="h-4 w-96 bg-zinc-100 rounded"></div>
+                            </div>
                         </div>
-                        <SkeletonLoader width="150px" height="32px" borderRadius="20px" />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {[1, 2, 3].map((i) => <SkeletonCard key={i} className="h-40 bg-white dark:bg-black border-zinc-200 dark:border-zinc-800" />)}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {[1, 2, 3].map((i) => (
+                                <div key={i} className="h-48 bg-white border border-zinc-100 rounded-2xl shadow-sm"></div>
+                            ))}
+                        </div>
                     </div>
                 </main>
             </div>
@@ -521,6 +576,7 @@ const App = () => {
                         <div className="mb-6">
                             <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Category</label>
                             <select
+                                title="Meeting Category"
                                 value={instantMeetingCategory}
                                 onChange={(e) => setInstantMeetingCategory(e.target.value)}
                                 className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none"
@@ -593,6 +649,7 @@ const App = () => {
                             <InviteStaffModal 
                                 isOpen={showInviteModal && !lastInviteData} 
                                 onClose={() => setShowInviteModal(false)}
+                                organizationId={organizationId || ''}
                                 spaces={clients}
                             />
                         </>

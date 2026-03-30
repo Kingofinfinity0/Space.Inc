@@ -146,6 +146,7 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
 };
 
 const SpaceActivityIndicators = ({ spaceId }: { spaceId: string }) => {
+    const { organizationId } = useAuth();
     const [indicators, setIndicators] = useState<{
         unreadCount: number;
         upcomingMeetingsCount: number;
@@ -155,29 +156,15 @@ const SpaceActivityIndicators = ({ spaceId }: { spaceId: string }) => {
 
     useEffect(() => {
         const load = async () => {
+            if (!spaceId || !organizationId) return;
             try {
-                const lastSeenAt = localStorage.getItem(`space_${spaceId}_last_seen`) || new Date(0).toISOString();
-                const [unreadRes, meetingsRes, filesRes] = await Promise.all([
-                    supabase.from('messages')
-                        .select('id', { count: 'exact' })
-                        .eq('space_id', spaceId)
-                        .gt('created_at', lastSeenAt),
-                    supabase.from('meetings')
-                        .select('id', { count: 'exact' })
-                        .eq('space_id', spaceId)
-                        .gt('starts_at', new Date().toISOString())
-                        .eq('status', 'scheduled'),
-                    supabase.from('files')
-                        .select('id', { count: 'exact' })
-                        .eq('space_id', spaceId)
-                        .eq('status', 'available')
-                        .gt('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-                ]);
+                const { data, error } = await apiService.getSpaceDashboardData(spaceId, organizationId);
+                if (error) throw error;
 
                 setIndicators({
-                    unreadCount: unreadRes.count || 0,
-                    upcomingMeetingsCount: meetingsRes.count || 0,
-                    recentFilesCount: filesRes.count || 0
+                    unreadCount: data.unread_messages || 0,
+                    upcomingMeetingsCount: (data.upcoming_meetings || []).length,
+                    recentFilesCount: data.recent_files || 0
                 });
             } catch (err) {
                 console.error('Failed to load indicators for space:', spaceId, err);
@@ -186,7 +173,7 @@ const SpaceActivityIndicators = ({ spaceId }: { spaceId: string }) => {
             }
         };
         load();
-    }, [spaceId]);
+    }, [spaceId, organizationId]);
 
     if (loading) return <div className="h-10 flex items-center justify-center"><div className="h-4 w-4 border-2 border-zinc-200 border-t-zinc-400 rounded-full animate-spin" /></div>;
 

@@ -5,9 +5,10 @@ import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
 import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle, FileText, MessageSquare } from 'lucide-react';
 import { ClientSpace, Meeting, Message, StaffMember, Task } from '../../types';
 import { useNavigate } from 'react-router-dom';
+import { apiService } from '../../services/apiService';
 
 type OwnerDashboardProps = {
     clients: ClientSpace[];
@@ -57,7 +58,7 @@ export default function OwnerDashboardView({
     onInstantMeet,
     onGoToSpace
 }: OwnerDashboardProps) {
-    const { user } = useAuth();
+    const { user, organizationId } = useAuth();
     const { showToast } = useToast();
     const navigate = useNavigate();
 
@@ -74,61 +75,27 @@ export default function OwnerDashboardView({
     });
 
     const load = async () => {
-        if (!user) return;
+        if (!user || !organizationId) return;
         setLoading(true);
         try {
             const now = new Date().toISOString();
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-            const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-
             const [tasksRes, meetingsRes, notificationsRes, analyticsRes] = await Promise.all([
-                // Widget 1: Task Management (activity_logs as tasks)
-                supabase.from('activity_logs')
-                    .select('id, action_type, space_name, created_at, actor_name')
-                    .in('action_type', ['meeting_created', 'file_uploaded'])
-                    .gt('created_at', sevenDaysAgo)
-                    .order('created_at', { ascending: false }),
-
-                // Widget 2: Calendar
-                supabase.from('meetings')
-                    .select('id, title, space_name, starts_at, status')
-                    .gt('starts_at', now)
-                    .eq('status', 'scheduled')
-                    .order('starts_at')
-                    .limit(10),
-
-                // Widget 3: Inbox / Notifications
-                supabase.from('notifications')
-                    .select('id, type, message, is_read, created_at, space_id')
-                    .eq('user_id', user.id)
-                    .eq('is_read', false)
-                    .order('created_at', { ascending: false })
-                    .limit(20),
-
-                // Widget 4: Business Analytics
-                Promise.all([
-                    supabase.from('spaces').select('id', { count: 'exact' }).eq('status', 'active'),
-                    supabase.from('space_memberships')
-                        .select('id', { count: 'exact' })
-                        .eq('role', 'client')
-                        .gt('last_activity_at', sevenDaysAgo),
-                    supabase.from('messages').select('id', { count: 'exact' }).gt('created_at', sevenDaysAgo),
-                    supabase.from('meetings').select('id', { count: 'exact' }).eq('status', 'ended').gt('ended_at', startOfMonth),
-                    supabase.from('files').select('id', { count: 'exact' }).gt('created_at', startOfMonth)
-                ])
+                apiService.getDashboardFeed(organizationId),
+                apiService.getMeetings(organizationId), // Scoped by organizationId
+                apiService.getUnifiedNotifications(organizationId, user.id),
+                apiService.getDashboardMetrics(organizationId)
             ]);
 
             setTasksFeed(tasksRes.data || []);
-            setUpcomingMeetings(meetingsRes.data || []);
+            setUpcomingMeetings((meetingsRes.data || []).filter((m: any) => m.starts_at > now && m.status === 'scheduled').slice(0, 10));
             setNotifications(notificationsRes.data || []);
-            setAnalytics({
-                activeSpaces: analyticsRes[0].count || 0,
-                activeClients: analyticsRes[1].count || 0,
-                totalMessagesWeek: analyticsRes[2].count || 0,
-                meetingsMonth: analyticsRes[3].count || 0,
-                filesMonth: analyticsRes[4].count || 0
+            setAnalytics(analyticsRes.data || {
+                activeSpaces: 0,
+                activeClients: 0,
+                totalMessagesWeek: 0,
+                meetingsMonth: 0,
+                filesMonth: 0
             });
-
         } catch (err: any) {
             console.error('[OwnerDashboardView] load failed:', err);
             showToast(friendlyError(err?.message), 'error');
@@ -142,13 +109,11 @@ export default function OwnerDashboardView({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id]);
 
-    const silentCount = summary?.spaces_silent_14d ?? summary?.spaces_silent ?? 0;
-    const silentAlert = typeof silentCount === 'number' && silentCount > 0;
-
-    const totalClients = summary?.total_clients ?? summary?.totalClients ?? 0;
-    const newThisMonth = summary?.new_this_month ?? summary?.newThisMonth ?? 0;
-    const activeSpaces = summary?.active_spaces ?? summary?.activeSpaces ?? 0;
-    const planQuota = summary?.plan_quota ?? summary?.plan ?? summary?.quota ?? null;
+    const silentAlert = false;
+    const totalClients = clients.length;
+    const newThisMonth = 0; 
+    const activeSpaces = analytics.activeSpaces;
+    const planQuota = null;
 
     const goToSpace = (spaceId: string) => {
         if (onGoToSpace) return onGoToSpace(spaceId);

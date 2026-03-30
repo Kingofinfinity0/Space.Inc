@@ -257,7 +257,29 @@ serve(async (req: Request) => {
                     const tokenData = await tokenRes.json()
                     if (!tokenRes.ok) throw new Error(`Daily Token Error: ${tokenData.info || tokenData.error}`)
 
-                    return new Response(JSON.stringify({ data: { token: tokenData.token } }), {
+                    return new Response(JSON.stringify({ 
+                        data: { 
+                            token: tokenData.token,
+                            roomUrl: meeting.daily_room_url,
+                            meetingId: meeting.id
+                        } 
+                    }), {
+                        status: 200,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    })
+                }
+
+                // ── RECORD_PARTICIPANT_EXIT ────────────────────────────────────
+                case 'RECORD_PARTICIPANT_EXIT': {
+                    if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
+
+                    const { error: rpcError } = await supabase.rpc('record_participant_exit', {
+                        p_meeting_id: meeting_id
+                    })
+
+                    if (rpcError) throw rpcError
+
+                    return new Response(JSON.stringify({ success: true }), {
                         status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })

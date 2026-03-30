@@ -25,7 +25,14 @@ import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
 
 
 // 4. Meeting Hub
-const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMeet }: { meetings: Meeting[], clients: ClientSpace[], onSchedule: (m: any) => void, onJoin: (id: string) => void, onInstantMeet: (spaceId: string) => void }) => {
+const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMeet, onDeleteMeeting }: { 
+    meetings: Meeting[], 
+    clients: ClientSpace[], 
+    onSchedule: (m: any) => void, 
+    onJoin: (id: string) => void, 
+    onInstantMeet: (spaceId: string) => void,
+    onDeleteMeeting?: (meetingId: string) => void
+}) => {
     const [tab, setTab] = useState<'Upcoming' | 'History'>('Upcoming');
     const [isScheduleOpen, setIsScheduleOpen] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
@@ -92,9 +99,24 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                                     </div>
                                 </div>
                             </div>
-                            <Button variant="secondary" size="sm" onClick={() => joinRoom(meeting.id)}>
-                                Join Room <ArrowRight size={14} className="ml-1" />
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button variant="secondary" size="sm" onClick={() => joinRoom(meeting.id)}>
+                                    Join Room <ArrowRight size={14} className="ml-1" />
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="px-2 text-red-500 hover:bg-red-50 border-red-100"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (window.confirm('Delete this meeting?')) {
+                                            onDeleteMeeting?.(meeting.id);
+                                        }
+                                    }}
+                                >
+                                    <Trash2 size={16} />
+                                </Button>
+                            </div>
                         </GlassCard>
                     ))}
                 </div>

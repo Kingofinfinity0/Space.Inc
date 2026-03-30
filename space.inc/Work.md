@@ -1,102 +1,102 @@
-# Work.md - Space.inc Frontend Development
+# Multi-Tenant Hardening Work Log
 
-## Sequence Diagram
+## Logic Flow: Hardened Gateway Pattern
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Frontend
-    participant SupabaseRPC
-    participant EdgeFunctions
-    participant Realtime
+    participant User as Frontend Component
+    participant API as apiService (Hardened Gateway)
+    participant Auth as AuthContext (organizationId)
+    participant Edge as Supabase Edge Functions / RPC
+    participant DB as Postgres (RLS Enforced)
 
-    %% System 1: Messaging
-    rect rgb(230, 240, 255)
-        Note over User,Realtime: System 1 - Messaging
-        User->>Frontend: Send Message
-        Frontend->>SupabaseRPC: send_message(p_space_id, p_content, p_idempotency_key)
-        SupabaseRPC-->>Frontend: Success
-        Realtime-->>Frontend: Broadcast Message (Postgres Changes)
-    end
-
-    %% System 2: Files
-    rect rgb(255, 240, 230)
-        Note over User,EdgeFunctions: System 2 - File Storage
-        User->>Frontend: Request Upload Voucher
-        Frontend->>EdgeFunctions: files-api (REQUEST_UPLOAD_VOUCHER)
-        EdgeFunctions-->>Frontend: { data: { upload_url, file_id } }
-        User->>Frontend: Download / View History
-        Frontend->>EdgeFunctions: files-api (SIGN_URL)
-        EdgeFunctions-->>Frontend: signedUrl
-    end
+    User->>Auth: Get current organizationId
+    Auth-->>User: organizationId (e.g., 'org_123')
     
-    %% System 3: Meetings
-    rect rgb(230, 255, 230)
-        Note over User,EdgeFunctions: System 3 - Meetings
-        User->>Frontend: Join Meeting
-        Frontend->>EdgeFunctions: meetings-api (GET_TOKEN with meetingId)
-        User->>Frontend: Leave Meeting
-        Frontend->>EdgeFunctions: meetings-api (END_MEETING)
-        Frontend->>User: Show Outcome Prompt
-        User->>Frontend: Save Outcome
-        Frontend->>SupabaseRPC: record_meeting_outcome()
-    end
-
-    %% System 4: Notifications
-    rect rgb(255, 230, 255)
-        Note over User,Realtime: System 4 - Notifications
-        Frontend->>SupabaseRPC: Initial Unread Count Fetch
-        Realtime-->>Frontend: Realtime Badges Updates (INSERT)
-        User->>Frontend: Click Bell
-        Frontend->>SupabaseRPC: Fetch 20 Notifications
-        User->>Frontend: Click Notification
-        Frontend->>SupabaseRPC: Mark as Read & Redirect
-    end
-
-    %% System 5: Analytics
-    rect rgb(255, 255, 230)
-        Note over User,SupabaseRPC: System 5 - Analytics
-        User->>Frontend: Open Dashboard
-        Frontend->>SupabaseRPC: Fetch Stats & Feeds (via multiple RPCs)
-        SupabaseRPC-->>Frontend: Dashboard Data
-    end
+    User->>API: Call method (e.g., getSpaces(orgId))
+    Note over API: Explicitly injects orgId into query
+    
+    API->>Edge: Request with organization_id filter
+    Edge->>DB: Query with RLS + Explicit org filter
+    
+    DB-->>Edge: Scoped Data
+    Edge-->>API: Hardened JSON Response
+    API-->>User: Reactive Data
 ```
 
 ## Thought Process
 
-I will tackle this task step-by-step according to the strict deployment order:
-Messaging → Files → Meetings → Notifications → Analytics.
+1. **Phase 1: Gateway Enforcement**
+   - **Thought**: Direct `supabase.from` calls are a "leaky abstraction" in multi-tenant apps. Even with RLS, failing to filter in the query causes Postgres to scan more rows than necessary and relies solely on one security layer.
+   - **Action**: Moved all dashboard and view logic to `apiService.ts`. Replaced `supabase.from('table').select('*')` with calls that require `organization_id`.
 
-### Task List
-#### System 1 — Messaging (SPA-30)
-- [x] Task 1B: Create global error translation helper `friendlyError`.
-- [x] Task 1A: Fix duplicate messages (use `.rpc('send_message')`).
-- [x] Task 1C: Implement Message edit UI (`.rpc('edit_message')`).
-- [x] Task 1D: Implement Message delete UI (`.rpc('delete_message')`).
+2. **Phase 2: Hook Hardening**
+   - **Thought**: Realtime subscriptions were still subscribing to "all" changes or relying on implicit state.
+   - **Action**: Refactored `useRealtimeFiles` to require `organization_id`. Added server-side filters to the subscription and client-side filters to the callback for "Defense-in-Depth".
 
-#### System 2 — File Storage (SPA-28)
-- [ ] Task 2A: Fix the upload bug `upload_url`.
-- [ ] Task 2B: Secure file downloads via `SIGN_URL`.
-- [ ] Task 2C: Version history Modal/Dropdown.
+3. **Phase 3: RPC & Edge Alignment**
+   - **Thought**: Frontend calls must match backend expectations.
+   - **Action**: Updated `messaging-api` and `meetings-api` (frontend calls) to ensure `organization_id` is always passed in payloads. Verified that Edge Functions call versioned SQL functions (`list_messages_v2`) that enforce tenancy.
 
-#### System 3 — Meetings (SPA-29)
-- [ ] Task 3A: Fix `getMeetingToken` (`meeting_id` -> `meetingId`).
-- [ ] Task 3B: Add meeting category selector.
-- [ ] Task 3C: Implement lifecycle hooks `START_MEETING` and `END_MEETING`.
-- [ ] Task 3D: Post-meeting outcome prompt.
-- [ ] Task 3E: "View Recording" button.
+4. **Phase 4: Global Data Propogation**
+   - **Thought**: Data fetching in `App.tsx` was the primary entry point for stale/unhardened data.
+   - **Action**: Re-wrote `fetchData` in `App.tsx` to use the hardened `apiService` methods, ensuring the first load is strictly scoped.
 
-#### System 4 — Notifications (SPA-32)
-- [ ] Task 4A: Create `NotificationBell.tsx`.
-- [ ] Task 4B: Implement notification dropdown.
+## Task List
 
-#### System 5 — Analytics Dashboards (SPA-31)
-- [ ] Task 5A: Owner dashboard.
-- [ ] Task 5B: Staff dashboard.
-- [ ] Task 5C: Space detail mini-stats bar.
+- [x] Harden `apiService.ts` method signatures
+- [x] Refactor `OwnerDashboardView.tsx` to use gateway
+- [x] Refactor `StaffDashboardView.tsx` to use gateway
+- [x] Refactor `SpaceDetailView.tsx` to use gateway
+- [x] Refactor `SpacesView.tsx` to use gateway
+- [x] Refactor `ClientPortalView.tsx` to use gateway
+- [x] Update `App.tsx` global fetch logic
+- [x] Harden `useRealtimeFiles.ts` hook
+- [x] Harden `GlobalFilesView.tsx` call sites
+- [x] Cleanup duplicate methods and lint errors in `apiService.ts`
+- [x] Audit `InboxView.tsx`, `SettingsView.tsx`, and CRM views
+
+## User Section Notes
+
+- *User mentioned Claude's version of meetings works*: Verified the meeting token payload matches the expected `{ token, roomUrl, meetingId }` structure in `apiService.ts`.
+- *Status 400 errors in file uploads*: Hardened the file upload workflow to ensures `organization_id` is passed to the `files-api` during voucher request and confirmation.
 
 ---
-## USER SECTION NOTES
-- spaces.status is lowercase only ('active', 'archived').
-- friendlyError() everywhere to never show raw API errors.
-- Token and time efficiency is priority.
+*Last Updated: 2026-03-30*
+
+# GitHub Repo Update Work Log
+
+## Logic Flow: Update Git Repository
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant LocalRepo as Local Git Repository
+    participant RemoteRepo as GitHub (Origin)
+
+    User->>LocalRepo: Add modified files (git add)
+    User->>LocalRepo: Commit changes (git commit)
+    User->>RemoteRepo: Push current version (git push)
+```
+
+## Thought Process
+
+1. **Phase 1: Status Check**
+   - **Thought**: Before pushing, I need to know what files have changed. I see `src/App.tsx` has modifications.
+   - **Action**: Run `git status`.
+
+2. **Phase 2: Stage and Commit**
+   - **Thought**: I will stage all changed files and commit them with a descriptive message like "Update current version".
+   - **Action**: Run `git add .` and `git commit -m "Update application with latest changes"`.
+
+3. **Phase 3: Push**
+   - **Thought**: Update the remote repository with the local commits.
+   - **Action**: Run `git push origin master`.
+
+## Task List
+
+- [x] Check git status
+- [ ] Update Work.md with thought process
+- [ ] Stage all changes
+- [ ] Commit changes
+- [ ] Push to remote branch

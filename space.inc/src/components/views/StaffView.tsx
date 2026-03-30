@@ -28,21 +28,15 @@ const StaffView: React.FC<{
     staff: StaffMember[];
     spaces: ClientSpace[];
     onInvite: () => void;
-    onUpdateCapability: (staffId: string, spaceId: string, capKey: string, allowed: boolean) => void;
+    onUpdateCapability: (staffId: string, spaceId: string, allowed: boolean) => void;
     onRefresh?: () => void;
 }> = ({ staff, spaces, onInvite, onUpdateCapability, onRefresh }) => {
     const { showToast } = useToast();
 
     const handleToggleSpace = async (staffUserId: string, spaceId: string, currentValue: boolean) => {
-        try {
-            await apiService.updateStaffCapability(staffUserId, spaceId, !currentValue);
-            showToast("Staff capability updated successfully.", "success");
-            // Refresh staff list after update
-            if (onRefresh) onRefresh();
-        } catch (err) {
-            console.error('Failed to update staff capability:', err);
-            showToast("Failed to update staff capability.", "error");
-        }
+        // Optimistic UI update can be handled by App.tsx state if passed back, 
+        // but for now we just call the central handler which does a silent refresh.
+        onUpdateCapability(staffUserId, spaceId, !currentValue);
     };
 
     return (
@@ -102,13 +96,13 @@ const StaffView: React.FC<{
                                         </div>
                                         {isAssigned && (
                                             <div className="flex flex-wrap gap-2">
-                                                {['message_clients', 'manage_tasks', 'view_files'].map(cap => (
+                                                {['Full Access'].map(cap => (
                                                     <button
                                                         key={cap}
-                                                        onClick={() => onUpdateCapability(member.id, space.id, cap, true)}
+                                                        onClick={() => onUpdateCapability(member.id, space.id, true)}
                                                         className="px-2 py-1 bg-white border border-zinc-200 rounded text-[9px] font-bold text-zinc-500 hover:border-emerald-500 hover:text-emerald-600 transition-colors"
                                                     >
-                                                        {cap.replace('_', ' ')}
+                                                        {cap}
                                                     </button>
                                                 ))}
                                             </div>

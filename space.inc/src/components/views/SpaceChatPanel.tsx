@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
+import { supabase } from '../../lib/supabase';
 import {
     LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
@@ -33,7 +34,7 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
     const [sending, setSending] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [staffCount, setStaffCount] = useState(0);
-    const { messages, loading, error, sendMessage, sendFile, messagesEndRef } = useRealtimeMessages(spaceId);
+    const { messages, loading, error, sendMessage, sendFile, messagesEndRef } = useRealtimeMessages(spaceId, organizationId || profile?.organization_id);
 
     useEffect(() => {
         const fetchStaffCount = async () => {

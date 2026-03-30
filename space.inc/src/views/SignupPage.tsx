@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { apiService } from '../../services/apiService';
-import { useAuth } from '../../contexts/AuthContext';
-import { Button, Input, Heading, Text, GlassCard } from '../../components/UI/index';
+import { apiService } from '@/services/apiService';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button, Input, Heading, Text, GlassCard } from '@/components/UI/index';
 import { Rocket, Shield, ArrowRight } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 export default function SignupPage() {
     const [searchParams] = useSearchParams();
