@@ -62,12 +62,27 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
                     filter: `space_id=eq.${spaceId}`
                 },
                 (payload) => {
-                    const newMessage = payload.new as Message;
+                    const raw = payload.new as any;
+                    const newMessage: Message = {
+                        id:             raw.id,
+                        spaceId:        raw.space_id,
+                        organizationId: raw.organization_id,
+                        senderId:       raw.sender_id,
+                        senderType:     raw.sender_type,
+                        content:        raw.content,
+                        channel:        raw.channel ?? 'general',
+                        extension:      raw.extension ?? 'chat',
+                        payload:        raw.payload ?? {},
+                        createdAt:      raw.created_at,
+                        updatedAt:      raw.updated_at ?? null,
+                        editedAt:       raw.edited_at ?? null,
+                        deletedAt:      raw.deleted_at ?? null,
+                        replyCount:     raw.reply_count ?? 0,
+                    };
                     
                     // Defense-in-depth: Manual verification of organization_id in callback
-                    // In some edge cases, Supabase filters might be bypassable if not correctly configured in the dashboard
-                    if (newMessage.organization_id !== orgId) {
-                        console.warn('[useRealtimeMessages] Ignoring message from different tenant:', newMessage.organization_id);
+                    if (newMessage.organizationId !== orgId) {
+                        console.warn('[useRealtimeMessages] Ignoring message from different tenant:', newMessage.organizationId);
                         return;
                     }
 

@@ -396,31 +396,28 @@ export const apiService = {
 
     // --- Messaging ---
     async getMessages(spaceId: string, organizationId: string) {
-        const { data, error } = await supabase.functions.invoke(`messaging-api?space_id=${spaceId}&organization_id=${organizationId}`, {
-            method: 'GET'
-        });
+        const { data, error } = await supabase.functions.invoke(
+            `messaging-api?spaceId=${spaceId}&limit=50`,
+            { method: "GET" }
+        );
         if (error || data?.error) return { data: [], error: data?.error || error };
         return { data: data?.data || [], error: null };
     },
-
-    async sendMessage(spaceId: string, content: string, extension: string = 'chat', payload: any = {}, channel: 'general' | 'internal' = 'general', organizationId: string) {
-        if (!organizationId) throw new Error('organizationId is required for sendMessage');
-        
-        const { data, error } = await supabase.functions.invoke('messaging-api', {
-            method: 'POST',
+    async sendMessage(spaceId: string, content: string, extension: string = "chat", payload: any = {}, channel: "general" | "internal" = "general", organizationId: string) {
+        const { data, error } = await supabase.functions.invoke("messaging-api", {
+            method: "POST",
             body: { 
-                space_id: spaceId, 
-                organization_id: organizationId,
+                spaceId,                   // ← camelCase
                 content, 
                 extension, 
                 payload, 
-                channel 
+                channel,
+                idempotencyKey: crypto.randomUUID()   // ← prevents duplicate sends on retry
             }
         });
-
         if (error) return { data: null, error: { message: error.message } };
         if (data?.error) return { data: null, error: data.error };
-        return { data: data.data, error: null };
+        return { data: data?.data, error: null };
     },
 
     // --- Tasks ---
