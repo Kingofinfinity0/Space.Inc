@@ -99,19 +99,23 @@ export interface Recording {
 
 export interface Message {
   id: string;
-  sender_id?: string;
-  sender_type: 'client' | 'staff';
+  spaceId: string;
+  organizationId?: string;
+  senderId?: string;
+  senderType: "client" | "staff";
+  senderName?: string;
+  senderAvatar?: string;
   content: string;
-  channel?: 'general' | 'internal';
-  extension?: 'text' | 'file' | 'system';
+  channel?: "general" | "internal";
+  extension?: "text" | "file" | "system";
   payload?: any;
-  created_at: string;
-  updated_at?: string;
-  is_unread?: boolean;
-  space_id: string;
-  sender?: {
-    full_name: string;
-  };
+  parentId?: string;
+  threadRootId?: string;
+  replyCount?: number;
+  editedAt?: string;
+  deletedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface StaffMember {

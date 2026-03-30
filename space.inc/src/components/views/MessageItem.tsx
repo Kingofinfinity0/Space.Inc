@@ -21,7 +21,7 @@ export const MessageItem = ({
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    const isOwner = msg.sender_id === currentUserId;
+    const isOwner = msg.senderId === currentUserId;
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -65,8 +65,8 @@ export const MessageItem = ({
     };
 
     // Style variations
-    const isSenderStaff = msg.sender_type === 'staff';
-    const alignRight = msg.sender_type === 'staff'; // Matches InboxView and SpaceChatPanel.
+    const isSenderStaff = msg.senderType === 'staff';
+    const alignRight = msg.senderType === 'staff'; // Matches InboxView and SpaceChatPanel.
 
     let bubbleClass = '';
     if (msg.channel === 'internal') {
@@ -117,9 +117,9 @@ export const MessageItem = ({
                         Internal Note
                     </div>
                 )}
-                {msg.sender?.full_name && (
+                {msg.senderName && (
                     <p className={`text-[10px] mb-1 font-medium ${alignRight ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                        {msg.sender.full_name}
+                        {msg.senderName}
                     </p>
                 )}
 
@@ -169,7 +169,7 @@ export const MessageItem = ({
                         ) : (
                             <p className="text-sm leading-relaxed whitespace-pre-wrap">
                                 {msg.content}
-                                {msg.updated_at && msg.updated_at !== msg.created_at && (
+                                {msg.updatedAt && msg.updatedAt !== msg.createdAt && (
                                     <span className="text-[10px] opacity-60 ml-2 inline-block">(edited)</span>
                                 )}
                             </p>
@@ -178,7 +178,7 @@ export const MessageItem = ({
                 )}
 
                 <p className={`text-[10px] mt-1 text-right ${alignRight ? 'text-zinc-400' : 'text-zinc-400'}`}>
-                    {formatTime(msg.created_at)}
+                    {formatTime(msg.createdAt)}
                 </p>
             </div>
         </div>
