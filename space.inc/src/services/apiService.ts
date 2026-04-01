@@ -199,6 +199,27 @@ export const apiService = {
         return { data: data || [], error: error };
     },
 
+    async getSpaceMembers(spaceId: string, organizationId: string) {
+        if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
+        const { data, error } = await supabase
+            .from('space_memberships')
+            .select(`
+                id,
+                role,
+                status,
+                profiles (
+                    id,
+                    full_name,
+                    role,
+                    email
+                )
+            `)
+            .eq('space_id', spaceId)
+            .eq('organization_id', organizationId);
+        
+        return { data: data || [], error: error };
+    },
+
     async createSpace(name: string, description?: string, organizationId?: string) {
         const { data, error } = await supabase.functions.invoke('createspace-api', {
             method: 'POST',
@@ -379,6 +400,21 @@ export const apiService = {
         return data || [];
     },
 
+    async submitClientReview(organizationId: string, spaceId: string, rating: number, comment?: string) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { data: null, error: { message: 'Not authenticated' } };
+        const { data, error } = await supabase
+            .from('client_reviews')
+            .insert({
+                organization_id: organizationId,
+                space_id: spaceId,
+                client_id: user.id,
+                rating,
+                comment
+            });
+        return { data, error };
+    },
+
     async getUnassignedStaffSummary(): Promise<any[]> {
         const { data, error } = await supabase.rpc('get_unassigned_staff_summary');
         if (error) throw error;
@@ -396,7 +432,7 @@ export const apiService = {
 
     // --- Messaging ---
     async getMessages(spaceId: string, organizationId: string) {
-        const { data, error } = await supabase.functions.invoke(`messaging-api?space_id=${spaceId}&organization_id=${organizationId}`, {
+        const { data, error } = await supabase.functions.invoke(`messaging-api?spaceId=${spaceId}&limit=50`, {
             method: 'GET'
         });
         if (error || data?.error) return { data: [], error: data?.error || error };
@@ -404,23 +440,21 @@ export const apiService = {
     },
 
     async sendMessage(spaceId: string, content: string, extension: string = 'chat', payload: any = {}, channel: 'general' | 'internal' = 'general', organizationId: string) {
-        if (!organizationId) throw new Error('organizationId is required for sendMessage');
-        
         const { data, error } = await supabase.functions.invoke('messaging-api', {
             method: 'POST',
             body: { 
-                space_id: spaceId, 
-                organization_id: organizationId,
+                spaceId, 
                 content, 
                 extension, 
                 payload, 
-                channel 
+                channel,
+                idempotencyKey: crypto.randomUUID()
             }
         });
 
         if (error) return { data: null, error: { message: error.message } };
         if (data?.error) return { data: null, error: data.error };
-        return { data: data.data, error: null };
+        return { data: data?.data, error: null };
     },
 
     // --- Tasks ---
@@ -588,6 +622,24 @@ export const apiService = {
             body: { action: 'DELETE_MEETING', meeting_id: meetingId }
         });
         if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to cancel meeting' } };
+        return { data, error: null };
+    },
+
+    async endMeetingByStaff(meetingId: string, outcome: string, outcomeNotes?: string) {
+        const { data, error } = await supabase.rpc('end_meeting_by_staff', {
+            p_meeting_id: meetingId,
+            p_outcome: outcome,
+            p_outcome_notes: outcomeNotes ?? null
+        });
+        if (error) return { data: null, error };
+        return { data, error: null };
+    },
+
+    async getMeetingDetail(meetingId: string) {
+        const { data, error } = await supabase.rpc('get_meeting_detail', {
+            p_meeting_id: meetingId
+        });
+        if (error) return { data: null, error };
         return { data, error: null };
     },
 

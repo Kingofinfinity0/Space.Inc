@@ -54,6 +54,7 @@ import ClientsCRMView from './components/views/ClientsCRMView';
 import StaffView from './components/views/StaffView';
 import SpaceDetailView from './components/views/SpaceDetailView';
 import GlobalMeetingsView from './components/views/GlobalMeetingsView';
+import MeetingReviewPage from './components/views/MeetingReviewPage';
 import TaskView from './components/views/TaskView';
 import GlobalFilesView from './components/views/GlobalFilesView';
 import SettingsView from './components/views/SettingsView';
@@ -336,6 +337,17 @@ const App = () => {
         }
     };
 
+    const handleEndMeeting = async (meetingId: string, outcome: string, notes: string) => {
+        try {
+            const { error } = await apiService.endMeetingByStaff(meetingId, outcome, notes);
+            if (error) throw error;
+            showToast('Meeting ended successfully.', 'success');
+            fetchData(true);
+        } catch (err: any) {
+            showToast(friendlyError(err?.message || 'Failed to end meeting'), 'error');
+        }
+    };
+
     const handleScheduleMeeting = async (data: any) => {
         try {
             const { data: newMeeting, error } = await apiService.scheduleMeeting({
@@ -407,7 +419,7 @@ const App = () => {
                 if (!can('can_view_all_spaces')) return <div className="p-8">Access Denied</div>;
                 return <SpacesView clients={clients} onSelect={(id) => { setSelectedSpaceId(id); setCurrentView(ViewState.SPACE_DETAIL); }} onCreate={handleCreateSpace} />;
             case ViewState.SPACE_DETAIL:
-                return <SpaceDetailView spaceId={selectedSpaceId!} space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setCurrentView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} />;
+                return <SpaceDetailView spaceId={selectedSpaceId!} space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setCurrentView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} onEndMeeting={handleEndMeeting} />;
             case ViewState.INBOX:
                 if (!can('can_view_dashboard')) return <div className="p-8">Access Denied</div>;
                 return <InboxView clients={clients} inboxData={inboxData} />;
@@ -422,7 +434,7 @@ const App = () => {
                 return <TaskView tasks={tasks} clients={clients} onUpdateStatus={handleTaskStatusUpdate} onCreate={handleCreateTask} />;
             case ViewState.MEETINGS:
                 if (!can('can_view_meetings')) return <div className="p-8">Access Denied</div>;
-                return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} onDeleteMeeting={handleDeleteMeeting} />;
+                return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} onDeleteMeeting={handleDeleteMeeting} onEndMeeting={handleEndMeeting} tasks={tasks} />;
             case ViewState.FILES:
                 if (!can('can_view_files')) return <div className="p-8">Access Denied</div>;
                 return <GlobalFilesView clients={clients} profile={profile} />;
@@ -481,6 +493,7 @@ const App = () => {
             <Route path="/join" element={<JoinView />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route path="/spaces/:spaceId/meetings/:meetingId/review" element={<MeetingReviewPage />} />
             <Route path="*" element={
                 (() => {
                     if (!isAuthenticated) {

@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { DailyProvider, useParticipant, useParticipantIds, useLocalSessionId, useVideoTrack, useAudioTrack, useScreenShare, useDaily } from '@daily-co/daily-react';
 import DailyIframe from '@daily-co/daily-js';
-import { Loader2, Video, AlertCircle, X, LogOut } from 'lucide-react';
+import { Loader2, Video, AlertCircle, X, LogOut, Square } from 'lucide-react';
 import { VideoTile } from './meeting/VideoTile';
 import { ControlsBar } from './meeting/ControlsBar';
 import { apiService } from '../services/apiService';
 import { supabase } from '../lib/supabase';
 import { MeetingState, MeetingStateContext, getInitialState, isLoading, isInMeeting } from '../utils/meetingStateMachine';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { friendlyError } from '../utils/errors';
 import { Button } from './UI';
 
@@ -36,9 +37,14 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
     const localSessionId = useLocalSessionId();
     const participantIds = useParticipantIds();
     const { isSharingScreen, startScreenShare, stopScreenShare } = useScreenShare();
+    const { userRole } = useAuth();
 
     const [meetingState, setMeetingState] = useState<MeetingStateContext>(getInitialState());
     const [meetingTitle, setMeetingTitle] = useState('Meeting');
+    const [showEndConfirm, setShowEndConfirm] = useState(false);
+    const [endOutcome, setEndOutcome] = useState<string>('successful');
+    const [endNotes, setEndNotes] = useState('');
+    const [isEnding, setIsEnding] = useState(false);
 
     // TASK 3: Fail-safe spinner kill mechanism
     const failsafeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -182,6 +188,22 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
         }
     }, [callObject, onMeetingEnded]);
 
+    // Handle staff ending meeting
+    const handleEndMeeting = async () => {
+        setIsEnding(true);
+        try {
+            await apiService.endMeetingByStaff(meetingId, endOutcome, endNotes);
+            setShowEndConfirm(false);
+            // Leave Daily room after backend confirms
+            await callObject?.leave();
+            await callObject?.destroy();
+            onLeave();
+        } catch (err) {
+            console.error('[MeetingRoom] endMeetingByStaff failed:', err);
+            setIsEnding(false);
+        }
+    };
+
     // Toggle microphone
     const handleToggleMic = useCallback(() => {
         if (!callObject) return;
@@ -226,14 +248,27 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
 
                 {/* TASK 6: Leave Meeting Button */}
                 {isInMeeting(meetingState.state) && (
-                    <button
-                        onClick={handleLeave}
-                        disabled={meetingState.state === MeetingState.LEAVING}
-                        className="flex items-center gap-2 px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-500 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <LogOut size={16} />
-                        <span className="font-medium">Leave Meeting</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* Staff-only: End Meeting for everyone */}
+                        {(userRole === 'owner' || userRole === 'admin' || userRole === 'staff') && (
+                            <button
+                                onClick={() => setShowEndConfirm(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-rose-600/30 hover:bg-rose-600/50 text-rose-400 rounded-xl border border-rose-500/30 transition-all text-sm font-semibold"
+                            >
+                                <Square size={16} />
+                                End Meeting
+                            </button>
+                        )}
+                        {/* Everyone: Leave (just you leave) */}
+                        <button
+                            onClick={handleLeave}
+                            disabled={meetingState.state === MeetingState.LEAVING}
+                            className="flex items-center gap-2 px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-500 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <LogOut size={16} />
+                            <span className="font-medium">Leave</span>
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -293,6 +328,66 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
                     onLeave={handleLeave}
                 />
             )}
+
+            {/* End Meeting Confirmation Modal */}
+            {showEndConfirm && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+                    <div className="max-w-md w-full bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6">
+                        <h2 className="text-lg font-bold text-white mb-1">End meeting for everyone?</h2>
+                        <p className="text-zinc-400 text-sm mb-6">
+                            This marks the meeting as complete and notifies all participants.
+                        </p>
+                        
+                        {/* Outcome selector */}
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                            {[
+                                { id: 'successful', label: '✅ Successful' },
+                                { id: 'follow_up_needed', label: '🔄 Follow-up' },
+                                { id: 'no_show', label: '👻 No Show' },
+                                { id: 'inconclusive', label: '❓ Inconclusive' },
+                            ].map(opt => (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => setEndOutcome(opt.id)}
+                                    className={`px-3 py-2 rounded-xl border text-sm transition-all ${
+                                        endOutcome === opt.id
+                                            ? 'bg-emerald-500/20 border-emerald-500 text-white'
+                                            : 'bg-zinc-800 border-zinc-600 text-zinc-300 hover:border-zinc-400'
+                                    }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                        
+                        {/* Notes */}
+                        <input
+                            value={endNotes}
+                            onChange={e => setEndNotes(e.target.value)}
+                            placeholder="Notes (optional)"
+                            disabled={isEnding}
+                            className="w-full bg-zinc-800 border border-zinc-600 rounded-xl px-4 py-2 text-sm text-white mb-6 outline-none focus:border-emerald-500"
+                        />
+                        
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowEndConfirm(false)}
+                                disabled={isEnding}
+                                className="flex-1 py-2 rounded-xl bg-zinc-700 text-zinc-300 text-sm hover:bg-zinc-600 transition-all disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleEndMeeting}
+                                disabled={isEnding}
+                                className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all disabled:opacity-50"
+                            >
+                                {isEnding ? 'Ending...' : 'End for Everyone'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -327,10 +422,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, roomUrl: in
     const { showToast } = useToast();
 
     const endMeetingCalledRef = useRef(false);
-    const [showOutcomePrompt, setShowOutcomePrompt] = useState(false);
-    const [selectedOutcome, setSelectedOutcome] = useState<'successful' | 'follow_up' | 'no_show' | 'inconclusive'>('successful');
-    const [outcomeNotes, setOutcomeNotes] = useState('');
-    const [isSavingOutcome, setIsSavingOutcome] = useState(false);
 
     useEffect(() => {
         let mounted = true;
@@ -416,33 +507,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, roomUrl: in
         const res = await apiService.stopMeeting(meetingId);
         if (res?.error) {
             console.error('[MeetingRoom] END_MEETING error:', res.error);
-            // Still show the outcome prompt; user can decide what to record.
         }
-
-        setShowOutcomePrompt(true);
     }, [meetingId]);
-
-    const recordOutcome = useCallback(async () => {
-        if (isSavingOutcome) return;
-        setIsSavingOutcome(true);
-        try {
-            const { error: rpcError } = await supabase.rpc('record_meeting_outcome', {
-                p_meeting_id: meetingId,
-                p_outcome: selectedOutcome,
-                p_outcome_notes: outcomeNotes.trim() ? outcomeNotes.trim() : null
-            });
-            if (rpcError) throw rpcError;
-            setShowOutcomePrompt(false);
-            setOutcomeNotes('');
-            setSelectedOutcome('successful');
-            onLeave();
-        } catch (err: any) {
-            console.error('[MeetingRoom] record_meeting_outcome failed:', err);
-            showToast(friendlyError(err?.message), 'error');
-        } finally {
-            setIsSavingOutcome(false);
-        }
-    }, [endMeetingCalledRef, isSavingOutcome, meetingId, outcomeNotes, onLeave, selectedOutcome, showToast]);
 
     // Error state
     if (error) {
@@ -479,90 +545,13 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, roomUrl: in
 
     // Render with DailyProvider
     return (
-        <>
-            <DailyProvider callObject={callObject}>
-                <MeetingRoomContent
-                    meetingId={meetingId}
-                    roomUrl={initialRoomUrl}
-                    onLeave={onLeave}
-                    onMeetingEnded={handleMeetingEnded}
-                />
-            </DailyProvider>
-
-            {showOutcomePrompt && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                    <div className="max-w-md w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-6">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                                How did the meeting go?
-                            </h2>
-                            <button
-                                className="p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-white/10"
-                                onClick={() => { setShowOutcomePrompt(false); onLeave(); }}
-                                aria-label="Close"
-                                title="Close"
-                                disabled={isSavingOutcome}
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 mt-4">
-                            {[
-                                { id: 'successful', label: 'Successful' },
-                                { id: 'follow_up', label: 'Follow-up Needed' },
-                                { id: 'no_show', label: 'No Show' },
-                                { id: 'inconclusive', label: 'Inconclusive' }
-                            ].map((opt) => (
-                                <button
-                                    key={opt.id}
-                                    onClick={() => setSelectedOutcome(opt.id as any)}
-                                    disabled={isSavingOutcome}
-                                    className={`px-3 py-2 rounded-xl border text-sm transition-all ${
-                                        selectedOutcome === opt.id
-                                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-700 dark:text-emerald-300'
-                                            : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/5'
-                                    }`}
-                                >
-                                    {opt.label}
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="mt-4">
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">
-                                Notes (optional)
-                            </label>
-                            <input
-                                value={outcomeNotes}
-                                onChange={(e) => setOutcomeNotes(e.target.value)}
-                                placeholder="______________________________"
-                                disabled={isSavingOutcome}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-emerald-500/50"
-                            />
-                        </div>
-
-                        <div className="flex gap-3 mt-5">
-                            <Button
-                                variant="secondary"
-                                className="flex-1"
-                                onClick={() => { setShowOutcomePrompt(false); setOutcomeNotes(''); onLeave(); }}
-                                disabled={isSavingOutcome}
-                            >
-                                Skip
-                            </Button>
-                            <Button
-                                variant="primary"
-                                className="flex-1"
-                                onClick={recordOutcome}
-                                disabled={isSavingOutcome}
-                            >
-                                {isSavingOutcome ? 'Saving...' : 'Save'}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </>
+        <DailyProvider callObject={callObject}>
+            <MeetingRoomContent
+                meetingId={meetingId}
+                roomUrl={initialRoomUrl}
+                onLeave={onLeave}
+                onMeetingEnded={handleMeetingEnded}
+            />
+        </DailyProvider>
     );
 };

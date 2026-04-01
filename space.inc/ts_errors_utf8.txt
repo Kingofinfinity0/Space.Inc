@@ -1,0 +1,60 @@
+﻿src/components/views/SpaceDetailView.tsx(561,77): error TS2304: Cannot find name 'CheckSquare'.
+src/contexts/AuthContext.tsx(146,34): error TS2551: Property 'acceptInvitation2' does not exist on type '{ auth(data: { action: "signup" | "login"; email: string; password?: string; organization_name?: string; full_name?: string; }): Promise<{ data: { user: User; session: Session; }; error: null; } | { ...; } | { ...; }>; ... 65 more ...; hardDeleteFile(file_id: string, organizationId: string): Promise<...>; }'. Did you mean 'acceptInvitation'?
+supabase/functions/_shared/auth.ts(2,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2' or its corresponding type declarations.
+supabase/functions/_shared/auth.ts(50,9): error TS2304: Cannot find name 'Deno'.
+supabase/functions/_shared/auth.ts(51,9): error TS2304: Cannot find name 'Deno'.
+supabase/functions/activity-logs-api/index.ts(4,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/background-worker/index.ts(5,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/background-worker/index.ts(6,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2' or its corresponding type declarations.
+supabase/functions/background-worker/index.ts(15,22): error TS2304: Cannot find name 'Deno'.
+supabase/functions/background-worker/index.ts(16,21): error TS2304: Cannot find name 'Deno'.
+supabase/functions/background-worker/index.ts(17,24): error TS2304: Cannot find name 'Deno'.
+supabase/functions/background-worker/index.ts(18,22): error TS2304: Cannot find name 'Deno'.
+supabase/functions/createspace-api/index.ts(4,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/files-api/index.ts(4,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/files-api/index.ts(5,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2' or its corresponding type declarations.
+supabase/functions/files-api/index.ts(25,13): error TS2304: Cannot find name 'Deno'.
+supabase/functions/files-api/index.ts(26,13): error TS2304: Cannot find name 'Deno'.
+supabase/functions/invitations-api/index.ts(8,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/invitations-api/index.ts(9,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2' or its corresponding type declarations.
+supabase/functions/invitations-api/index.ts(15,8): error TS2307: Cannot find module 'shared/auth.ts' or its corresponding type declarations.
+supabase/functions/invitations-api/index.ts(17,22): error TS2304: Cannot find name 'Deno'.
+supabase/functions/invitations-api/index.ts(18,22): error TS2304: Cannot find name 'Deno'.
+supabase/functions/invitations-api/index.ts(106,9): error TS2304: Cannot find name 'Deno'.
+supabase/functions/meetings-api/index.ts(4,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/meetings-api/index.ts(5,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2' or its corresponding type declarations.
+supabase/functions/meetings-api/index.ts(37,29): error TS2304: Cannot find name 'Deno'.
+supabase/functions/meetings-api/index.ts(38,31): error TS2304: Cannot find name 'Deno'.
+supabase/functions/meetings-api/index.ts(52,17): error TS2304: Cannot find name 'Deno'.
+supabase/functions/meetings-api/index.ts(53,17): error TS2304: Cannot find name 'Deno'.
+supabase/functions/messaging-api/index.ts(4,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/polar-webhook/index.ts(1,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/polar-webhook/index.ts(2,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2.7.1' or its corresponding type declarations.
+supabase/functions/polar-webhook/index.ts(64,45): error TS2304: Cannot find name 'Deno'.
+supabase/functions/polar-webhook/index.ts(73,29): error TS2304: Cannot find name 'Deno'.
+supabase/functions/polar-webhook/index.ts(74,29): error TS2304: Cannot find name 'Deno'.
+supabase/functions/privacy-api/index.ts(2,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2' or its corresponding type declarations.
+supabase/functions/privacy-api/index.ts(3,74): error TS2307: Cannot find module 'shared/auth.ts' or its corresponding type declarations.
+supabase/functions/privacy-api/index.ts(5,1): error TS2304: Cannot find name 'Deno'.
+supabase/functions/privacy-api/index.ts(13,13): error TS2304: Cannot find name 'Deno'.
+supabase/functions/privacy-api/index.ts(14,13): error TS2304: Cannot find name 'Deno'.
+supabase/functions/process-notifications/index.ts(10,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/process-notifications/index.ts(11,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2.7.1' or its corresponding type declarations.
+supabase/functions/process-notifications/index.ts(13,74): error TS2307: Cannot find module 'shared/auth.ts' or its corresponding type declarations.
+supabase/functions/process-notifications/index.ts(15,24): error TS2304: Cannot find name 'Deno'.
+supabase/functions/process-notifications/index.ts(16,22): error TS2304: Cannot find name 'Deno'.
+supabase/functions/process-notifications/index.ts(31,13): error TS2304: Cannot find name 'Deno'.
+supabase/functions/process-notifications/index.ts(32,13): error TS2304: Cannot find name 'Deno'.
+supabase/functions/profile-api/index.ts(4,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/resend-api/index.ts(6,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/resend-api/index.ts(7,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2' or its corresponding type declarations.
+supabase/functions/resend-api/index.ts(16,24): error TS2304: Cannot find name 'Deno'.
+supabase/functions/resend-api/index.ts(17,24): error TS2304: Cannot find name 'Deno'.
+supabase/functions/resend-api/index.ts(18,24): error TS2304: Cannot find name 'Deno'.
+supabase/functions/resend-api/index.ts(19,24): error TS2304: Cannot find name 'Deno'.
+supabase/functions/space-analytics-worker/index.ts(3,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.
+supabase/functions/space-analytics-worker/index.ts(4,30): error TS2307: Cannot find module 'https://esm.sh/@supabase/supabase-js@2' or its corresponding type declarations.
+supabase/functions/space-analytics-worker/index.ts(6,74): error TS2307: Cannot find module 'shared/auth.ts' or its corresponding type declarations.
+supabase/functions/space-analytics-worker/index.ts(15,13): error TS2304: Cannot find name 'Deno'.
+supabase/functions/space-analytics-worker/index.ts(16,13): error TS2304: Cannot find name 'Deno'.
+supabase/functions/tasks-api/index.ts(4,23): error TS2307: Cannot find module 'https://deno.land/std@0.177.0/http/server.ts' or its corresponding type declarations.

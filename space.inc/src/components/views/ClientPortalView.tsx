@@ -9,7 +9,7 @@ import {
     Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
     GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
     File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft
+    Bell, Eye, Play, X, FileVideo, ChevronLeft, Star, StarHalf
 } from 'lucide-react';
 import {
     GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
@@ -31,22 +31,30 @@ const ClientPortalView = ({ client, meetings, onJoin, onLogout }: {
     
     const [notifications, setNotifications] = useState<any[]>([]);
     const [activityFeed, setActivityFeed] = useState<any[]>([]);
+    const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
+    
+    // Review state
+    const [isReviewOpen, setIsReviewOpen] = useState(false);
+    const [rating, setRating] = useState(5);
+    const [reviewComment, setReviewComment] = useState('');
 
     const loadData = useCallback(async () => {
         const orgId = profile?.organization_id;
         if (!user || !orgId) return;
         try {
             setLoading(true);
-            const [notificationsRes, activityRes] = await Promise.all([
+            const [notificationsRes, activityRes, tasksRes] = await Promise.all([
                 apiService.getUnifiedNotifications(orgId, user.id),
-                apiService.getDashboardFeed(orgId, 20)
+                apiService.getDashboardFeed(orgId, 20),
+                apiService.getTasks(orgId, client.id)
             ]);
 
             setNotifications(notificationsRes.data || []);
             // Filter activity feed to only show logs for this specific space
             const filteredActivity = (activityRes.data || []).filter((log: any) => log.space_id === client.id);
             setActivityFeed(filteredActivity);
+            setTasks(tasksRes.data || []);
         } catch (err) {
             console.error('Failed to load client portal data:', err);
         } finally {
@@ -88,6 +96,9 @@ const ClientPortalView = ({ client, meetings, onJoin, onLogout }: {
                         <p className="text-zinc-500 font-light mt-1">Your dedicated workspace for {client.name}</p>
                     </div>
                     <div className="flex items-center gap-4">
+                        <Button variant="outline" size="sm" onClick={() => setIsReviewOpen(true)}>
+                            Leave a Review
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => showToast("Help request submitted.", "info")}>
                             Get Help
                         </Button>
@@ -200,9 +211,77 @@ const ClientPortalView = ({ client, meetings, onJoin, onLogout }: {
                                 </GlassCard>
                             )}
                         </div>
+                        
+                        {/* Widget: Tasks */}
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
+                                <ListTodo size={20} className="text-indigo-500" /> My Tasks
+                            </h3>
+                            {loading ? (
+                                <SkeletonCard className="h-40" />
+                            ) : tasks.length > 0 ? (
+                                <div className="space-y-3">
+                                    {tasks.map(task => (
+                                        <GlassCard key={task.id} className={`p-4 ${task.status === 'done' ? 'opacity-60 bg-zinc-50' : ''}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center ${task.status === 'done' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-zinc-300'}`}>
+                                                    {task.status === 'done' && <CheckSquare size={12} />}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`text-sm font-medium ${task.status === 'done' ? 'line-through text-zinc-500' : 'text-zinc-900'}`}>{task.title}</p>
+                                                    {task.due_date && <p className="text-[10px] text-zinc-500 mt-1">Due: {formatDate(task.due_date)}</p>}
+                                                </div>
+                                            </div>
+                                        </GlassCard>
+                                    ))}
+                                </div>
+                            ) : (
+                                <GlassCard className="p-8 text-center bg-zinc-50/50 border-dashed border-2">
+                                    <ListTodo size={32} className="mx-auto text-zinc-200 mb-2" />
+                                    <p className="text-zinc-400 text-sm">No pending tasks.</p>
+                                </GlassCard>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
+
+            {/* Leave Review Modal */}
+            <Modal isOpen={isReviewOpen} onClose={() => setIsReviewOpen(false)} title="Feedback & Review">
+                <div className="space-y-4">
+                    <p className="text-sm text-zinc-600">How would you rate your experience with {profile?.organization_name || 'us'} so far?</p>
+                    <div className="flex justify-center gap-2 my-4">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                            <button key={star} onClick={() => setRating(star)} className="text-amber-400 hover:scale-110 transition-transform">
+                                <Star size={32} fill={rating >= star ? 'currentColor' : 'none'} strokeWidth={rating >= star ? 0 : 1} />
+                            </button>
+                        ))}
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-zinc-700 mb-1">Additional Comments</label>
+                        <Input 
+                            value={reviewComment} 
+                            onChange={(e) => setReviewComment(e.target.value)} 
+                            placeholder="Tell us what you loved or how we can improve..." 
+                        />
+                    </div>
+                    <Button 
+                        className="w-full mt-2" 
+                        onClick={async () => {
+                            if (!profile?.organization_id) return;
+                            try {
+                                await apiService.submitClientReview(profile.organization_id, client.id, rating, reviewComment);
+                                showToast("Thank you for your review!", "success");
+                                setIsReviewOpen(false);
+                            } catch (err: any) {
+                                showToast(err.message || 'Failed to submit review', 'error');
+                            }
+                        }}
+                    >
+                        Submit Review
+                    </Button>
+                </div>
+            </Modal>
         </div>
     );
 };

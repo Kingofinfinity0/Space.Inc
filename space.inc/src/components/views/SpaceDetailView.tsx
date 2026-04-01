@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
@@ -9,7 +10,8 @@ import {
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
     Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
     GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft, History, FolderClosed, File as DocIcon
+    File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
+    Bell, Eye, Play, X, FileVideo, ChevronLeft, History
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -25,11 +27,13 @@ import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile,
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
 import SpaceChatPanel from './SpaceChatPanel';
+import { CalendarWidget } from '../CalendarWidget';
 
 
 // 3. Space Detail View
-const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void }) => {
-    const { user, profile, organizationId } = useAuth();
+const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet, onEndMeeting }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void, onEndMeeting?: (id: string, outcome: string, notes: string) => void }) => {
+    const navigate = useNavigate();
+    const { user, profile, organizationId, userRole } = useAuth();
     const { showToast } = useToast();
 
     const [space, setSpace] = useState<ClientSpace | undefined>(initialSpace);
@@ -43,9 +47,18 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         recentFilesCount: number;
     }>({ unreadCount: 0, upcomingMeetings: [], recentFilesCount: 0 });
 
-    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Docs'>('Dashboard');
+    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Tasks' | 'Docs'>('Dashboard');
     const [invites, setInvites] = useState<any[]>([]);
     const [invitesLoading, setInvitesLoading] = useState(false);
+    
+    const [members, setMembers] = useState<any[]>([]);
+    const [membersLoading, setMembersLoading] = useState(false);
+    
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [tasksLoading, setTasksLoading] = useState(false);
+    const [newTaskTitle, setNewTaskTitle] = useState('');
+
+    const canManageInvites = userRole === 'owner' || userRole === 'admin' || userRole === 'staff';
 
     const loadActivityIndicators = useCallback(async () => {
         if (!spaceId || !organizationId) return;
@@ -125,8 +138,32 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             }
         };
 
+        const loadActivities = async () => {
+            if (!spaceId || !organizationId) return;
+            try {
+                setMembersLoading(true);
+                setTasksLoading(true);
+                const [memRes, taskRes] = await Promise.all([
+                    apiService.getSpaceMembers(spaceId, organizationId),
+                    apiService.getTasks(organizationId, spaceId)
+                ]);
+                if (!cancelled) {
+                    setMembers(memRes.data || []);
+                    setTasks(taskRes.data || []);
+                }
+            } catch (err: any) {
+                console.error('Failed to load activities:', err);
+            } finally {
+                if (!cancelled) {
+                    setMembersLoading(false);
+                    setTasksLoading(false);
+                }
+            }
+        };
+
         loadSpaceFull();
         loadStats();
+        loadActivities();
         loadInvites();
         loadActivityIndicators();
         return () => {
@@ -182,6 +219,11 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     const [notifyClient, setNotifyClient] = useState(true);
     const [newMeetingCategory, setNewMeetingCategory] = useState<string>('general');
 
+    const [meetingToEnd, setMeetingToEnd] = useState<Meeting | null>(null);
+    const [endOutcome, setEndOutcome] = useState('successful');
+    const [endNotes, setEndNotes] = useState('');
+    const [isEnding, setIsEnding] = useState(false);
+
     const handleLocalSchedule = () => {
         onSchedule({
             space_id: space.id,
@@ -214,7 +256,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     <p className="text-sm text-zinc-500">Managed by You</p>
                 </div>
                 <div className="ml-auto flex bg-white/50 p-1 rounded-md border border-zinc-200">
-                    {['Dashboard', 'Chat', 'Meetings', 'Docs'].map(tab => (
+                    {['Dashboard', 'Chat', 'Meetings', 'Tasks', 'Docs'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab as any)}
@@ -279,71 +321,98 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                 </div>
                             </GlassCard>
                             <GlassCard className="p-6">
-                                <Heading level={3} className="mb-4">Space Info</Heading>
-                                <div className="space-y-2 text-sm text-zinc-600">
-                                    <p><span className="font-medium text-[#1D1D1D]">Visibility:</span> {space.visibility}</p>
-                                    <p><span className="font-medium text-[#1D1D1D]">Role:</span> {space.role}</p>
-                                    <p><span className="font-medium text-[#1D1D1D]">Status:</span> {space.status}</p>
-                                </div>
-                            </GlassCard>
-
-                            <GlassCard className="p-6">
-                                <div className="flex justify-between items-center mb-4">
-                                    <Heading level={3}>Client Invite Links</Heading>
-                                    <Button variant="outline" size="sm" onClick={() => handleGenerateInvite()}>
-                                        <Plus size={14} className="mr-1" /> New Link
-                                    </Button>
-                                </div>
-                                <div className="space-y-4">
-                                    {invitesLoading ? (
+                                <Heading level={3} className="mb-4">Space Members</Heading>
+                                <div className="space-y-3">
+                                    {membersLoading ? (
                                         <SkeletonText lines={2} />
-                                    ) : invites.length > 0 ? (
-                                        invites.map(invite => (
-                                            <div key={invite.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
-                                                <div className="min-w-0 flex-1 mr-3">
-                                                    <p className="text-xs font-mono text-zinc-500 truncate">
-                                                        ...{invite.token.substring(invite.token.length - 8)}
-                                                    </p>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        {invite.email && <span className="text-[10px] text-zinc-400">{invite.email}</span>}
-                                                        <span className="px-1.5 py-0.5 bg-zinc-200 text-[8px] font-bold text-zinc-500 rounded uppercase">
-                                                            Exp: {new Date(invite.expires_at).toLocaleDateString()}
-                                                        </span>
-                                                    </div>
+                                    ) : members.length > 0 ? (
+                                        members.map(member => (
+                                            <div key={member.id} className="flex items-center gap-3 p-2 hover:bg-zinc-50 rounded-lg transition-colors border border-transparent">
+                                                <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs uppercase">
+                                                    {member.profiles?.full_name?.charAt(0) || <User size={14} />}
                                                 </div>
-                                                <div className="flex gap-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 w-8 p-0"
-                                                        onClick={() => {
-                                                            const url = `${window.location.origin}/join?token=${invite.token}`;
-                                                            navigator.clipboard.writeText(url);
-                                                            showToast("Copied to clipboard", "success");
-                                                        }}
-                                                        title="Copy Link"
-                                                    >
-                                                        <Copy size={14} />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 w-8 p-0"
-                                                        onClick={() => handleGenerateInvite(invite.email)}
-                                                        title="Regenerate"
-                                                    >
-                                                        <History size={14} />
-                                                    </Button>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-zinc-900 truncate">
+                                                        {member.profiles?.full_name || 'Pending User'}
+                                                    </p>
+                                                    <p className="text-[10px] text-zinc-500 truncate capitalize">{member.role}</p>
                                                 </div>
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="text-center py-4">
-                                            <p className="text-zinc-400 text-xs italic">No active invite links.</p>
-                                        </div>
+                                        <p className="text-xs text-zinc-400 italic">No members found.</p>
                                     )}
                                 </div>
                             </GlassCard>
+
+                            {canManageInvites && (
+                                <GlassCard className="p-6">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <Heading level={3}>Client Invite Links</Heading>
+                                        <Button variant="outline" size="sm" onClick={() => handleGenerateInvite()}>
+                                            <Plus size={14} className="mr-1" /> New Link
+                                        </Button>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {invitesLoading ? (
+                                            <SkeletonText lines={2} />
+                                        ) : invites.length > 0 ? (
+                                            invites.map(invite => (
+                                                <div key={invite.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
+                                                    <div className="min-w-0 flex-1 mr-3">
+                                                        <p className="text-xs font-mono text-zinc-500 truncate">
+                                                            ...{invite.token.substring(invite.token.length - 8)}
+                                                        </p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            {invite.email && <span className="text-[10px] text-zinc-400">{invite.email}</span>}
+                                                            <span className="px-1.5 py-0.5 bg-zinc-200 text-[8px] font-bold text-zinc-500 rounded uppercase">
+                                                                Exp: {new Date(invite.expires_at).toLocaleDateString()}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 w-8 p-0"
+                                                            onClick={() => {
+                                                                const url = `${window.location.origin}/join?token=${invite.token}`;
+                                                                navigator.clipboard.writeText(url);
+                                                                showToast("Copied to clipboard", "success");
+                                                            }}
+                                                            title="Copy Link"
+                                                        >
+                                                            <Copy size={14} />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 w-8 p-0"
+                                                            onClick={() => handleGenerateInvite(invite.email)}
+                                                            title="Regenerate"
+                                                        >
+                                                            <History size={14} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="text-center py-4">
+                                                <p className="text-zinc-400 text-xs italic">No active invite links.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </GlassCard>
+                            )}
+                            <CalendarWidget
+                                meetings={localMeetings}
+                                tasks={tasks}
+                                spaces={[space].filter(Boolean)}
+                                defaultSpaceId={space.id}
+                                showSpaceFilter={false}
+                                showTypeFilter={true}
+                                title={`${space.name} Calendar`}
+                            />
                         </div>
                     </div>
                 )}
@@ -369,29 +438,66 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
 
                         {localMeetings.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {localMeetings.map(m => (
-                                    <GlassCard key={m.id} className="p-4 flex flex-col justify-between h-32">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-semibold text-sm truncate max-w-[150px]">{m.title}</p>
-                                                <div className="text-[10px] text-zinc-500 uppercase tracking-tighter">
-                                                    {m.status === 'live' ? (
-                                                        <span className="text-emerald-500 font-bold flex items-center gap-1">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> LIVE NOW
-                                                        </span>
-                                                    ) : m.status}
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-xs font-bold">{new Date(m.starts_at).toLocaleDateString()}</p>
-                                                <p className="text-[10px] text-zinc-400">{new Date(m.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                            </div>
-                                        </div>
-                                        <Button variant={m.status === 'live' ? 'primary' : 'outline'} size="sm" className="w-full mt-2" onClick={() => onJoin(m.id)}>
-                                            {m.status === 'live' ? 'Join Now' : 'Enter Lobby'}
-                                        </Button>
-                                    </GlassCard>
-                                ))}
+                                {localMeetings.map(m => {
+    const isEnded = m.status === 'ended' || m.status === 'cancelled';
+    return (
+        <GlassCard key={m.id} className="p-4 flex flex-col justify-between h-auto">
+            <div className="flex justify-between items-start mb-3">
+                <div>
+                    <p className="font-semibold text-sm truncate max-w-[200px]">{m.title}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] text-zinc-500 uppercase">
+                            {isEnded ? m.status : m.status}
+                        </span>
+                        {!isEnded && (m.status === 'active' || m.status === 'live') && (
+                            <span className="text-emerald-500 font-bold text-[10px] flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> LIVE
+                            </span>
+                        )}
+                        {isEnded && m.outcome && (
+                            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                                m.outcome === 'successful' ? 'bg-emerald-100 text-emerald-700' :
+                                m.outcome === 'no_show' ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
+                            }`}>
+                                {m.outcome.replace(/_/g, ' ')}
+                            </span>
+                        )}
+                    </div>
+                </div>
+                <div className="text-right">
+                    <p className="text-xs font-bold">{new Date(m.starts_at).toLocaleDateString()}</p>
+                    <p className="text-[10px] text-zinc-400">{new Date(m.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+            </div>
+            <div className="flex gap-2 w-full mt-2">
+                <Button
+                    variant={isEnded ? 'outline' : 'primary'}
+                    size="sm"
+                    className={`flex-1 ${isEnded ? 'text-purple-600 border-purple-200 hover:bg-purple-50' : ''}`}
+                    onClick={() => !isEnded ? onJoin(m.id) : navigate(`/spaces/${spaceId}/meetings/${m.id}/review`)}
+                >
+                    {isEnded ? '📋 Review Details' : 'Enter Lobby'}
+                </Button>
+                {!isEnded && ['owner', 'admin', 'staff'].includes(userRole || '') && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-rose-600 border-rose-200 hover:bg-rose-50 px-3"
+                        onClick={() => {
+                            setEndOutcome('successful');
+                            setEndNotes('');
+                            setMeetingToEnd(m);
+                        }}
+                        title="End Meeting"
+                    >
+                        <Flag size={14} /> 
+                    </Button>
+                )}
+            </div>
+        </GlassCard>
+    );
+})}
                             </div>
                         ) : (
                             <div className="flex flex-col items-center justify-center py-16 bg-zinc-50/50 rounded-xl border border-dashed border-zinc-200">
@@ -438,6 +544,150 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                 <Button className="w-full mt-4" onClick={handleLocalSchedule}>Schedule for this Space</Button>
                             </div>
                         </Modal>
+
+                        {/* End Meeting Modal */}
+                        <Modal isOpen={!!meetingToEnd} onClose={() => !isEnding && setMeetingToEnd(null)} title="End meeting for everyone?">
+                            <div className="space-y-4">
+                                <Text variant="secondary" className="mb-2">This marks the meeting as complete and notifies all participants.</Text>
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-700 mb-2">Outcome</label>
+                                    <div className="grid grid-cols-2 gap-2 mb-4">
+                                        {[
+                                            { id: 'successful', label: '✅ Successful' },
+                                            { id: 'follow_up_needed', label: '🔄 Follow-up' },
+                                            { id: 'no_show', label: '👻 No Show' },
+                                            { id: 'inconclusive', label: '❓ Inconclusive' },
+                                        ].map(opt => (
+                                            <button
+                                                key={opt.id}
+                                                onClick={() => setEndOutcome(opt.id)}
+                                                className={`px-3 py-2 rounded-xl border text-sm transition-all ${
+                                                    endOutcome === opt.id
+                                                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700 font-bold shadow-sm'
+                                                        : 'bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50'
+                                                }`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-700 mb-2">Notes (optional)</label>
+                                    <textarea
+                                        value={endNotes}
+                                        onChange={e => setEndNotes(e.target.value)}
+                                        placeholder="Add any final unstructured notes..."
+                                        disabled={isEnding}
+                                        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-sm text-zinc-800 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 min-h-[100px]"
+                                    />
+                                </div>
+                                <div className="flex gap-3 pt-2">
+                                    <Button variant="secondary" className="flex-1" onClick={() => setMeetingToEnd(null)} disabled={isEnding}>Cancel</Button>
+                                    <Button variant="primary" className="flex-1 bg-rose-600 hover:bg-rose-700 border-rose-600 text-white" disabled={isEnding} onClick={async () => {
+                                        if (meetingToEnd && onEndMeeting) {
+                                            setIsEnding(true);
+                                            await onEndMeeting(meetingToEnd.id, endOutcome, endNotes);
+                                            setIsEnding(false);
+                                            setMeetingToEnd(null);
+                                        }
+                                    }}>
+                                        {isEnding ? 'Ending...' : 'End Meeting'}
+                                    </Button>
+                                </div>
+                            </div>
+                        </Modal>
+                    </div>
+                )}
+                {activeTab === 'Tasks' && (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-lg font-medium">Space Tasks</h3>
+                                <p className="text-xs text-zinc-500">Manage tasks and action items for this workspace.</p>
+                            </div>
+                        </div>
+
+                        <GlassCard className="p-4 mb-6">
+                            <div className="flex gap-2">
+                                <Input 
+                                    className="flex-1" 
+                                    placeholder="Add a new task for this space..." 
+                                    value={newTaskTitle} 
+                                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                                />
+                                <Button onClick={() => {
+                                    (async () => {
+                                        if (!organizationId) return;
+                                        if (!newTaskTitle.trim()) return;
+                                        try {
+                                            const { data, error } = await apiService.createTask(
+                                                {
+                                                    title: newTaskTitle.trim(),
+                                                    space_id: space.id,
+                                                    status: 'pending'
+                                                },
+                                                organizationId
+                                            );
+                                            if (error) throw error;
+                                            if (data) {
+                                                setTasks(prev => [data as any, ...prev]);
+                                                setNewTaskTitle('');
+                                                showToast('Task created.', 'success');
+                                            }
+                                        } catch (err: any) {
+                                            showToast(friendlyError(err?.message || 'Failed to create task'), 'error');
+                                        }
+                                    })();
+                                }}>
+                                    Add Task
+                                </Button>
+                            </div>
+                        </GlassCard>
+
+                        {tasksLoading ? (
+                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
+                        ) : tasks.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 bg-zinc-50/50 rounded-xl border border-dashed border-zinc-200">
+                                <ListTodo size={40} className="text-zinc-300 mb-3 opacity-50" />
+                                <p className="text-zinc-500 text-sm italic">No tasks assigned to this space.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {tasks.map(task => (
+                                    <GlassCard key={task.id} className={`p-4 flex items-center justify-between ${task.status === 'done' ? 'opacity-60 bg-zinc-50' : ''}`}>
+                                        <div className="flex items-center gap-4">
+                                            <div 
+                                                className={`h-6 w-6 rounded-full border-2 flex items-center justify-center cursor-pointer ${task.status === 'done' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-zinc-300'}`}
+                                                onClick={() => {
+                                                    (async () => {
+                                                        if (!organizationId) return;
+                                                        const nextStatus: Task['status'] = task.status === 'done' ? 'pending' : 'done';
+                                                        try {
+                                                            const { error } = await apiService.updateTask(task.id, { status: nextStatus }, organizationId);
+                                                            if (error) throw error;
+                                                            setTasks(prev => prev.map(t => (t.id === task.id ? { ...t, status: nextStatus } : t)));
+                                                        } catch (err: any) {
+                                                            showToast(friendlyError(err?.message || 'Failed to update task'), 'error');
+                                                        }
+                                                    })();
+                                                }}
+                                            >
+                                                {task.status === 'done' && <CheckSquare size={12} />}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`text-sm font-medium ${task.status === 'done' ? 'line-through text-zinc-500' : 'text-zinc-900'}`}>{task.title}</p>
+                                                <div className="flex items-center gap-3 mt-1 text-[10px] text-zinc-500">
+                                                    {task.due_date && <span className="flex items-center gap-1"><Calendar size={10} /> {new Date(task.due_date).toLocaleDateString()}</span>}
+                                                    {task.priority && <span className="uppercase tracking-wider">Priority: {task.priority}</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <Button variant="ghost" size="sm"><MoreVertical size={16} /></Button>
+                                    </GlassCard>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
                 {activeTab === 'Docs' && (

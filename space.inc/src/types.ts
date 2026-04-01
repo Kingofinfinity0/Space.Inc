@@ -69,6 +69,9 @@ export interface Meeting {
   ended_at?: string;
   updated_at: string;
   deleted_at?: string | null;
+  outcome?: 'successful' | 'follow_up_needed' | 'no_show' | 'cancelled' | 'inconclusive' | null;
+  outcome_notes?: string | null;
+  ended_by?: string | null;
 }
 
 export interface MeetingParticipant {
@@ -99,19 +102,23 @@ export interface Recording {
 
 export interface Message {
   id: string;
-  sender_id?: string;
-  sender_type: 'client' | 'staff';
+  spaceId: string;
+  organizationId?: string;
+  senderId?: string;
+  senderType: 'client' | 'staff';
+  senderName?: string;
+  senderAvatar?: string;
   content: string;
   channel?: 'general' | 'internal';
-  extension?: 'text' | 'file' | 'system';
+  extension?: 'text' | 'file' | 'system' | 'chat';
   payload?: any;
-  created_at: string;
-  updated_at?: string;
-  is_unread?: boolean;
-  space_id: string;
-  sender?: {
-    full_name: string;
-  };
+  parentId?: string;
+  threadRootId?: string;
+  replyCount?: number;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
 }
 
 export interface StaffMember {

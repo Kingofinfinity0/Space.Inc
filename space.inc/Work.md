@@ -1,102 +1,37 @@
-# Multi-Tenant Hardening Work Log
+## Sprint 2: Meeting Overhaul & Manual End Meeting Feature
 
-## Logic Flow: Hardened Gateway Pattern
-
+### Sequence Flow
 ```mermaid
 sequenceDiagram
-    participant User as Frontend Component
-    participant API as apiService (Hardened Gateway)
-    participant Auth as AuthContext (organizationId)
-    participant Edge as Supabase Edge Functions / RPC
-    participant DB as Postgres (RLS Enforced)
+    participant Staff
+    participant Dashboard
+    participant App
+    participant apiService
+    participant Backend
 
-    User->>Auth: Get current organizationId
-    Auth-->>User: organizationId (e.g., 'org_123')
-    
-    User->>API: Call method (e.g., getSpaces(orgId))
-    Note over API: Explicitly injects orgId into query
-    
-    API->>Edge: Request with organization_id filter
-    Edge->>DB: Query with RLS + Explicit org filter
-    
-    DB-->>Edge: Scoped Data
-    Edge-->>API: Hardened JSON Response
-    API-->>User: Reactive Data
+    Staff->>Dashboard: Clicks "End Meeting" on active meeting card
+    Dashboard->>Dashboard: Opens "End Meeting" Modal
+    Staff->>Dashboard: Selects outcome, enters notes, confirms
+    Dashboard->>App: handleEndMeeting(id, outcome, notes)
+    App->>apiService: endMeetingByStaff(id, outcome, notes)
+    apiService->>Backend: rpc('end_meeting_by_staff', ...)
+    Backend-->>apiService: { success: true }
+    apiService-->>App: ok
+    App->>App: fetchData(true) refresh meetings state
+    App-->>Dashboard: update UI (Meeting moves to History)
 ```
 
-## Thought Process
+### System Thought Process
+1. I will add an `onEndMeeting` callback to `App.tsx` that will call `apiService.endMeetingByStaff` and refresh the data using `fetchData(true)`.
+2. I will pass `onEndMeeting` to both `GlobalMeetingsView` and `SpaceDetailView`.
+3. In `GlobalMeetingsView`, I will add a "End Meeting" button to the Upcoming meeting cards.
+4. I will add a state `meetingToEnd` inside `GlobalMeetingsView` to trigger the End Meeting Review Modal.
+5. In `SpaceDetailView`, I will do the same: add the button and the modal to allow staff to end meetings directly from the workspace view.
+6. The modal will match the light-theme of the dashboard (using standard Headings, Text, Input/Textarea).
 
-1. **Phase 1: Gateway Enforcement**
-   - **Thought**: Direct `supabase.from` calls are a "leaky abstraction" in multi-tenant apps. Even with RLS, failing to filter in the query causes Postgres to scan more rows than necessary and relies solely on one security layer.
-   - **Action**: Moved all dashboard and view logic to `apiService.ts`. Replaced `supabase.from('table').select('*')` with calls that require `organization_id`.
+### Task List
+- [x] Update Work.md with sequence diagram.
+- [x] Add `handleEndMeeting` to `App.tsx`.
+- [x] Update `GlobalMeetingsView.tsx` props, meeting cards, and add modal.
+- [x] Update `SpaceDetailView.tsx` props, meeting cards, and add modal.
 
-2. **Phase 2: Hook Hardening**
-   - **Thought**: Realtime subscriptions were still subscribing to "all" changes or relying on implicit state.
-   - **Action**: Refactored `useRealtimeFiles` to require `organization_id`. Added server-side filters to the subscription and client-side filters to the callback for "Defense-in-Depth".
-
-3. **Phase 3: RPC & Edge Alignment**
-   - **Thought**: Frontend calls must match backend expectations.
-   - **Action**: Updated `messaging-api` and `meetings-api` (frontend calls) to ensure `organization_id` is always passed in payloads. Verified that Edge Functions call versioned SQL functions (`list_messages_v2`) that enforce tenancy.
-
-4. **Phase 4: Global Data Propogation**
-   - **Thought**: Data fetching in `App.tsx` was the primary entry point for stale/unhardened data.
-   - **Action**: Re-wrote `fetchData` in `App.tsx` to use the hardened `apiService` methods, ensuring the first load is strictly scoped.
-
-## Task List
-
-- [x] Harden `apiService.ts` method signatures
-- [x] Refactor `OwnerDashboardView.tsx` to use gateway
-- [x] Refactor `StaffDashboardView.tsx` to use gateway
-- [x] Refactor `SpaceDetailView.tsx` to use gateway
-- [x] Refactor `SpacesView.tsx` to use gateway
-- [x] Refactor `ClientPortalView.tsx` to use gateway
-- [x] Update `App.tsx` global fetch logic
-- [x] Harden `useRealtimeFiles.ts` hook
-- [x] Harden `GlobalFilesView.tsx` call sites
-- [x] Cleanup duplicate methods and lint errors in `apiService.ts`
-- [x] Audit `InboxView.tsx`, `SettingsView.tsx`, and CRM views
-
-## User Section Notes
-
-- *User mentioned Claude's version of meetings works*: Verified the meeting token payload matches the expected `{ token, roomUrl, meetingId }` structure in `apiService.ts`.
-- *Status 400 errors in file uploads*: Hardened the file upload workflow to ensures `organization_id` is passed to the `files-api` during voucher request and confirmation.
-
----
-*Last Updated: 2026-03-30*
-
-# GitHub Repo Update Work Log
-
-## Logic Flow: Update Git Repository
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant LocalRepo as Local Git Repository
-    participant RemoteRepo as GitHub (Origin)
-
-    User->>LocalRepo: Add modified files (git add)
-    User->>LocalRepo: Commit changes (git commit)
-    User->>RemoteRepo: Push current version (git push)
-```
-
-## Thought Process
-
-1. **Phase 1: Status Check**
-   - **Thought**: Before pushing, I need to know what files have changed. I see `src/App.tsx` has modifications.
-   - **Action**: Run `git status`.
-
-2. **Phase 2: Stage and Commit**
-   - **Thought**: I will stage all changed files and commit them with a descriptive message like "Update current version".
-   - **Action**: Run `git add .` and `git commit -m "Update application with latest changes"`.
-
-3. **Phase 3: Push**
-   - **Thought**: Update the remote repository with the local commits.
-   - **Action**: Run `git push origin master`.
-
-## Task List
-
-- [x] Check git status
-- [ ] Update Work.md with thought process
-- [ ] Stage all changes
-- [ ] Commit changes
-- [ ] Push to remote branch

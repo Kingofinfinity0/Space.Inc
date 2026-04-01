@@ -62,6 +62,11 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
     const [selectedSpaceForUpload, setSelectedSpaceForUpload] = useState<string>(clients[0]?.id || '');
     const [uploading, setUploading] = useState(false);
 
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    const [inviteSpaceId, setInviteSpaceId] = useState<string>(clients[0]?.id || '');
+    const [inviteEmail, setInviteEmail] = useState<string>('');
+    const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+
     const { user } = useAuth();
     const [analyticsLoading, setAnalyticsLoading] = useState(true);
     const [tasksFeed, setTasksFeed] = useState<any[]>([]);
@@ -279,6 +284,15 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
                                 </div>
                             </button>
                             <button
+                                onClick={() => setIsInviteModalOpen(true)}
+                                className="w-full flex items-center gap-3 p-3 rounded-md hover:bg-zinc-50 transition-colors border border-transparent hover:border-zinc-200 text-left"
+                            >
+                                <div className="bg-zinc-100 p-2 rounded-lg text-emerald-600">
+                                    <UserPlus size={16} />
+                                </div>
+                                <span className="text-sm font-medium">Invite Client to Space</span>
+                            </button>
+                            <button
                                 onClick={() => setIsUploadModalOpen(true)}
                                 className="w-full flex items-center gap-3 p-3 rounded-md hover:bg-zinc-50 transition-colors border border-transparent hover:border-zinc-200 text-left"
                             >
@@ -359,6 +373,69 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
                     }
                 }}
             />
+
+            {/* Quick Invite Modal */}
+            <Modal isOpen={isInviteModalOpen} onClose={() => { setIsInviteModalOpen(false); setGeneratedLink(null); setInviteEmail(''); }} title="Quick Client Invite">
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-zinc-700 mb-1">Select Space</label>
+                        <select
+                            title="Select Space"
+                            className="w-full bg-white border border-zinc-200 rounded-lg px-4 py-3 text-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#10A37F]/20 focus:border-[#10A37F]"
+                            value={inviteSpaceId}
+                            onChange={(e) => setInviteSpaceId(e.target.value)}
+                        >
+                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-zinc-700 mb-1">Client Email (Optional)</label>
+                        <Input 
+                            type="email" 
+                            placeholder="client@company.com" 
+                            value={inviteEmail} 
+                            onChange={(e) => setInviteEmail(e.target.value)} 
+                        />
+                        <p className="text-xs text-zinc-500 mt-1">If provided, an email invitation will be sent automatically.</p>
+                    </div>
+                    
+                    {generatedLink ? (
+                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-lg">
+                            <p className="text-xs font-bold text-emerald-800 mb-2">Invite Link Generated:</p>
+                            <div className="flex items-center gap-2">
+                                <input 
+                                    className="flex-1 text-xs bg-white border border-emerald-200 rounded px-2 py-1.5 focus:outline-none" 
+                                    readOnly 
+                                    value={generatedLink} 
+                                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                                />
+                                <Button size="sm" onClick={() => {
+                                    navigator.clipboard.writeText(generatedLink);
+                                    showToast("Link copied to clipboard", "success");
+                                }}>Copy</Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="pt-2">
+                            <Button
+                                className="w-full"
+                                onClick={async () => {
+                                    if (!inviteSpaceId || !organizationId) return;
+                                    try {
+                                        const res = await apiService.generateClientInviteLink(inviteSpaceId, organizationId, inviteEmail || undefined);
+                                        setGeneratedLink(window.location.origin + '/join?token=' + res.token);
+                                        showToast(inviteEmail ? "Invitation sent!" : "Link generated!", "success");
+                                    } catch (err: any) {
+                                        showToast(friendlyError(err.message), "error");
+                                    }
+                                }}
+                            >
+                                Generate Link
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 };
