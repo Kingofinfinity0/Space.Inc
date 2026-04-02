@@ -1,167 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
 import {
-    LayoutDashboard, Users, MessageSquare, Calendar, FileText, Settings, Plus, Search,
-    Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
-    Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
-    GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft, Download as DownloadIcon
+    Plus, ChevronRight, Video, Clock, ArrowRight, Flag, Trash2, Play, Download as DownloadIcon
 } from 'lucide-react';
 import {
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
-import {
-    GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
-    SkeletonLoader, SkeletonCard, SkeletonText, SkeletonImage
+    GlassCard, Button, Heading, Text, Input, Modal, Toggle
 } from '../UI/index';
-import { FileViewerModal } from '../FileViewerModal';
 import { PostMeetingDashboard } from './PostMeetingDashboard';
-import { FileUploadModal } from '../FileUploadModal';
-import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
-import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
-import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
+import { ClientSpace, Meeting, Task } from '../../types';
 import { CalendarWidget } from '../CalendarWidget';
 
-const PostMeetingDashboard: React.FC<{ meeting: Meeting; onClose: () => void }> = ({ meeting, onClose }) => {
-    const [detail, setDetail] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        apiService.getMeetingDetail(meeting.id)
-            .then(r => { if (r.data) setDetail(r.data); })
-            .finally(() => setLoading(false));
-    }, [meeting.id]);
-
-    const outcomeColor = (outcome?: string) => {
-        if (!outcome) return 'bg-zinc-100 text-zinc-500';
-        const map: Record<string, string> = {
-            successful: 'bg-emerald-100 text-emerald-700',
-            follow_up_needed: 'bg-amber-100 text-amber-700',
-            no_show: 'bg-red-100 text-red-700',
-            cancelled: 'bg-zinc-200 text-zinc-600',
-            inconclusive: 'bg-blue-100 text-blue-700',
-        };
-        return map[outcome] || 'bg-zinc-100 text-zinc-500';
-    };
-
-    if (loading) return <div className="py-8 text-center text-zinc-400">Loading...</div>;
-
-    const d = detail || meeting;
-
-    return (
-        <div className="space-y-5">
-            {/* Header */}
-            <div className="flex items-start justify-between">
-                <div>
-                    <h3 className="text-xl font-bold text-[#1D1D1D]">{d.title}</h3>
-                    <p className="text-sm text-zinc-500 mt-1">
-                        {new Date(d.starts_at).toLocaleDateString()} · {new Date(d.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                </div>
-                <div className="flex gap-2">
-                    {d.category && (
-                        <span className="px-2 py-1 bg-zinc-100 text-zinc-500 text-[10px] font-bold rounded-full uppercase">
-                            {d.category.replace(/_/g, ' ')}
-                        </span>
-                    )}
-                    {d.outcome && (
-                        <span className={`px-2 py-1 text-[10px] font-bold rounded-full uppercase ${outcomeColor(d.outcome)}`}>
-                            {d.outcome.replace(/_/g, ' ')}
-                        </span>
-                    )}
-                </div>
-            </div>
-
-            {/* Metadata strip */}
-            <div className="grid grid-cols-3 gap-3">
-                {[
-                    { label: 'Duration', value: d.duration_minutes ? `${d.duration_minutes} min` : '—' },
-                    { label: 'Participants', value: d.participants?.length ?? '—' },
-                    { label: 'Ended by', value: d.ended_by_name || '—' },
-                ].map(item => (
-                    <div key={item.label} className="bg-zinc-50 rounded-xl p-3 text-center">
-                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{item.label}</p>
-                        <p className="text-sm font-semibold text-zinc-800 mt-1">{item.value}</p>
-                    </div>
-                ))}
-            </div>
-
-            {/* Recording */}
-            {d.recording_url && d.recording_status === 'ready' ? (
-                <div className="bg-zinc-900 rounded-xl p-1">
-                    <div
-                        className="aspect-video bg-zinc-800 rounded-lg flex items-center justify-center cursor-pointer hover:bg-zinc-700 transition-colors group"
-                        onClick={() => window.open(d.recording_url, '_blank')}
-                    >
-                        <div className="text-center">
-                            <div className="h-14 w-14 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-2 group-hover:bg-white/20 transition-colors">
-                                <Play size={24} className="text-white ml-1" />
-                            </div>
-                            <p className="text-white text-sm font-medium">Watch Recording</p>
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                <div className="bg-zinc-50 rounded-xl p-6 text-center">
-                    <p className="text-zinc-400 text-sm">
-                        {d.recording_status === 'processing' ? '⏳ Recording processing...' : 'No recording available'}
-                    </p>
-                </div>
-            )}
-
-            {/* Participants */}
-            {d.participants && d.participants.length > 0 && (
-                <div>
-                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">Participants</h4>
-                    <div className="space-y-2">
-                        {d.participants.map((p: any, i: number) => (
-                            <div key={i} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-7 w-7 bg-zinc-200 rounded-full flex items-center justify-center text-xs font-bold text-zinc-600">
-                                        {p.name?.substring(0, 2).toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-zinc-800">{p.name}</p>
-                                        <p className="text-[10px] text-zinc-400 capitalize">{p.role}</p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[10px] text-zinc-400">
-                                        {p.joined_at ? new Date(p.joined_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
-                                        {p.left_at ? ` → ${new Date(p.left_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
-                                    </p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Notes */}
-            {d.outcome_notes && (
-                <div>
-                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Notes</h4>
-                    <div className="p-4 bg-zinc-50 rounded-xl text-sm text-zinc-700 leading-relaxed">
-                        {d.outcome_notes}
-                    </div>
-                </div>
-            )}
-
-            <div className="flex gap-3 pt-2">
-                <Button variant="secondary" className="flex-1" onClick={onClose}>Close</Button>
-                {d.recording_url && d.recording_status === 'ready' && (
-                    <Button variant="primary" className="flex-1" onClick={() => window.open(d.recording_url, '_blank')}>
-                        <DownloadIcon size={16} className="mr-2" /> Download
-                    </Button>
-                )}
-            </div>
-        </div>
-    );
-};
 
 // 4. Meeting Hub
 const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMeet, onDeleteMeeting, onEndMeeting, tasks }: { 
