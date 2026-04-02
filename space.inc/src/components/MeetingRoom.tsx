@@ -3,6 +3,7 @@ import { DailyProvider, useParticipant, useParticipantIds, useLocalSessionId, us
 import DailyIframe from '@daily-co/daily-js';
 import { Loader2, Video, AlertCircle, X, LogOut, Square } from 'lucide-react';
 import { VideoTile } from './meeting/VideoTile';
+import { MeetingNotepad } from './meeting/MeetingNotepad';
 import { ControlsBar } from './meeting/ControlsBar';
 import { apiService } from '../services/apiService';
 import { supabase } from '../lib/supabase';
@@ -33,6 +34,7 @@ const DEBUG_EVENTS = true;
  */
 
 const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null; onLeave: () => void; onMeetingEnded: () => void }> = ({ meetingId, roomUrl, onLeave, onMeetingEnded }) => {
+    const [isNotepadOpen, setIsNotepadOpen] = useState(false);
     const callObject = useDaily();
     const localSessionId = useLocalSessionId();
     const participantIds = useParticipantIds();
@@ -326,6 +328,8 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
                     onToggleVideo={handleToggleVideo}
                     onToggleScreenShare={handleToggleScreenShare}
                     onLeave={handleLeave}
+                    onToggleNotepad={() => setIsNotepadOpen(!isNotepadOpen)}
+                    isNotepadOpen={isNotepadOpen}
                 />
             )}
 

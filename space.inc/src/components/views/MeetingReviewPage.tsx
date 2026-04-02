@@ -1,166 +1,89 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../contexts/ToastContext';
-import { apiService } from '../../services/apiService';
 import { supabase } from '../../lib/supabase';
 import {
-    ArrowLeft, Download, Play, Pause, Volume2, Maximize2, 
-    Clock, Users, FileText, Calendar, Loader2, AlertCircle
+    Calendar, Clock, Users, FileText, Download, Play,
+    ArrowLeft, Loader2, Video, CheckCircle2, AlertCircle,
+    LayoutGrid, History, Shield, Cloud
 } from 'lucide-react';
-import {
-    GlassCard, Button, Heading, Text, Modal
-} from '../UI/index';
-
-interface MeetingDetail {
-    id: string;
-    title: string;
-    description?: string;
-    starts_at: string;
-    ended_at?: string;
-    duration_minutes?: number;
-    space_id: string;
-    space_name?: string;
-    outcome?: string;
-    outcome_notes?: string;
-    ended_by_name?: string;
-    recording_url?: string;
-    recording_status: 'none' | 'processing' | 'ready' | 'failed';
-    participants?: Array<{
-        name: string;
-        role: string;
-        joined_at: string;
-        left_at?: string;
-    }>;
-}
+import { Button, GlassCard, Heading, Text } from '../UI';
 
 interface MeetingNote {
     id: string;
-    meeting_id: string;
     user_id: string;
     content: string;
     created_at: string;
-    updated_at: string;
-    user_name?: string;
+    profiles?: {
+        full_name: string;
+        avatar_url: string;
+    };
+}
+
+interface Meeting {
+    id: string;
+    title: string;
+    starts_at: string;
+    duration_minutes: number;
+    recording_url: string;
+    recording_status: string;
+    outcome: string;
+    outcome_notes: string;
+    participants?: any[];
 }
 
 const MeetingReviewPage: React.FC = () => {
-    const { spaceId, meetingId } = useParams<{ spaceId: string; meetingId: string }>();
+    const { spaceId, meetingId } = useParams();
     const navigate = useNavigate();
-    const { user } = useAuth();
-    const { showToast } = useToast();
-
-    const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
+    const [meeting, setMeeting] = useState<Meeting | null>(null);
     const [notes, setNotes] = useState<MeetingNote[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [videoLoading, setVideoLoading] = useState(false);
-    const [signedUrl, setSignedUrl] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [videoError, setVideoError] = useState(false);
 
-    // Load meeting details and notes
     useEffect(() => {
-        if (!meetingId) return;
-
-        const loadData = async () => {
+        const fetchMeetingData = async () => {
+            setIsLoading(true);
             try {
-                setLoading(true);
+                const { data: mData, error: mErr } = await supabase
+                    .from('meetings')
+                    .select('*, participants:meeting_participants(*)')
+                    .eq('id', meetingId)
+                    .single();
 
-                // Load meeting details
-                const meetingRes = await apiService.getMeetingDetail(meetingId);
-                if (meetingRes.data) {
-                    setMeeting(meetingRes.data);
+                if (mErr) throw mErr;
+                setMeeting(mData);
 
-                    // Get signed URL for recording if available
-                    if (meetingRes.data.recording_url && meetingRes.data.recording_status === 'ready') {
-                        await getSignedUrl(meetingRes.data.recording_url);
-                    }
-                }
+                const { data: nData, error: nErr } = await supabase
+                    .from('meeting_notes')
+                    .select('*, profiles(full_name, avatar_url)')
+                    .eq('meeting_id', meetingId);
 
-                // Load meeting notes
-                await loadNotes();
-
-            } catch (error) {
-                console.error('Failed to load meeting data:', error);
-                showToast('Failed to load meeting details', 'error');
+                if (nErr) throw nErr;
+                setNotes(nData || []);
+            } catch (err) {
+                console.error('Error fetching review data:', err);
             } finally {
-                setLoading(false);
+                setIsLoading(false);
             }
         };
 
-        loadData();
-    }, [meetingId, showToast]);
+        if (meetingId) fetchMeetingData();
+    }, [meetingId]);
 
-    const loadNotes = async () => {
-        if (!meetingId) return;
-
-        try {
-            const { data, error } = await supabase
-                .from('meeting_notes')
-                .select('*')
-                .eq('meeting_id', meetingId)
-                .order('created_at', { ascending: true });
-
-            if (error) throw error;
-            setNotes(data || []);
-        } catch (error) {
-            console.error('Failed to load notes:', error);
+    const handleDownload = () => {
+        if (meeting?.recording_url) {
+            window.open(meeting.recording_url, '_blank');
         }
     };
 
-    const getSignedUrl = async (recordingPath: string) => {
-        try {
-            setVideoLoading(true);
-            const { data, error } = await supabase.storage
-                .from('meeting-recordings')
-                .createSignedUrl(recordingPath, 3600); // 1 hour expiry
-
-            if (error) throw error;
-            setSignedUrl(data.signedUrl);
-        } catch (error) {
-            console.error('Failed to get signed URL:', error);
-            showToast('Failed to load recording', 'error');
-        } finally {
-            setVideoLoading(false);
-        }
-    };
-
-    const handleDownload = async () => {
-        if (!meeting?.recording_url || !signedUrl) return;
-
-        try {
-            const response = await fetch(signedUrl);
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${meeting.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_recording.mp4`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } catch (error) {
-            console.error('Download failed:', error);
-            showToast('Failed to download recording', 'error');
-        }
-    };
-
-    const getOutcomeColor = (outcome?: string) => {
-        if (!outcome) return 'bg-gray-100 text-gray-600';
-        const colors = {
-            successful: 'bg-green-100 text-green-700',
-            follow_up_needed: 'bg-yellow-100 text-yellow-700',
-            no_show: 'bg-red-100 text-red-700',
-            cancelled: 'bg-gray-100 text-gray-600',
-            inconclusive: 'bg-blue-100 text-blue-700'
-        };
-        return colors[outcome as keyof typeof colors] || 'bg-gray-100 text-gray-600';
-    };
-
-    if (loading) {
+    if (isLoading) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="min-h-screen bg-black flex items-center justify-center">
                 <div className="text-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-                    <p className="text-gray-600">Loading meeting details...</p>
+                    <div className="relative mb-6">
+                        <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full animate-pulse" />
+                        <Loader2 className="h-12 w-12 text-emerald-500 animate-spin mx-auto relative" />
+                    </div>
+                    <p className="text-zinc-500 font-bold uppercase tracking-widest text-[10px]">Establishing Secure Link...</p>
                 </div>
             </div>
         );
@@ -168,251 +91,201 @@ const MeetingReviewPage: React.FC = () => {
 
     if (!meeting) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                <div className="text-center">
-                    <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">Meeting not found</p>
-                    <Button className="mt-4" onClick={() => navigate(-1)}>
-                        Go Back
+            <div className="min-h-screen bg-black flex items-center justify-center p-6">
+                <GlassCard className="max-w-md w-full p-12 text-center border-rose-500/20 bg-zinc-950/50 backdrop-blur-3xl rounded-[40px]">
+                    <div className="h-20 w-20 rounded-3xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 mx-auto mb-8">
+                        <AlertCircle size={40} />
+                    </div>
+                    <Heading level={2} className="text-white mb-3 text-3xl font-black tracking-tight">Meeting Inaccessible</Heading>
+                    <Text className="text-zinc-500 mb-10 font-medium">This record has been archived, deleted, or you do not have permission to access it.</Text>
+                    <Button onClick={() => navigate(-1)} className="w-full h-14 bg-white text-black font-black uppercase tracking-widest text-xs rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all">
+                        Return to Command Center
                     </Button>
-                </div>
+                </GlassCard>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-16">
-                        <div className="flex items-center">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => navigate(-1)}
-                                className="mr-4"
-                            >
-                                <ArrowLeft className="h-4 w-4 mr-2" />
-                                Back
-                            </Button>
-                            <div>
-                                <Heading level={1} className="text-xl">{meeting.title}</Heading>
-                                <Text variant="secondary" className="text-sm">
-                                    {new Date(meeting.starts_at).toLocaleDateString()} • 
-                                    {meeting.duration_minutes ? ` ${meeting.duration_minutes} min` : ''}
-                                </Text>
+        <div className="min-h-screen bg-black text-white p-4 md:p-8 lg:p-12 selection:bg-emerald-500/30">
+            <div className="max-w-7xl mx-auto mb-12 flex items-center justify-between">
+                <button
+                    onClick={() => navigate(-1)}
+                    className="group flex items-center gap-4 text-zinc-500 hover:text-white transition-all font-black text-[11px] uppercase tracking-[0.2em]"
+                >
+                    <div className="h-12 w-12 rounded-2xl bg-zinc-900 flex items-center justify-center border border-white/5 group-hover:border-white/20 group-hover:bg-zinc-800 transition-all shadow-2xl">
+                        <ArrowLeft size={20} />
+                    </div>
+                    Back to Workspace
+                </button>
+
+                <div className="hidden md:flex items-center gap-6">
+                    <div className="flex -space-x-3">
+                        {meeting.participants?.slice(0, 3).map((p, i) => (
+                            <div key={i} className="h-10 w-10 rounded-xl bg-zinc-800 border-2 border-black flex items-center justify-center text-[10px] font-black text-zinc-400">
+                                {p.participant_name?.charAt(0)}
                             </div>
-                        </div>
-                        {meeting.outcome && (
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getOutcomeColor(meeting.outcome)}`}>
-                                {meeting.outcome.replace(/_/g, ' ')}
-                            </span>
+                        ))}
+                        {meeting.participants && meeting.participants.length > 3 && (
+                            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border-2 border-black flex items-center justify-center text-[10px] font-black text-emerald-500">
+                                +{meeting.participants.length - 3}
+                            </div>
                         )}
+                    </div>
+                    <div className="h-8 w-px bg-white/5" />
+                    <div className="px-5 py-2.5 rounded-2xl bg-zinc-900/50 border border-white/5 flex items-center gap-3">
+                        <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.8)] animate-pulse" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Encrypted Review</span>
                     </div>
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Video Section */}
-                    <div className="lg:col-span-2">
-                        <GlassCard className="overflow-hidden">
-                            <div className="aspect-video bg-black">
-                                {videoLoading ? (
-                                    <div className="h-full flex items-center justify-center">
-                                        <Loader2 className="h-8 w-8 animate-spin text-white" />
-                                    </div>
-                                ) : signedUrl ? (
-                                    <video
-                                        controls
-                                        className="w-full h-full"
-                                        preload="metadata"
-                                    >
-                                        <source src={signedUrl} type="video/mp4" />
-                                        Your browser does not support the video tag.
-                                    </video>
-                                ) : meeting.recording_status === 'processing' ? (
-                                    <div className="h-full flex items-center justify-center text-white">
-                                        <div className="text-center">
-                                            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-                                            <p>Processing recording...</p>
-                                        </div>
-                                    </div>
-                                ) : meeting.recording_status === 'failed' ? (
-                                    <div className="h-full flex items-center justify-center text-white">
-                                        <div className="text-center">
-                                            <AlertCircle className="h-8 w-8 mx-auto mb-4" />
-                                            <p>Recording failed</p>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="h-full flex items-center justify-center text-white">
-                                        <div className="text-center">
-                                            <FileText className="h-8 w-8 mx-auto mb-4" />
-                                            <p>No recording available</p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            
-                            {/* Video Controls */}
-                            {signedUrl && (
-                                <div className="p-4 bg-gray-50 border-t border-gray-200">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center space-x-4">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={handleDownload}
-                                                className="flex items-center"
-                                            >
-                                                <Download className="h-4 w-4 mr-2" />
-                                                Download
-                                            </Button>
-                                        </div>
-                                        <Text variant="secondary" className="text-xs">
-                                            Recording available for download
-                                        </Text>
-                                    </div>
-                                </div>
-                            )}
-                        </GlassCard>
+            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
 
-                        {/* Meeting Info */}
-                        <GlassCard className="mt-6">
-                            <div className="p-6">
-                                <Heading level={2} className="text-lg mb-4">Meeting Details</Heading>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="flex items-center space-x-3">
-                                        <Calendar className="h-5 w-5 text-gray-400" />
-                                        <div>
-                                            <p className="text-sm font-medium">Date</p>
-                                            <p className="text-sm text-gray-600">
-                                                {new Date(meeting.starts_at).toLocaleDateString()}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center space-x-3">
-                                        <Clock className="h-5 w-5 text-gray-400" />
-                                        <div>
-                                            <p className="text-sm font-medium">Duration</p>
-                                            <p className="text-sm text-gray-600">
-                                                {meeting.duration_minutes ? `${meeting.duration_minutes} minutes` : 'N/A'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center space-x-3">
-                                        <Users className="h-5 w-5 text-gray-400" />
-                                        <div>
-                                            <p className="text-sm font-medium">Participants</p>
-                                            <p className="text-sm text-gray-600">
-                                                {meeting.participants?.length || 0} attendees
-                                            </p>
-                                        </div>
-                                    </div>
-                                    {meeting.ended_by_name && (
-                                        <div className="flex items-center space-x-3">
-                                            <FileText className="h-5 w-5 text-gray-400" />
-                                            <div>
-                                                <p className="text-sm font-medium">Ended by</p>
-                                                <p className="text-sm text-gray-600">{meeting.ended_by_name}</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {meeting.outcome_notes && (
-                                    <div className="mt-6">
-                                        <Heading level={3} className="text-md font-medium mb-2">Outcome Notes</Heading>
-                                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                                            {meeting.outcome_notes}
-                                        </p>
-                                    </div>
-                                )}
+                <div className="lg:col-span-8 space-y-10">
+                    <div className="relative overflow-hidden rounded-[48px] p-10 md:p-16 border border-white/5 bg-gradient-to-br from-zinc-900/40 via-zinc-900/20 to-transparent backdrop-blur-md">
+                        <div className="absolute top-0 right-0 w-2/3 h-full bg-gradient-to-l from-emerald-500/5 to-transparent pointer-events-none" />
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-5 mb-8">
+                                <span className="px-4 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/5">
+                                    {meeting.outcome || 'General Review'}
+                                </span>
+                                <span className="text-zinc-700 font-black text-xs">•</span>
+                                <span className="text-zinc-500 font-bold text-[11px] uppercase tracking-[0.15em]">
+                                    {new Date(meeting.starts_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                                </span>
                             </div>
-                        </GlassCard>
+                            <Heading level={1} className="text-5xl md:text-6xl font-black tracking-tight mb-8 leading-[1.1] bg-gradient-to-br from-white via-white to-zinc-500 bg-clip-text text-transparent">
+                                {meeting.title}
+                            </Heading>
+                            <div className="flex items-start gap-4">
+                                <div className="mt-1.5 h-1 w-12 rounded-full bg-emerald-500/50 shadow-lg shadow-emerald-500/20" />
+                                <Text className="text-zinc-400 text-lg md:text-xl font-medium max-w-2xl leading-relaxed">
+                                    {meeting.outcome_notes || 'No strategic outcome was recorded. This session is currently classified as a General Review. Refer to collaborative notes for execution details.'}
+                                </Text>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Notes Section */}
-                    <div className="lg:col-span-1">
-                        <GlassCard>
-                            <div className="p-6">
-                                <Heading level={2} className="text-lg mb-4">Meeting Notes</Heading>
-                                
-                                {notes.length > 0 ? (
-                                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                                        {notes.map((note) => (
-                                            <div key={note.id} className="border-b border-gray-100 pb-3 last:border-b-0">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <span className="text-sm font-medium text-gray-900">
-                                                        {note.user_name || 'Anonymous'}
-                                                    </span>
-                                                    <span className="text-xs text-gray-500">
-                                                        {new Date(note.created_at).toLocaleTimeString([], { 
-                                                            hour: '2-digit', 
-                                                            minute: '2-digit' 
-                                                        })}
-                                                    </span>
-                                                </div>
-                                                <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                                                    {note.content}
-                                                </p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-8">
-                                        <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                                        <p className="text-sm text-gray-500">No notes were taken during this meeting</p>
-                                    </div>
-                                )}
-                            </div>
-                        </GlassCard>
-
-                        {/* Participants List */}
-                        {meeting.participants && meeting.participants.length > 0 && (
-                            <GlassCard className="mt-6">
-                                <div className="p-6">
-                                    <Heading level={2} className="text-lg mb-4">Participants</Heading>
-                                    <div className="space-y-3">
-                                        {meeting.participants.map((participant, index) => (
-                                            <div key={index} className="flex items-center justify-between">
-                                                <div className="flex items-center space-x-3">
-                                                    <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                                        <span className="text-xs font-medium text-blue-600">
-                                                            {participant.name.charAt(0).toUpperCase()}
-                                                        </span>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-medium">{participant.name}</p>
-                                                        <p className="text-xs text-gray-500 capitalize">{participant.role}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-xs text-gray-500">
-                                                        {new Date(participant.joined_at).toLocaleTimeString([], { 
-                                                            hour: '2-digit', 
-                                                            minute: '2-digit' 
-                                                        })}
-                                                    </p>
-                                                    {participant.left_at && (
-                                                        <p className="text-xs text-gray-400">
-                                                            → {new Date(participant.left_at).toLocaleTimeString([], { 
-                                                                hour: '2-digit', 
-                                                                minute: '2-digit' 
-                                                            })}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                    <div className="group relative rounded-[48px] overflow-hidden border border-white/5 bg-zinc-950 aspect-video shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] ring-1 ring-white/5 transition-all duration-700 hover:ring-emerald-500/20">
+                        {meeting.recording_url ? (
+                            <video
+                                src={meeting.recording_url}
+                                controls
+                                className="w-full h-full object-cover"
+                            />
+                        ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center p-16 text-center bg-zinc-900/10">
+                                <div className="h-32 w-32 rounded-[40px] bg-white/[0.02] border border-white/5 flex items-center justify-center text-zinc-800 mb-10 relative">
+                                    <div className="absolute inset-0 bg-emerald-500/5 blur-3xl rounded-full" />
+                                    <Video size={56} className="relative" />
                                 </div>
-                            </GlassCard>
+                                <Heading level={2} className="text-zinc-400 mb-3 text-2xl font-black">Decrypting Recording</Heading>
+                                <Text className="text-zinc-600 max-w-sm mx-auto font-medium">
+                                    The session stream is currently being processed and transferred to secure storage.
+                                </Text>
+                            </div>
+                        )}
+
+                        {meeting.recording_url && (
+                            <div className="absolute bottom-10 right-10 opacity-0 group-hover:opacity-100 transition-all duration-700 transform translate-y-4 group-hover:translate-y-0 scale-95 group-hover:scale-100">
+                                <button
+                                    onClick={handleDownload}
+                                    className="flex items-center gap-4 px-8 py-4 bg-white text-black font-black text-[11px] uppercase tracking-[0.2em] rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.4)] hover:scale-105 active:scale-95 transition-all"
+                                >
+                                    <Download size={18} />
+                                    Export Session Data
+                                </button>
+                            </div>
                         )}
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {[
+                            { label: 'Strategic Runtime', value: `${meeting.duration_minutes || '0'} Minutes`, icon: Clock },
+                            { label: 'Personnel Count', value: `${meeting.participants?.length || 0} Members`, icon: Users },
+                            { label: 'Security Layer', value: '256-bit AES', icon: Shield },
+                        ].map((stat, i) => (
+                            <div key={i} className="p-8 rounded-[40px] bg-zinc-900/20 border border-white/5 hover:border-emerald-500/20 transition-all duration-500 group shadow-xl">
+                                <div className="h-12 w-12 rounded-2xl bg-zinc-950 flex items-center justify-center mb-6 group-hover:bg-emerald-500/10 group-hover:text-emerald-500 transition-colors border border-white/5">
+                                    <stat.icon size={22} />
+                                </div>
+                                <div className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.2em] mb-2">{stat.label}</div>
+                                <div className="text-2xl font-black text-white tracking-tight">{stat.value}</div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
+
+                <div className="lg:col-span-4 space-y-10">
+                    <div className="rounded-[48px] border border-white/5 bg-zinc-900/20 overflow-hidden backdrop-blur-xl shadow-2xl">
+                        <div className="p-10 border-b border-white/5 flex items-center justify-between bg-zinc-950/20">
+                            <div>
+                                <Heading level={3} className="text-2xl font-black tracking-tight mb-1">Session Notes</Heading>
+                                <p className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">Aggregated Intel</p>
+                            </div>
+                            <div className="h-12 w-12 rounded-2xl bg-zinc-950 flex items-center justify-center text-zinc-700 border border-white/5">
+                                <FileText size={20} />
+                            </div>
+                        </div>
+                        <div className="p-10 space-y-10 max-h-[800px] overflow-y-auto scrollbar-hide">
+                            {notes.length === 0 ? (
+                                <div className="text-center py-20 flex flex-col items-center">
+                                    <div className="h-16 w-16 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-center text-zinc-800 mb-6">
+                                        <FileText size={32} />
+                                    </div>
+                                    <p className="text-zinc-600 font-black text-xs uppercase tracking-widest">No Intelligence Gathered</p>
+                                </div>
+                            ) : (
+                                notes.map((note) => (
+                                    <div key={note.id} className="group animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                        <div className="flex items-center gap-4 mb-5">
+                                            <div className="h-8 w-8 rounded-xl bg-zinc-800 flex items-center justify-center text-[11px] font-black text-zinc-400 border border-white/5 group-hover:border-emerald-500/20 transition-colors">
+                                                {note.profiles?.full_name?.charAt(0) || 'U'}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.1em]">
+                                                    {note.profiles?.full_name || 'Anonymous'}
+                                                </div>
+                                                <div className="text-[9px] text-zinc-700 font-black uppercase tracking-widest mt-0.5">
+                                                    {new Date(note.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="p-7 rounded-[32px] bg-white/[0.02] border border-white/5 group-hover:bg-white/[0.04] transition-all duration-500">
+                                            <Text className="text-zinc-400 text-[15px] leading-relaxed font-medium">
+                                                {note.content}
+                                            </Text>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="rounded-[48px] border border-white/5 bg-zinc-900/20 overflow-hidden shadow-2xl">
+                        <div className="p-10 border-b border-white/5 bg-zinc-950/20">
+                            <Heading level={3} className="text-2xl font-black tracking-tight">Personnel</Heading>
+                        </div>
+                        <div className="p-10 space-y-5">
+                            {meeting.participants?.map((p, i) => (
+                                <div key={i} className="group flex items-center justify-between p-5 rounded-[24px] bg-zinc-950/50 border border-white/5 hover:border-emerald-500/20 transition-all duration-300">
+                                    <div className="flex items-center gap-4">
+                                        <div className="h-10 w-10 rounded-[14px] bg-emerald-500/10 flex items-center justify-center text-emerald-500 font-black text-xs border border-emerald-500/20">
+                                            {p.participant_name?.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <div className="text-sm font-black text-zinc-200 tracking-tight">{p.participant_name}</div>
+                                            <div className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest capitalize">{p.role || 'Participant'}</div>
+                                        </div>
+                                    </div>
+                                    <div className="h-2 w-2 rounded-full bg-zinc-800 group-hover:bg-emerald-500 transition-colors shadow-[0_0_8px_rgba(16,185,129,0)] group-hover:shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     );
