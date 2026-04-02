@@ -332,6 +332,11 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
                     isNotepadOpen={isNotepadOpen}
                 />
             )}
+            <MeetingNotepad
+                meetingId={meetingId}
+                isOpen={isNotepadOpen}
+                onClose={() => setIsNotepadOpen(false)}
+            />
 
             {/* End Meeting Confirmation Modal */}
             {showEndConfirm && (
@@ -504,6 +509,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, roomUrl: in
     }, [meetingId]);
 
     const handleMeetingEnded = useCallback(async () => {
+        // Redirection fix: Call the parent onLeave to reset activeMeetingId
+        onLeave();
         if (endMeetingCalledRef.current) return;
         endMeetingCalledRef.current = true;
 
