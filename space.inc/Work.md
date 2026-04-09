@@ -86,3 +86,25 @@ I will verify the changes by checking if there are any other hardcoded URLs or i
 ## USER SECTION NOTES
 - `inviteService.ts` needs to send `space_id` (not `spaceId`) in the request body for the regenerate action.
     - Status: Confirmed. The current implementation uses `space_id: spaceId` in the request body for `regenerate_space_link`, `send_client`, and `get_space_invite_link`.
+
+### 4. Deploy to Vercel
+I will deploy the current application code to Vercel manually since the GitHub integration seems to have failed to trigger a build.
+
+**Sequence Diagram:**
+```mermaid
+sequenceDiagram
+    participant Local as Local Machine (Antigravity)
+    participant VercelCLI as Vercel CLI
+    participant VercelCloud as Vercel Cloud
+    
+    Local->>VercelCLI: vercel link (Check if project is linked)
+    Local->>VercelCLI: vercel pull (Pull production environment variables)
+    Local->>VercelCLI: vercel deploy --prod (Push to Production)
+    VercelCloud-->>Local: Deployment Success & URL
+```
+
+**Task List:**
+- [ ] Check if Vercel CLI is installed.
+- [ ] Verify project linkage to Vercel.
+- [ ] Execute `vercel deploy --prod` to push current local changes to production.
+- [ ] Provide the deployment URL to the user.
