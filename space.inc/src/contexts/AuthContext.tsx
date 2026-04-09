@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase, onAuthStateChange, getSession } from '../lib/supabase';
 import { apiService } from '../services/apiService';
+import { inviteService } from '../services/inviteService';
+import { useNavigate } from 'react-router-dom';
 
 type AuthContextType = {
   user: User | null;
@@ -31,8 +33,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [userRole, setUserRole] = useState<string | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Refs to prevent redundant fetches
+  const profileCacheRef = useRef<Record<string, any>>({});
+  const capabilitiesCacheRef = useRef<boolean>(false);
 
   const refreshCapabilities = async () => {
+    if (capabilitiesCacheRef.current) {
+      console.log('[AuthContext] Capabilities already cached, skipping fetch');
+      return;
+    }
+    
     try {
       console.log('[AuthContext] Refreshing capability lens...');
       const { data, error } = await apiService.getCapabilityLens();
@@ -41,6 +52,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCapabilityCache(data);
         setUserRole(data.role);
         setOrganizationId(data.org_id);
+        capabilitiesCacheRef.current = true;
         // Sync legacy capabilities array for backward compatibility
         // (Collecting all unique capability keys from assigned spaces)
         const allCaps = new Set<string>();
@@ -95,6 +107,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const fetchProfile = async (uid: string) => {
     if (!uid) return;
+    
+    // Check cache first
+    if (profileCacheRef.current[uid]) {
+      console.log(`[AuthContext] Profile for ${uid} already cached, skipping fetch`);
+      setProfile(profileCacheRef.current[uid]);
+      return;
+    }
+    
     try {
       console.log(`[AuthContext] Fetching profile for ${uid}...`);
       const { data, error } = await supabase
@@ -105,6 +125,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (error) throw error;
       setProfile(data);
+      profileCacheRef.current[uid] = data;
     } catch (err) {
       console.warn('Error syncing context:', err);
     }
@@ -143,10 +164,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (event === 'SIGNED_IN' && currentSession.user.app_metadata?.invitation_id) {
              console.log("[AuthContext] Found invitation in app_metadata, completing join...");
              try {
-                await apiService.acceptInvitation2(currentSession.user.app_metadata.invitation_id);
+                await apiService.acceptInvitation(currentSession.user.app_metadata.invitation_id);
              } catch (err) {
                 console.error("[AuthContext] Error accepting invitation during login:", err);
              }
+          }
+
+          // Handle pending invite tokens
+          if (event === 'SIGNED_IN') {
+            const pending = inviteService.getAndClearPendingToken();
+            if (pending) {
+              const { token, type } = pending;
+              console.log(`[AuthContext] Found pending ${type} invite token, accepting...`);
+              try {
+                if (type === 'space') {
+                  const result = await inviteService.acceptSpaceInvite(token, currentSession.access_token);
+                  if (result.success && result.data) {
+                    window.location.href = result.data.redirect_path;
+                    return;
+                  } else {
+                    console.error("[AuthContext] Failed to accept space invite:", (result as any).error_code);
+                  }
+                } else if (type === 'email') {
+                  const result = await inviteService.acceptEmailInvite(token, currentSession.access_token);
+                  if (result.success && result.data) {
+                    window.location.href = result.data.redirect_path;
+                    return;
+                  } else {
+                    console.error("[AuthContext] Failed to accept email invite:", (result as any).error_code);
+                  }
+                }
+              } catch (err) {
+                console.error(`[AuthContext] Error accepting ${type} invite:`, err);
+              }
+            }
           }
 
           await Promise.all([
@@ -162,6 +213,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCapabilityCache(null);
         setUserRole(null);
         setOrganizationId(null);
+        // Clear caches on sign out
+        profileCacheRef.current = {};
+        capabilitiesCacheRef.current = false;
       }
       setLoading(false);
     });

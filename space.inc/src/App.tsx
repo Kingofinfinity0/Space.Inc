@@ -65,6 +65,7 @@ import { InviteStaffModal } from './components/views/InviteStaffModal';
 import { MeetingRoom } from './components/MeetingRoom';
 import { Routes, Route } from 'react-router-dom';
 import JoinView from './components/views/JoinView';
+import AcceptInviteView from './components/views/AcceptInviteView';
 import { NotificationBell } from './components/NotificationBell';
 
 const ErrorView = ({ message }: { message: string }) => (
@@ -91,6 +92,7 @@ const App = () => {
     const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
     const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
     const [activeMeetingRoomUrl, setActiveMeetingRoomUrl] = useState<string | null>(null);
+    const [meetingEntrySource, setMeetingEntrySource] = useState<{ view: ViewState; spaceId?: string } | null>(null);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [lastInviteData, setLastInviteData] = useState<{ link: string | null, email: string, status?: string, invite_id?: string } | null>(null);
     const [copiedLink, setCopiedLink] = useState(false);
@@ -205,6 +207,30 @@ const App = () => {
     };
 
     const handleJoinMeeting = (meetingId: string) => {
+        // Find the meeting to determine which space it belongs to
+        const meeting = meetings.find(m => m.id === meetingId);
+        
+        // Track where user joined from before entering meeting
+        if (currentView === ViewState.SPACE_DETAIL) {
+            // User is already in a space detail view
+            setMeetingEntrySource({ 
+                view: currentView, 
+                spaceId: selectedSpaceId 
+            });
+        } else if (meeting && currentView === ViewState.MEETINGS) {
+            // User joined from global meetings, redirect to this space's meetings tab
+            setMeetingEntrySource({ 
+                view: ViewState.SPACE_DETAIL, 
+                spaceId: meeting.space_id 
+            });
+        } else {
+            // Default case - redirect to current view
+            setMeetingEntrySource({ 
+                view: currentView, 
+                spaceId: currentView === ViewState.SPACE_DETAIL ? selectedSpaceId : undefined 
+            });
+        }
+        
         setActiveMeetingId(meetingId);
     };
 
@@ -229,8 +255,12 @@ const App = () => {
 
             if (error) throw error;
             if (newSpace) {
+                // Handle both direct response and nested response structures
+                const spaceData = newSpace.space || newSpace;
+                const invitationToken = spaceData.invitation_token;
+                
                 const optimisticSpace: any = {
-                    id: newSpace.id || newSpace,
+                    id: spaceData.id || newSpace.id || newSpace,
                     name: data.name || 'New Client',
                     description: `Workspace for ${data.name || 'New Client'}`,
                     status: 'active',
@@ -242,6 +272,7 @@ const App = () => {
                     member_count: 0,
                     last_activity_at: new Date().toISOString(),
                     organization_id: profile?.organization_id || '',
+                    invitation_token: invitationToken,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 };
@@ -250,6 +281,15 @@ const App = () => {
                 setCurrentView(ViewState.SPACE_DETAIL);
                 fetchData();
                 showToast("Space Created Successfully!", "success");
+                
+                // Show invite URL immediately after creation
+                if (invitationToken) {
+                    const inviteUrl = `https://app.space.inc/join/${invitationToken}`;
+                    setTimeout(() => {
+                        navigator.clipboard.writeText(inviteUrl);
+                        showToast("Invite link copied to clipboard!", "success");
+                    }, 1000);
+                }
             }
         } catch (err: any) {
             showToast(`Error creating space: ${err.message}`, "error");
@@ -490,7 +530,8 @@ const App = () => {
 
     return (
         <Routes>
-            <Route path="/join" element={<JoinView />} />
+            <Route path="/join/:token" element={<JoinView />} />
+            <Route path="/accept-invite" element={<AcceptInviteView />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/spaces/:spaceId/meetings/:meetingId/review" element={<MeetingReviewPage />} />
@@ -576,7 +617,20 @@ const App = () => {
                                 <MeetingRoom 
                                     meetingId={activeMeetingId}
                                     roomUrl={activeMeetingRoomUrl}
-                                    onLeave={() => { setActiveMeetingId(null); setActiveMeetingRoomUrl(null); }}
+                                    onLeave={() => { 
+                // Redirect user back to where they came from
+                if (meetingEntrySource) {
+                    if (meetingEntrySource.spaceId) {
+                        setSelectedSpaceId(meetingEntrySource.spaceId);
+                        setCurrentView(ViewState.SPACE_DETAIL);
+                    } else {
+                        setCurrentView(meetingEntrySource.view);
+                    }
+                    setMeetingEntrySource(null);
+                }
+                setActiveMeetingId(null); 
+                setActiveMeetingRoomUrl(null); 
+            }}
                                 />
                             )}
 

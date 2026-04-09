@@ -1,144 +1,137 @@
 import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { apiService } from '../../services/apiService';
+import { inviteService, SpaceInviteToken, AcceptSpaceInviteResponse } from '../../services/inviteService';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import '../../styles/JoinView.css';
 
 type PageStatus = 'loading' | 'valid' | 'invalid' | 'authing' | 'done' | 'error';
 
-interface InviteContext {
-    valid: boolean;
-    status?: string;
-    org_name?: string;
-    inviter_name?: string;
-    invited_email?: string;
-    role?: string;
-}
-
-// ─── Utility ────────────────────────────────────────────────────────────────
-
-async function waitForSession(maxMs = 5000): Promise<string | null> {
-    const interval = 300;
-    const attempts = Math.ceil(maxMs / interval);
-    for (let i = 0; i < attempts; i++) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session?.access_token) return data.session.access_token;
-        await new Promise(r => setTimeout(r, interval));
-    }
-    return null;
-}
-
-// ─── Component ──────────────────────────────────────────────────────────────
-
 export default function JoinView() {
-    // ✅ 1. Reads token from URL
-    const token = new URLSearchParams(window.location.search).get('token') ?? '';
+    const { token } = useParams<{ token: string }>();
+    const navigate = useNavigate();
+    const { user, session } = useAuth();
+    const { showToast } = useToast();
 
-    const [context, setContext]       = useState<InviteContext | null>(null);
+    const [inviteData, setInviteData] = useState<SpaceInviteToken | null>(null);
     const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
-    const [mode, setMode]             = useState<'signup' | 'login'>('signup');
-    const [email, setEmail]           = useState('');
-    const [password, setPassword]     = useState('');
-    const [fullName, setFullName]     = useState('');
-    const [statusMsg, setStatusMsg]   = useState('');
-    const [errorMsg, setErrorMsg]     = useState('');
+    const [errorMsg, setErrorMsg] = useState('');
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-    // ✅ 2. Calls validate_invitation_context on mount — shows org name, inviter, role
+    // Check authentication status on mount
     useEffect(() => {
-        if (!token) { setPageStatus('invalid'); setErrorMsg('No invitation token in URL.'); return; }
+        const checkAuth = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            setIsAuthenticated(!!session);
+        };
+        checkAuth();
+    }, []);
 
-        apiService.validateInvitationContext(token)
-            .then((data: InviteContext) => {
-                setContext(data);
+    // Resolve the token on mount
+    useEffect(() => {
+        if (!token) {
+            setPageStatus('invalid');
+            setErrorMsg('No invitation token in URL.');
+            return;
+        }
+
+        const resolveToken = async () => {
+            try {
+                const data = await inviteService.resolveSpaceToken(token);
+                setInviteData(data);
+                
                 if (data.valid) {
-                    // ✅ 3. Pre-fill email from invite context (read-only)
-                    setEmail(data.invited_email ?? '');
                     setPageStatus('valid');
                 } else {
                     setPageStatus('invalid');
+                    setErrorMsg(getErrorMessage(data.error_code || 'INVALID_TOKEN'));
                 }
-            })
-            .catch(() => {
+            } catch (err: any) {
+                console.error('Error resolving token:', err);
                 setPageStatus('invalid');
-            });
+                setErrorMsg('Failed to verify invitation. Please try again.');
+            }
+        };
+
+        resolveToken();
     }, [token]);
 
-    // ✅ 4–7. On submit: auth first → poll session → accept_invitation → redirect
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setErrorMsg('');
-        setPageStatus('authing');
-
-        try {
-            // Step 1: Authenticate
-            if (mode === 'signup') {
-                setStatusMsg('Creating your account…');
-                const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-                    email,
-                    password,
-                    options: { data: { full_name: fullName, invite_token: token } }
-                });
-                if (signUpError) throw signUpError;
-
-                // ✅ If signUp returned no session, email already exists — fall back to signIn
-                if (!signUpData.session) {
-                    setStatusMsg('Account exists. Signing in…');
-                    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-                    if (signInError) {
-                        throw new Error('An account with this email already exists. Use the "Sign In" tab or check your password.');
-                    }
-                }
-            } else {
-                setStatusMsg('Signing in…');
-                const { error } = await supabase.auth.signInWithPassword({ email, password });
-                if (error) throw error;
-            }
-
-            // ✅ 5. Poll getSession() until access_token confirmed
-            setStatusMsg('Confirming session…');
-            const accessToken = await waitForSession(8000);
-            if (!accessToken) throw new Error('Session did not initialise. Please try signing in manually.');
-
-            // ✅ 6. AFTER session confirmed: call accept_invitation
-            setStatusMsg('Joining workspace…');
-            const result = await apiService.acceptInvitation(token);
-
-            // ✅ 7. Navigate to redirect_path from RPC response
-            setPageStatus('done');
-            const path = result?.redirect_path || (result?.role === 'client' ? '/client/portal' : '/dashboard');
-            window.location.href = path;
-
-        } catch (err: any) {
-            setErrorMsg(err.message || 'Something went wrong. Please try again.');
-            setPageStatus('valid'); // reset to form
+    const getErrorMessage = (errorCode: string): string => {
+        switch (errorCode) {
+            case 'INVALID_TOKEN':
+                return 'This invite link is invalid.';
+            case 'LINK_EXPIRED':
+                return 'This invite link has expired.';
+            case 'INVITE_FULL':
+                return 'This space is at capacity.';
+            default:
+                return 'This invitation link is invalid or does not exist.';
         }
     };
 
-    // ─── Render ─────────────────────────────────────────────────────────────
+    const handleJoinClick = async () => {
+        if (!token || !session?.access_token) {
+            setErrorMsg('Authentication required to join.');
+            return;
+        }
+
+        setPageStatus('authing');
+        setErrorMsg('');
+
+        try {
+            const result = await inviteService.acceptSpaceInvite(token, session.access_token);
+            
+            if (result.success && result.data) {
+                setPageStatus('done');
+                showToast('Successfully joined the space!', 'success');
+                
+                // Navigate to the correct redirect path
+                setTimeout(() => {
+                    navigate(result.data!.redirectPath);
+                }, 1000);
+            } else {
+                setPageStatus('valid');
+                setErrorMsg(getErrorMessage(result.error_code || 'INVALID_TOKEN'));
+            }
+        } catch (err: any) {
+            console.error('Error accepting invite:', err);
+            setPageStatus('valid');
+            setErrorMsg('Failed to join space. Please try again.');
+        }
+    };
+
+    const handleAuthClick = () => {
+        if (!token) return;
+        
+        // Store the token for post-auth retrieval
+        inviteService.storePendingToken(token);
+        
+        // Redirect to signup with the join URL as the redirect
+        navigate(`/signup?redirect=/join/${token}`);
+    };
 
     // Loading state
-    if (pageStatus === 'loading') return (
-        <div className="join-view-page">
-            <div className="join-view-center">
-                <div className="join-view-spinner" />
-                <p className="join-view-verify-text">Verifying invitation…</p>
+    if (pageStatus === 'loading') {
+        return (
+            <div className="join-view-page">
+                <div className="join-view-center">
+                    <div className="join-view-spinner" />
+                    <p className="join-view-verify-text">Verifying invitation…</p>
+                </div>
             </div>
-        </div>
-    );
+        );
+    }
 
     // Invalid state
     if (pageStatus === 'invalid') {
-        const msg =
-            context?.status === 'expired'  ? 'This invitation link has expired.' :
-            context?.status === 'revoked'  ? 'This invitation has been revoked.' :
-            context?.status === 'accepted' ? 'This invitation has already been accepted.' :
-            errorMsg || 'This invitation link is invalid or does not exist.';
         return (
             <div className="join-view-page">
                 <div className="join-view-card join-view-center">
                     <div className="join-view-logo"><div className="join-view-logo-box">S</div>Space.inc</div>
                     <div className="join-view-invalid-icon">❌</div>
                     <h2 className="join-view-title">Invitation Invalid</h2>
-                    <p className="join-view-subtitle join-view-spacing-b24">{msg}</p>
+                    <p className="join-view-subtitle join-view-spacing-b24">{errorMsg}</p>
                     <p className="join-view-footer-info">
                         Contact the person who invited you for a fresh link.
                     </p>
@@ -148,17 +141,37 @@ export default function JoinView() {
     }
 
     // In-progress state
-    if (pageStatus === 'authing' || pageStatus === 'done') return (
-        <div className="join-view-page">
-            <div className="join-view-card join-view-center">
-                <div className="join-view-logo"><div className="join-view-logo-box">S</div>Space.inc</div>
-                <div className="join-view-spinner" />
-                <p className="join-view-verify-text">{statusMsg || 'Please wait…'}</p>
+    if (pageStatus === 'authing' || pageStatus === 'done') {
+        return (
+            <div className="join-view-page">
+                <div className="join-view-card join-view-center">
+                    <div className="join-view-logo"><div className="join-view-logo-box">S</div>Space.inc</div>
+                    <div className="join-view-spinner" />
+                    <p className="join-view-verify-text">
+                        {pageStatus === 'done' ? 'Redirecting...' : 'Joining workspace…'}
+                    </p>
+                </div>
             </div>
-        </div>
-    );
+        );
+    }
 
-    // Valid state — ✅ email/password form with pre-filled read-only email
+    // Valid state - show preview and action buttons
+    if (!inviteData?.valid) {
+        return (
+            <div className="join-view-page">
+                <div className="join-view-card join-view-center">
+                    <div className="join-view-logo"><div className="join-view-logo-box">S</div>Space.inc</div>
+                    <h2 className="join-view-title">Invalid Invitation</h2>
+                    <p className="join-view-subtitle">This invitation is not valid.</p>
+                </div>
+            </div>
+        );
+    }
+
+    const { organizationName, spaceName, spaceDescription, config } = inviteData;
+    const isExpiringSoon = config?.expiresAt && new Date(config.expiresAt) < new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const capacityInfo = config?.maxUses ? `${config.useCount || 0} of ${config.maxUses} spots filled` : null;
+
     return (
         <div className="join-view-page">
             <div className="join-view-card">
@@ -166,67 +179,47 @@ export default function JoinView() {
 
                 <div className="join-view-center join-view-spacing-b28">
                     <div className="join-view-rocket-icon">🚀</div>
-                    <h2 className="join-view-title">You're invited</h2>
+                    <h2 className="join-view-title">You're invited to join</h2>
                     <p className="join-view-subtitle">
-                        <strong className="join-view-text-bold">{context?.inviter_name}</strong> invited you to join{' '}
-                        <strong className="join-view-text-bold">{context?.org_name}</strong>
+                        <strong className="join-view-text-bold">{spaceName}</strong>
+                        {organizationName && (
+                            <>
+                                {' at '}
+                                <strong className="join-view-text-bold">{organizationName}</strong>
+                            </>
+                        )}
                     </p>
-                    <span className="join-view-badge">{context?.role}</span>
-                </div>
+                    
+                    {spaceDescription && (
+                        <p className="join-view-description">{spaceDescription}</p>
+                    )}
 
-                {/* Mode tabs */}
-                <div className="join-view-tabs">
-                    <button 
-                        className={`join-view-tab ${mode === 'signup' ? 'active' : ''}`} 
-                        onClick={() => setMode('signup')}
-                    >
-                        Create Account
-                    </button>
-                    <button 
-                        className={`join-view-tab ${mode === 'login' ? 'active' : ''}`} 
-                        onClick={() => setMode('login')}
-                    >
-                        Sign In
-                    </button>
+                    {capacityInfo && (
+                        <div className="join-view-capacity">
+                            <span className="join-view-capacity-text">{capacityInfo}</span>
+                        </div>
+                    )}
+
+                    {isExpiringSoon && (
+                        <div className="join-view-expiry-warning">
+                            <span className="join-view-expiry-text">⚠️ This invite expires soon</span>
+                        </div>
+                    )}
                 </div>
 
                 {errorMsg && <div className="join-view-err">{errorMsg}</div>}
 
-                <form onSubmit={handleSubmit}>
-                    {mode === 'signup' && (
-                        <input
-                            className="join-view-input"
-                            type="text"
-                            placeholder="Full name"
-                            value={fullName}
-                            onChange={e => setFullName(e.target.value)}
-                            required
-                        />
+                <div className="join-view-action-buttons">
+                    {isAuthenticated ? (
+                        <button className="join-view-btn" onClick={handleJoinClick}>
+                            Join Space →
+                        </button>
+                    ) : (
+                        <button className="join-view-btn" onClick={handleAuthClick}>
+                            Sign Up to Join →
+                        </button>
                     )}
-
-                    {/* ✅ Email pre-filled, read-only */}
-                    <input
-                        className="join-view-input readonly"
-                        type="email"
-                        value={email}
-                        readOnly
-                        placeholder="Email"
-                    />
-
-                    <input
-                        className="join-view-input"
-                        type="password"
-                        placeholder={mode === 'signup' ? 'Choose a password (min 6 chars)' : 'Password'}
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        required
-                        minLength={6}
-                    />
-
-                    <button className="join-view-btn" type="submit">
-                        {mode === 'signup' ? 'Create Account & Join →' : 'Sign In & Join →'}
-                    </button>
-                </form>
+                </div>
 
                 <p className="join-view-footer">
                     Secure invitation · One-time use

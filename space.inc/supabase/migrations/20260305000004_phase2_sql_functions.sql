@@ -403,21 +403,97 @@ $$;
 -- Canonical aliases for meeting lifecycle functions
 CREATE OR REPLACE FUNCTION public.start_meeting(p_meeting_id uuid, p_daily_room_url text DEFAULT NULL, p_daily_room_name text DEFAULT NULL)
 RETURNS public.meetings LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_meeting public.meetings; BEGIN
-  RETURN public.start_meeting_v2(p_meeting_id, p_daily_room_url, p_daily_room_name);
+DECLARE
+  v_org_id  uuid;
+  v_meeting public.meetings;
+BEGIN
+  v_org_id := public.get_my_org_id_secure();
+
+  UPDATE public.meetings
+  SET status = 'active',
+      started_at = now(),
+      daily_room_url = COALESCE(p_daily_room_url, daily_room_url),
+      daily_room_name = COALESCE(p_daily_room_name, daily_room_name),
+      updated_at = now()
+  WHERE id = p_meeting_id AND organization_id = v_org_id
+  RETURNING * INTO v_meeting;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'MEETING_NOT_FOUND'; END IF;
+
+  RETURN v_meeting;
 END; $$;
 
 CREATE OR REPLACE FUNCTION public.end_meeting(p_meeting_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN PERFORM public.end_meeting_v2(p_meeting_id); END; $$;
+DECLARE
+  v_org_id uuid;
+BEGIN
+  v_org_id := public.get_my_org_id_secure();
+
+  UPDATE public.meetings
+  SET status = 'ended',
+      ended_at = now(),
+      updated_at = now()
+  WHERE id = p_meeting_id AND organization_id = v_org_id;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'MEETING_NOT_FOUND'; END IF;
+END; $$;
 
 CREATE OR REPLACE FUNCTION public.join_meeting(p_meeting_id uuid)
 RETURNS public.meetings LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN RETURN public.join_meeting_v2(p_meeting_id); END; $$;
+DECLARE
+  v_org_id  uuid;
+  v_meeting public.meetings;
+BEGIN
+  v_org_id := public.get_my_org_id_secure();
+
+  SELECT * INTO v_meeting
+  FROM public.meetings
+  WHERE id = p_meeting_id AND organization_id = v_org_id;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'MEETING_NOT_FOUND'; END IF;
+
+  -- Insert participant record
+  INSERT INTO public.meeting_participants (meeting_id, profile_id, role, joined_at)
+  VALUES (p_meeting_id, auth.uid(), (SELECT role FROM public.profiles WHERE id = auth.uid()), now())
+  ON CONFLICT DO NOTHING;
+
+  RETURN v_meeting;
+END; $$;
 
 CREATE OR REPLACE FUNCTION public.cancel_meeting(p_meeting_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN PERFORM public.cancel_meeting_v2(p_meeting_id); END; $$;
+DECLARE
+  v_org_id  uuid;
+  v_space_id uuid;
+  v_title text;
+BEGIN
+  v_org_id := public.get_my_org_id_secure();
+
+  SELECT space_id, title INTO v_space_id, v_title
+  FROM public.meetings
+  WHERE id = p_meeting_id AND organization_id = v_org_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'MEETING_NOT_FOUND';
+  END IF;
+
+  UPDATE public.meetings
+  SET status = 'cancelled',
+      deleted_at = now(),
+      updated_at = now()
+  WHERE id = p_meeting_id;
+
+  INSERT INTO public.activity_logs (organization_id, user_id, space_id, action_type, metadata)
+  VALUES (
+    v_org_id, auth.uid(), v_space_id,
+    'meeting_cancelled',
+    jsonb_build_object(
+      'title', v_title,
+      'meeting_id', p_meeting_id
+    )
+  );
+END; $$;
 
 
 -- -----------------------------------------------------------------------------

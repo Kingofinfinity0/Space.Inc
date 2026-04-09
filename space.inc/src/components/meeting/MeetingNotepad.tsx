@@ -131,7 +131,7 @@ export const MeetingNotepad: React.FC<MeetingNotepadProps> = ({ meetingId, isOpe
     if (!isOpen) return null;
 
     return (
-        <div className="fixed top-24 right-6 bottom-32 w-[90vw] md:w-[450px] bg-zinc-950/95 backdrop-blur-3xl border border-white/10 rounded-[48px] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.9)] z-[500] flex flex-col overflow-hidden animate-in slide-in-from-right duration-700 ring-1 ring-white/10">
+        <div className="fixed inset-4 md:inset-6 lg:inset-8 bg-zinc-950/95 backdrop-blur-3xl border border-white/10 rounded-[32px] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.9)] z-[600] flex flex-col overflow-hidden animate-in fade-in slide-in-from-right duration-500 ring-1 ring-white/10 md:max-w-[500px] md:left-auto md:right-6 md:top-6 md:bottom-6 md:inset-y-6 md:w-[450px]">
             {/* Header */}
             <div className="p-10 border-b border-white/5 bg-gradient-to-br from-zinc-900/50 to-transparent flex items-center justify-between">
                 <div className="flex items-center gap-5">
@@ -269,9 +269,20 @@ export const MeetingNotepad: React.FC<MeetingNotepadProps> = ({ meetingId, isOpe
                 <Button
                     variant="outline"
                     className="flex-1 h-14 bg-zinc-900/50 border-white/5 text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px] rounded-2xl hover:bg-zinc-800 hover:text-white transition-all group shadow-xl"
+                    onClick={() => {
+                        const blob = new Blob([myNote], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `meeting-notes-${new Date().toISOString().split('T')[0]}.txt`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }}
                 >
                     <Download size={18} className="mr-4 group-hover:scale-110 transition-transform text-emerald-500" />
-                    Export PDF
+                    Export Notes
                 </Button>
             </div>
         </div>

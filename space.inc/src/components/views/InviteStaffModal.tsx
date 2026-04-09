@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { GlassCard, Heading, Button, Text } from '../UI';
 import { X, Check, Copy, Rocket, Calendar } from 'lucide-react';
 import { apiService } from '../../services/apiService';
+import { inviteService } from '../../services/inviteService';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface InviteStaffModalProps {
     isOpen: boolean;
@@ -15,6 +17,7 @@ type ExpiryOption = '1' | '3' | '7' | '14' | '30' | 'custom';
 
 export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onClose, organizationId, spaces }) => {
     const { showToast } = useToast();
+    const { session } = useAuth();
     const [email, setEmail] = useState('');
     const [role, setRole] = useState<'staff' | 'admin'>('staff');
     const [selectedSpaces, setSelectedSpaces] = useState<Record<string, {
@@ -92,8 +95,10 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const access_token = session?.access_token;
         if (!email.trim()) return showToast('Email is required', 'error');
         if (expiryOption === 'custom' && !customDate) return showToast('Please select an expiry date', 'error');
+        if (!access_token) return showToast('You must be logged in', 'error');
 
         const spaceAssignments = Object.entries(selectedSpaces).map(([space_id, capabilities]) => ({
             space_id,
@@ -104,14 +109,26 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
 
         setLoading(true);
         try {
-            const data = await apiService.generateStaffInviteLink(email.trim(), role, organizationId, spaceAssignments, expiresAt);
-            setInviteLink(data.invite_link);
-            setSentEmail(email.trim());
-            // Format nice date for display
-            const d = new Date(data.expires_at || expiresAt || '');
-            setExpiryDate(d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
-            setSent(true);
+            const res = await inviteService.sendStaffInvite(
+                email.trim(), 
+                role, 
+                spaceAssignments, 
+                expiresAt, 
+                access_token
+            );
+
+            if (res.success && res.data) {
+                setInviteLink(res.data.invite_url);
+                setSentEmail(res.data.email);
+                // Format nice date for display
+                const d = new Date(res.data.expires_at || '');
+                setExpiryDate(d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
+                setSent(true);
+            } else {
+                showToast(res.error || 'Failed to create staff invite', 'error');
+            }
         } catch (err: any) {
+            console.error('[InviteStaffModal] Failure:', err);
             showToast(err.message || 'Something went wrong.', 'error');
         } finally {
             setLoading(false);

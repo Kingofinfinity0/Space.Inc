@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
+import { inviteService } from '../../services/inviteService';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
 import {
@@ -31,9 +32,9 @@ import { CalendarWidget } from '../CalendarWidget';
 
 
 // 3. Space Detail View
-const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet, onEndMeeting }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void, onEndMeeting?: (id: string, outcome: string, notes: string) => void }) => {
+const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet, onEndMeeting, onDeleteMeeting }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void, onEndMeeting?: (id: string, outcome: string, notes: string) => void, onDeleteMeeting?: (meetingId: string) => void }) => {
     const navigate = useNavigate();
-    const { user, profile, organizationId, userRole } = useAuth();
+    const { user, profile, organizationId, userRole, session } = useAuth();
     const { showToast } = useToast();
 
     const [space, setSpace] = useState<ClientSpace | undefined>(initialSpace);
@@ -50,6 +51,11 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Tasks' | 'Docs'>('Dashboard');
     const [invites, setInvites] = useState<any[]>([]);
     const [invitesLoading, setInvitesLoading] = useState(false);
+    const [spaceInviteUrl, setSpaceInviteUrl] = useState<string>('');
+    const [inviteLoading, setInviteLoading] = useState(false);
+    const [personalInviteEmail, setPersonalInviteEmail] = useState('');
+    const [isSendingPersonal, setIsSendingPersonal] = useState(false);
+    const [lastPersonalInvite, setLastPersonalInvite] = useState<{ url: string; email: string } | null>(null);
     
     const [members, setMembers] = useState<any[]>([]);
     const [membersLoading, setMembersLoading] = useState(false);
@@ -76,13 +82,27 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         }
     }, [spaceId, organizationId]);
 
+    const loadSpaceInviteUrl = useCallback(async () => {
+        if (!spaceId || !session?.access_token) return;
+        try {
+            const result = await inviteService.getSpaceInviteLink(spaceId, session.access_token);
+            if (result.success && result.data?.invitation_url) {
+                setSpaceInviteUrl(result.data.invitation_url);
+            }
+        } catch (err) {
+            console.error('[SpaceDetailView] Failed to load space invite link:', err);
+        }
+    }, [spaceId, session?.access_token]);
+
     const loadInvites = useCallback(async () => {
         if (!spaceId || !organizationId) return;
         try {
             setInvitesLoading(true);
-            const { data, error } = await apiService.getSpaceInvitations(spaceId, organizationId);
+            const { data, error } = await supabase.rpc('list_sent_invitations');
             if (error) throw error;
-            setInvites(data || []);
+            // Filter client-side by space_id since RPC returns all org invitations
+            const filteredInvites = (data || []).filter((invite: any) => invite.space_id === spaceId);
+            setInvites(filteredInvites);
         } catch (err) {
             console.error('Failed to fetch invites:', err);
         } finally {
@@ -90,15 +110,48 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         }
     }, [spaceId, organizationId]);
 
-    const handleGenerateInvite = async (email?: string) => {
-        if (!spaceId) return;
+    const handleRegenerateSpaceInvite = async () => {
+        if (!spaceId || !session?.access_token) return;
+        if (!window.confirm("Are you sure? This will immediately invalidate the existing link and all clients using it will need the new one.")) return;
+        
         try {
-            await apiService.generateClientInviteLink(spaceId, organizationId || '', email);
-            showToast("Invite link generated successfully.", "success");
-            await loadInvites();
+            setInviteLoading(true);
+            const result = await inviteService.regenerateSpaceLink(spaceId, session.access_token);
+            
+            if (result.success && result.data?.invitation_url) {
+                setSpaceInviteUrl(result.data.invitation_url);
+                showToast("Space invite link regenerated successfully.", "success");
+            } else {
+                throw new Error('Failed to regenerate invite link');
+            }
         } catch (err: any) {
-            console.error('Failed to generate invite link:', err);
+            console.error('Failed to regenerate space invite link:', err);
             showToast(friendlyError(err.message), "error");
+        } finally {
+            setInviteLoading(false);
+        }
+    };
+
+    const handleSendPersonalInvite = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!spaceId || !session?.access_token || !personalInviteEmail) return;
+
+        setIsSendingPersonal(true);
+        try {
+            const res = await inviteService.sendClientInvite(personalInviteEmail, spaceId, session.access_token);
+            if (res.success && res.data) {
+                setLastPersonalInvite({ url: res.data.invite_url, email: res.data.email });
+                setPersonalInviteEmail('');
+                showToast(`Invitation created for ${res.data.email}`, 'success');
+                loadInvites();
+            } else {
+                showToast(res.error || 'Failed to create personal invite', 'error');
+            }
+        } catch (err: any) {
+            console.error('[SpaceDetailView] Personal invite failed:', err);
+            showToast('An unexpected error occurred', 'error');
+        } finally {
+            setIsSendingPersonal(false);
         }
     };
 
@@ -166,10 +219,11 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         loadActivities();
         loadInvites();
         loadActivityIndicators();
+        loadSpaceInviteUrl();
         return () => {
             cancelled = true;
         };
-    }, [spaceId, initialSpace, loadInvites, loadActivityIndicators]);
+    }, [spaceId, initialSpace, loadInvites, loadActivityIndicators, loadSpaceInviteUrl]);
 
     useEffect(() => {
         if (activeTab === 'Chat' && spaceId) {
@@ -348,58 +402,129 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             {canManageInvites && (
                                 <GlassCard className="p-6">
                                     <div className="flex justify-between items-center mb-4">
-                                        <Heading level={3}>Client Invite Links</Heading>
-                                        <Button variant="outline" size="sm" onClick={() => handleGenerateInvite()}>
-                                            <Plus size={14} className="mr-1" /> New Link
+                                        <div>
+                                            <Heading level={3}>Shareable Space Link</Heading>
+                                            <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Public/Ghost Access</p>
+                                        </div>
+                                        <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            onClick={handleRegenerateSpaceInvite}
+                                            disabled={inviteLoading}
+                                        >
+                                            <History size={14} className="mr-2" /> {inviteLoading ? 'Wait...' : 'Regenerate'}
                                         </Button>
                                     </div>
                                     <div className="space-y-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-2 text-sm font-mono text-zinc-600 truncate">
+                                                {spaceInviteUrl || 'No active link'}
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    if (spaceInviteUrl) {
+                                                        navigator.clipboard.writeText(spaceInviteUrl);
+                                                        showToast("Copied to clipboard", "success");
+                                                    }
+                                                }}
+                                                disabled={!spaceInviteUrl}
+                                            >
+                                                <Copy size={14} />
+                                            </Button>
+                                        </div>
+                                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex gap-3">
+                                            <LinkIcon size={16} className="text-blue-500 shrink-0 mt-0.5" />
+                                            <Text variant="secondary" className="text-xs leading-relaxed">
+                                                Clients using this link will be added to this space immediately. Recommended for generic onboarding.
+                                            </Text>
+                                        </div>
+                                    </div>
+                                </GlassCard>
+                            )}
+
+                            {canManageInvites && (
+                                <GlassCard className="p-6">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <div>
+                                            <Heading level={3}>Personal Client Invite</Heading>
+                                            <p className="text-[10px] text-emerald-600 uppercase tracking-wider font-bold">Secure/One-Time</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <form onSubmit={handleSendPersonalInvite} className="space-y-4 mb-6">
+                                        <div className="flex gap-2">
+                                            <Input 
+                                                className="flex-1"
+                                                type="email"
+                                                placeholder="client@email.com"
+                                                required
+                                                value={personalInviteEmail}
+                                                onChange={e => setPersonalInviteEmail(e.target.value)}
+                                            />
+                                            <Button variant="primary" type="submit" disabled={isSendingPersonal || !personalInviteEmail}>
+                                                {isSendingPersonal ? '...' : <ArrowRight size={16} />}
+                                            </Button>
+                                        </div>
+                                        <p className="text-[11px] text-zinc-500 italic">This will generate a unique link tied to their email.</p>
+                                    </form>
+
+                                    {lastPersonalInvite && (
+                                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl animate-[fadeIn_0.3s_ease-out]">
+                                            <label className="block text-[10px] font-bold text-emerald-700 uppercase tracking-tight mb-2">New Invite Link for {lastPersonalInvite.email}</label>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    readOnly 
+                                                    title="Invite link"
+                                                    value={lastPersonalInvite.url} 
+                                                    className="flex-1 bg-white border border-emerald-200 rounded-lg px-3 py-1.5 text-xs font-mono text-emerald-800"
+                                                />
+                                                <Button 
+                                                    size="sm" 
+                                                    className="bg-emerald-600 hover:bg-emerald-700 h-8"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(lastPersonalInvite.url);
+                                                        showToast("Personal link copied!", "success");
+                                                    }}
+                                                >
+                                                    <Copy size={14} />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-3 pt-4 border-t border-zinc-100">
+                                        <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Recent Pending Invites</label>
                                         {invitesLoading ? (
                                             <SkeletonText lines={2} />
                                         ) : invites.length > 0 ? (
-                                            invites.map(invite => (
-                                                <div key={invite.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
+                                            invites.slice(0, 3).map(invite => (
+                                                <div key={invite.id} className="flex items-center justify-between p-2.5 bg-zinc-50 rounded-lg border border-zinc-100 group">
                                                     <div className="min-w-0 flex-1 mr-3">
-                                                        <p className="text-xs font-mono text-zinc-500 truncate">
-                                                            ...{invite.token.substring(invite.token.length - 8)}
-                                                        </p>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            {invite.email && <span className="text-[10px] text-zinc-400">{invite.email}</span>}
-                                                            <span className="px-1.5 py-0.5 bg-zinc-200 text-[8px] font-bold text-zinc-500 rounded uppercase">
-                                                                Exp: {new Date(invite.expires_at).toLocaleDateString()}
-                                                            </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <Mail size={12} className="text-zinc-400" />
+                                                            <span className="text-[12px] font-medium text-zinc-700 truncate">{invite.email || 'Unspecified'}</span>
                                                         </div>
+                                                        <span className="text-[9px] text-zinc-400 font-mono ml-5">Expires {new Date(invite.expires_at).toLocaleDateString()}</span>
                                                     </div>
-                                                    <div className="flex gap-1">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-8 w-8 p-0"
-                                                            onClick={() => {
-                                                                const url = `${window.location.origin}/join?token=${invite.token}`;
-                                                                navigator.clipboard.writeText(url);
-                                                                showToast("Copied to clipboard", "success");
-                                                            }}
-                                                            title="Copy Link"
-                                                        >
-                                                            <Copy size={14} />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-8 w-8 p-0"
-                                                            onClick={() => handleGenerateInvite(invite.email)}
-                                                            title="Regenerate"
-                                                        >
-                                                            <History size={14} />
-                                                        </Button>
-                                                    </div>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        onClick={() => {
+                                                            const url = `${window.location.origin}/accept-invite?token=${invite.token}`;
+                                                            navigator.clipboard.writeText(url);
+                                                            showToast("Copied to clipboard", "success");
+                                                        }}
+                                                        title="Copy Link"
+                                                    >
+                                                        <Copy size={14} />
+                                                    </Button>
                                                 </div>
                                             ))
                                         ) : (
-                                            <div className="text-center py-4">
-                                                <p className="text-zinc-400 text-xs italic">No active invite links.</p>
-                                            </div>
+                                            <p className="text-center py-2 text-zinc-400 text-[11px] italic">No active personal invites.</p>
                                         )}
                                     </div>
                                 </GlassCard>
@@ -492,6 +617,21 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                         title="End Meeting"
                     >
                         <Flag size={14} /> 
+                    </Button>
+                )}
+                {['owner', 'admin', 'staff'].includes(userRole || '') && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="px-2 text-red-500 hover:bg-red-50 border-red-100"
+                        onClick={() => {
+                            if (window.confirm('Delete this meeting?')) {
+                                onDeleteMeeting?.(m.id);
+                            }
+                        }}
+                        title="Delete Meeting"
+                    >
+                        <Trash2 size={16} />
                     </Button>
                 )}
             </div>
@@ -843,6 +983,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                 onClose={() => setVersioningFile(null)}
                 file={versioningFile}
             />
+
         </div>
     );
 };

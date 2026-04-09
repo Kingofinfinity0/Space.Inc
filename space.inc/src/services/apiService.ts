@@ -115,7 +115,7 @@ export const apiService = {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
         const { data, error } = await supabase
             .from('activity_logs')
-            .select('id, action_type, space_name, created_at, actor_name')
+            .select('id, action_type, space_id, user_id, created_at')
             .eq('organization_id', organizationId)
             .in('action_type', ['meeting_created', 'file_uploaded'])
             .gt('created_at', sevenDaysAgo)
@@ -129,10 +129,10 @@ export const apiService = {
     async getUnifiedNotifications(organizationId: string, userId: string, limit: number = 20) {
         const { data, error } = await supabase
             .from('notifications')
-            .select('id, type, message, is_read, created_at, space_id')
+            .select('id, type, message, read, created_at, space_id')
             .eq('organization_id', organizationId)
             .eq('user_id', userId)
-            .eq('is_read', false)
+            .eq('read', false)
             .order('created_at', { ascending: false })
             .limit(limit);
         
@@ -496,19 +496,17 @@ export const apiService = {
     // --- Meetings ---
     async getMeetings(organizationId: string, spaceId?: string) {
         if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
-        let query = supabase
-            .from('meetings')
-            .select('*')
-            .eq('organization_id', organizationId)
-            .order('starts_at', { ascending: true });
-
-        if (spaceId) {
-            query = query.eq('space_id', spaceId);
+        
+        try {
+            const { data, error } = await supabase.rpc('list_meetings_v2', {
+                p_space_id: spaceId || null
+            });
+            
+            if (error) return { data: null, error };
+            return { data: data || [], error: null };
+        } catch (err) {
+            return { data: null, error: { message: err.message } };
         }
-
-        const { data, error } = await query;
-        if (error) return { data: null, error };
-        return { data: data || [], error: null };
     },
 
     async scheduleMeeting(data: { title: string; starts_at: string; duration_minutes?: number; space_id: string; description?: string; recording_enabled?: boolean; category?: string }) {
