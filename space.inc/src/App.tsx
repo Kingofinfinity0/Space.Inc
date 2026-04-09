@@ -63,10 +63,12 @@ import HistoryView from './components/views/HistoryView';
 import ClientPortalView from './components/views/ClientPortalView';
 import { InviteStaffModal } from './components/views/InviteStaffModal';
 import { MeetingRoom } from './components/MeetingRoom';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import JoinView from './components/views/JoinView';
 import AcceptInviteView from './components/views/AcceptInviteView';
 import { NotificationBell } from './components/NotificationBell';
+import ClientSpaceRoute from './components/views/ClientSpaceRoute';
+import { supabase as _supabase } from './lib/supabase';
 
 const ErrorView = ({ message }: { message: string }) => (
     <div className="h-screen w-full flex items-center justify-center bg-zinc-50 p-4">
@@ -84,6 +86,7 @@ const ErrorView = ({ message }: { message: string }) => (
 const App = () => {
     const { user, profile, loading, userRole, organizationId, can, signOut } = useAuth();
     const { showToast, removeToast } = useToast();
+    const navigate = useNavigate();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
 
@@ -121,15 +124,53 @@ const App = () => {
         }
     }, [user, loading]);
 
+    // ── Client role redirect ─────────────────────────────────────────────────
+    // After auth resolves: if the user is a client, look up their active space
+    // membership and redirect them to /client/space/:spaceId.
+    // If no membership exists yet, send them to /client/space/pending so
+    // ClientSpaceRoute can render the holding screen.
+    useEffect(() => {
+        if (loading || !user || !userRole) return;
+        if (userRole !== 'client') return;
+
+        // Only redirect if not already on the client space route
+        const isOnClientRoute = window.location.pathname.startsWith('/client/space/');
+        if (isOnClientRoute) return;
+
+        const redirectClient = async () => {
+            try {
+                const { data: membership } = await _supabase
+                    .from('space_memberships')
+                    .select('space_id')
+                    .eq('profile_id', user.id)
+                    .eq('status', 'active')
+                    .single();
+
+                if (membership?.space_id) {
+                    navigate(`/client/space/${membership.space_id}`, { replace: true });
+                } else {
+                    // No active membership — show holding screen
+                    navigate('/client/space/pending', { replace: true });
+                }
+            } catch {
+                navigate('/client/space/pending', { replace: true });
+            }
+        };
+
+        redirectClient();
+    }, [loading, user, userRole]);
+
     useEffect(() => {
         if (isAuthenticated && organizationId) {
             console.log('[App] Auth and Tenant ready, initiating data fetch...');
+            // Skip full data fetch for clients — they only need their own space data
+            if (userRole === 'client') return;
             fetchData();
         } else if (!loading && !user) {
             // If we're not loading and there's no user, we're on the login/signup page
             setIsInitialLoading(false);
         }
-    }, [isAuthenticated, organizationId, loading, user]);
+    }, [isAuthenticated, organizationId, loading, user, userRole]);
 
     useEffect(() => {
         if (!user || !profile) return;
@@ -535,6 +576,13 @@ const App = () => {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/spaces/:spaceId/meetings/:meetingId/review" element={<MeetingReviewPage />} />
+
+            {/* ── Client-only route ─────────────────────────────────────────
+                Locked: ClientSpaceRoute enforces role === 'client' internally.
+                Staff/owner/admin hitting this URL are redirected back to /.
+            ─────────────────────────────────────────────────────────────── */}
+            <Route path="/client/space/:spaceId" element={<ClientSpaceRoute />} />
+            <Route path="/client/space/pending" element={<ClientSpaceRoute />} />
             <Route path="*" element={
                 (() => {
                     if (!isAuthenticated) {
@@ -542,11 +590,41 @@ const App = () => {
                     }
 
                     if (userRole === 'client') {
-                        const currentClient = clients[0];
-                        if (!currentClient) return <div className="p-8">Loading Portal...</div>;
+                        // ── Route guard ──────────────────────────────────────
+                        // Clients hitting any staff route get redirected to their space
+                        const pathname = window.location.pathname;
+                        
+                        // If not already on a client route, redirect to their space
+                        if (!pathname.startsWith('/client/space/')) {
+                            const redirectClientToSpace = async () => {
+                                try {
+                                    const { data: membership } = await _supabase
+                                        .from('space_memberships')
+                                        .select('space_id')
+                                        .eq('profile_id', user.id)
+                                        .eq('status', 'active')
+                                        .single();
+
+                                    if (membership?.space_id) {
+                                        navigate(`/client/space/${membership.space_id}`, { replace: true });
+                                    } else {
+                                        navigate('/client/space/pending', { replace: true });
+                                    }
+                                } catch {
+                                    navigate('/client/space/pending', { replace: true });
+                                }
+                            };
+                            
+                            redirectClientToSpace();
+                        }
+                        
+                        // Show loading while redirecting
                         return (
-                            <div className="flex flex-col h-screen w-full bg-white font-sans">
-                                <ClientPortalView client={currentClient} meetings={meetings} onJoin={handleJoinMeeting} onLogout={signOut} />
+                            <div className="min-h-screen bg-white flex items-center justify-center">
+                                <div className="text-center space-y-3 animate-pulse">
+                                    <div className="h-10 w-10 bg-zinc-100 rounded-xl mx-auto" />
+                                    <div className="h-4 w-32 bg-zinc-100 rounded mx-auto" />
+                                </div>
                             </div>
                         );
                     }

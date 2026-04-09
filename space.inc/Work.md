@@ -151,3 +151,57 @@ sequenceDiagram
 - [ ] Verify project linkage to Vercel.
 - [ ] Execute `vercel deploy --prod` to push current local changes to production.
 - [ ] Provide the deployment URL to the user.
+
+---
+
+## Task 6 — Client Role-Based Routing & Guard
+
+### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Browser as Browser (client user)
+    participant App as App.tsx (Routes)
+    participant AuthContext as AuthContext
+    participant ClientSpaceView as ClientSpaceView
+    participant Supabase as Supabase DB
+
+    Browser->>App: Auth resolves (profile.role === 'client')
+    App->>Supabase: SELECT space_id FROM space_memberships WHERE profile_id = uid AND status = 'active'
+    Supabase-->>App: { space_id }
+    App->>Browser: redirect /client/space/:spaceId
+
+    Browser->>App: Route /client/space/:spaceId
+    App->>ClientSpaceView: Render dedicated client view (Messages, Files, Meetings, Tasks)
+    
+    Note over App: Route guard: any client hitting /dashboard, /spaces,
+    Note over App: /staff, /analytics, /settings → redirect to /client/space/:id
+
+    Browser->>App: No active membership found
+    App->>Browser: Render holding screen (No staff UI, no error)
+```
+
+### Thought Process
+
+`ClientPortalView.tsx` already EXISTS and is the correct view for clients. The problem is purely routing — clients land on the staff dashboard shell instead of being routed to their space.
+
+**USER NOTE:** Do NOT create a new view. Wire the existing `ClientPortalView` to a proper route.
+
+**Step 1 — Thin route wrapper: `ClientSpaceRoute.tsx`**
+A wrapper component that reads `:spaceId` from URL params, fetches the space from `spaces` table (RLS ensures only their space), fetches their meetings, then renders the existing `ClientPortalView` with those props.
+
+**Step 2 — Role-based redirect hook in `App.tsx`**
+After auth resolves and `capabilityCache.role === 'client'`, query `space_memberships` for `profile_id = user.id AND status = 'active'`, then call `navigate('/client/space/:spaceId')`. If no membership row exists, render a holding screen in-place (no staff UI, no crash).
+
+**Step 3 — Add `/client/space/:spaceId` route in `App.tsx`**
+Add an explicit `<Route path="/client/space/:spaceId" element={<ClientSpaceRoute />} />` above the wildcard. Route is only reachable if the user is authenticated (enforced inside ClientSpaceRoute itself).
+
+**Step 4 — Route guard in wildcard**
+In the wildcard `<Route path="*">`, the existing `userRole === 'client'` branch currently renders `ClientPortalView` inline. Replace this entire branch with a redirect to `/client/space/:spaceId` (using the space ID from `space_memberships`).
+
+**Task List:**
+- [ ] Create `src/components/views/ClientSpaceRoute.tsx` — thin wrapper, fetches space + meetings, renders existing `ClientPortalView`
+- [ ] Add `/client/space/:spaceId` route in `App.tsx` (above wildcard)
+- [ ] Add client redirect effect in `App.tsx` (query `space_memberships`, `navigate()`)
+- [ ] Replace old inline `ClientPortalView` branch in wildcard with redirect
+- [ ] Handle no-membership edge case: holding screen (no staff UI, no error thrown)
