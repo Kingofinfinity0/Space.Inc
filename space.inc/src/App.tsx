@@ -504,8 +504,10 @@ const App = () => {
             case ViewState.INBOX:
                 if (!can('can_view_dashboard')) return <div className="p-8">Access Denied</div>;
                 return <InboxView clients={clients} inboxData={inboxData} />;
-            case ViewState.CRM:
+            case ViewState.CLIENTS:
                 if (!can('owner') && !can('admin')) return <div className="p-8">Access Denied</div>;
+                // Use clientLifecycle data for now - this shows all clients across the organization
+                // In the future, this could be enhanced to show space-specific client data
                 return <ClientsCRMView clients={clientLifecycle} loading={isInitialLoading} />;
             case ViewState.STAFF:
                 if (!can('can_manage_team')) return <div className="p-8">Access Denied</div>;
@@ -655,7 +657,7 @@ const App = () => {
                                                     <p className="text-[10px] font-bold text-[#8E8EA0] uppercase tracking-wider px-3 mb-2">Management</p>
                                                     {can('can_manage_team') && <NavItem icon={<UserCheck size={16} />} label="Team" active={currentView === ViewState.STAFF} onClick={() => setCurrentView(ViewState.STAFF)} />}
                                                     {can('can_manage_team') && <NavItem icon={<Key size={16} />} label="Invitations" active={currentView === ViewState.INVITATIONS} onClick={() => setCurrentView(ViewState.INVITATIONS)} />}
-                                                    {(userRole === 'owner' || userRole === 'admin') && <NavItem icon={<Briefcase size={16} />} label="CRM" active={currentView === ViewState.CRM} onClick={() => setCurrentView(ViewState.CRM)} />}
+                                                    {(userRole === 'owner' || userRole === 'admin') && <NavItem icon={<Briefcase size={16} />} label="Clients" active={currentView === ViewState.CLIENTS} onClick={() => setCurrentView(ViewState.CLIENTS)} />}
                                                     {can('can_view_tasks') && <NavItem icon={<CheckSquare size={16} />} label="Tasks" active={currentView === ViewState.TASKS} onClick={() => setCurrentView(ViewState.TASKS)} />}
                                                     {can('can_view_meetings') && <NavItem icon={<Calendar size={16} />} label="Calendar" active={currentView === ViewState.MEETINGS} onClick={() => setCurrentView(ViewState.MEETINGS)} />}
                                                     {can('can_view_files') && <NavItem icon={<FolderClosed size={16} />} label="Drive" active={currentView === ViewState.FILES} onClick={() => setCurrentView(ViewState.FILES)} />}

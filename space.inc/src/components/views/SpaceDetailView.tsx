@@ -191,13 +191,23 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             }
         };
 
+        const refetchMembers = async () => {
+            if (!spaceId) return;
+            try {
+                const { data } = await supabase.rpc('get_space_members', { p_space_id: spaceId });
+                setMembers(data || []);
+            } catch (err) {
+                console.error('Failed to refetch members:', err);
+            }
+        };
+
         const loadActivities = async () => {
             if (!spaceId || !organizationId) return;
             try {
                 setMembersLoading(true);
                 setTasksLoading(true);
                 const [memRes, taskRes] = await Promise.all([
-                    apiService.getSpaceMembers(spaceId, organizationId),
+                    supabase.rpc('get_space_members', { p_space_id: spaceId }),
                     apiService.getTasks(organizationId, spaceId)
                 ]);
                 if (!cancelled) {
@@ -220,8 +230,21 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         loadInvites();
         loadActivityIndicators();
         loadSpaceInviteUrl();
+
+        // Set up real-time subscription for space_memberships changes
+        const channel = supabase
+            .channel('space-members-' + spaceId)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'space_memberships',
+                filter: `space_id=eq.${spaceId}` 
+            }, () => refetchMembers())
+            .subscribe();
+
         return () => {
             cancelled = true;
+            supabase.removeChannel(channel);
         };
     }, [spaceId, initialSpace, loadInvites, loadActivityIndicators, loadSpaceInviteUrl]);
 
@@ -381,20 +404,43 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                         <SkeletonText lines={2} />
                                     ) : members.length > 0 ? (
                                         members.map(member => (
-                                            <div key={member.id} className="flex items-center gap-3 p-2 hover:bg-zinc-50 rounded-lg transition-colors border border-transparent">
-                                                <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs uppercase">
-                                                    {member.profiles?.full_name?.charAt(0) || <User size={14} />}
+                                            <div key={member.profile_id} className="flex items-center gap-3 p-2 hover:bg-zinc-50 rounded-lg transition-colors border border-transparent">
+                                                {/* Avatar */}
+                                                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs uppercase">
+                                                    {member.avatar_url ? (
+                                                        <img src={member.avatar_url} alt={member.full_name} className="h-8 w-8 rounded-full object-cover" />
+                                                    ) : (
+                                                        member.full_name?.charAt(0) || <User size={14} />
+                                                    )}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium text-zinc-900 truncate">
-                                                        {member.profiles?.full_name || 'Pending User'}
-                                                    </p>
-                                                    <p className="text-[10px] text-zinc-500 truncate capitalize">{member.role}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-sm font-medium text-zinc-900 truncate">
+                                                            {member.full_name || 'Pending User'}
+                                                        </p>
+                                                        {/* Online indicator */}
+                                                        <div className={`h-2 w-2 rounded-full ${member.is_online ? 'bg-green-500' : 'bg-gray-300'}`} title={member.is_online ? 'Online' : 'Offline'} />
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        {/* Role badge */}
+                                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-medium ${
+                                                            member.membership_role === 'client' ? 'bg-blue-100 text-blue-700' :
+                                                            member.membership_role === 'staff' ? 'bg-emerald-100 text-emerald-700' :
+                                                            member.membership_role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                                                            'bg-gray-100 text-gray-700'
+                                                        }`}>
+                                                            {member.membership_role}
+                                                        </span>
+                                                        {/* Joined date */}
+                                                        <span className="text-[9px] text-zinc-400">
+                                                            Joined {member.joined_at ? new Date(member.joined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))
                                     ) : (
-                                        <p className="text-xs text-zinc-400 italic">No members found.</p>
+                                        <p className="text-xs text-zinc-400 italic">No members yet. Share the invite link to get started.</p>
                                     )}
                                 </div>
                             </GlassCard>
