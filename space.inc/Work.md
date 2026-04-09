@@ -87,6 +87,49 @@ I will verify the changes by checking if there are any other hardcoded URLs or i
 - `inviteService.ts` needs to send `space_id` (not `spaceId`) in the request body for the regenerate action.
     - Status: Confirmed. The current implementation uses `space_id: spaceId` in the request body for `regenerate_space_link`, `send_client`, and `get_space_invite_link`.
 
+### 5. Jules Fixes — Space Detail / Invite Section
+Three precise fixes for the invitation flow, switching from Edge Function fetches to native Supabase RPC calls and fixing invite URL format.
+
+```mermaid
+sequenceDiagram
+    participant JoinView as JoinView.tsx
+    participant SupabaseRPC as supabase.rpc()
+    participant inviteService as inviteService.ts
+    participant SpaceDetailView as SpaceDetailView.tsx
+
+    Note over JoinView: Route: /join/:token — token from useParams (path segment)
+    JoinView->>SupabaseRPC: rpc('resolve_space_invite_token', { p_token: token })
+    SupabaseRPC-->>JoinView: { data: SpaceInviteTokenResponse }
+
+    Note over SpaceDetailView: Regenerate wiring
+    SpaceDetailView->>SupabaseRPC: rpc('regenerate_space_invite_link', { p_space_id: spaceId })
+    SupabaseRPC-->>SpaceDetailView: { data: { data: { invitation_url, invitation_token } } }
+```
+
+**Fix A — Token extraction (already correct in App.tsx + JoinView, but inviteService.resolveSpaceToken must use RPC)**
+- Route `/join/:token` ✅ (App.tsx line 533)
+- `useParams<{ token: string }>()` ✅ (JoinView.tsx line 12)
+- ❌ `inviteService.resolveSpaceToken()` still uses Edge Function fetch → switch to `supabase.rpc('resolve_space_invite_token', { p_token: token })`
+
+**Fix B — RPC call for validation in inviteService.resolveSpaceToken**
+- Replace `fetch(${EDGE_FUNCTION_BASE_URL}/invitations-api, ...)` with `supabase.rpc('resolve_space_invite_token', { p_token: token })`
+
+**Fix C — Regenerate wiring in inviteService.regenerateSpaceLink**
+- Replace Edge Function fetch with `supabase.rpc('regenerate_space_invite_link', { p_space_id: spaceId })`
+- Parse response as `data.data.invitation_url` and `data.data.invitation_token`
+
+**Fix D — Invite link URL format (secondary)**
+- `apiService.ts` lines 295 & 331 use `/join?token=` (query param) → fix to `/join/${token}` (path segment)
+- `InvitationsManagementView.tsx` line 184 same fix
+
+**Task List:**
+- [x] Fix `inviteService.resolveSpaceToken()` → use `supabase.rpc('resolve_space_invite_token', { p_token: token })`
+- [x] Fix `inviteService.regenerateSpaceLink()` → use `supabase.rpc('regenerate_space_invite_link', { p_space_id: spaceId })` and parse `data.data.*`
+- [x] Fix `apiService.ts` invite link URL format (lines 295, 331) from `?token=` to path segment
+- [x] Fix `InvitationsManagementView.tsx` invite link URL format
+- [x] Fix broken `SpaceInviteToken` import in `JoinView.tsx` (type doesn't exist — rename to `SpaceInviteTokenResponse`)
+- [x] Fix `JoinView.tsx` property mismatches — all snake_case aligned to `SpaceInviteTokenResponse` + `redirect_path`
+
 ### 4. Deploy to Vercel
 I will deploy the current application code to Vercel manually since the GitHub integration seems to have failed to trigger a build.
 

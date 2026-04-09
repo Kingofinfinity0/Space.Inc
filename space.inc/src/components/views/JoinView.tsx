@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { inviteService, SpaceInviteToken, AcceptSpaceInviteResponse } from '../../services/inviteService';
+import { inviteService, SpaceInviteTokenResponse, AcceptSpaceInviteResponse } from '../../services/inviteService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import '../../styles/JoinView.css';
@@ -14,7 +14,7 @@ export default function JoinView() {
     const { user, session } = useAuth();
     const { showToast } = useToast();
 
-    const [inviteData, setInviteData] = useState<SpaceInviteToken | null>(null);
+    const [inviteData, setInviteData] = useState<SpaceInviteTokenResponse | null>(null);
     const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
     const [errorMsg, setErrorMsg] = useState('');
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -88,7 +88,7 @@ export default function JoinView() {
                 
                 // Navigate to the correct redirect path
                 setTimeout(() => {
-                    navigate(result.data!.redirectPath);
+                    navigate(result.data!.redirect_path);
                 }, 1000);
             } else {
                 setPageStatus('valid');
@@ -168,9 +168,9 @@ export default function JoinView() {
         );
     }
 
-    const { organizationName, spaceName, spaceDescription, config } = inviteData;
-    const isExpiringSoon = config?.expiresAt && new Date(config.expiresAt) < new Date(Date.now() + 48 * 60 * 60 * 1000);
-    const capacityInfo = config?.maxUses ? `${config.useCount || 0} of ${config.maxUses} spots filled` : null;
+    const { organization_name: organizationName, space_name: spaceName, space_description: spaceDescription, config } = inviteData;
+    const isExpiringSoon = config?.expires_at && new Date(config.expires_at) < new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const capacityInfo = config?.max_uses ? `${config.use_count || 0} of ${config.max_uses} spots filled` : null;
 
     return (
         <div className="join-view-page">

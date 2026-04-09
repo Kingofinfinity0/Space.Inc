@@ -406,6 +406,8 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
                                 <input 
                                     className="flex-1 text-xs bg-white border border-emerald-200 rounded px-2 py-1.5 focus:outline-none" 
                                     readOnly 
+                                    title="Generated invite link"
+                                    aria-label="Generated invite link"
                                     value={generatedLink} 
                                     onClick={(e) => (e.target as HTMLInputElement).select()}
                                 />
@@ -423,7 +425,7 @@ const StaffDashboardView = ({ clients, messages, meetings, tasks, profile, onJoi
                                     if (!inviteSpaceId || !organizationId) return;
                                     try {
                                         const res = await apiService.generateClientInviteLink(inviteSpaceId, organizationId, inviteEmail || undefined);
-                                        setGeneratedLink(window.location.origin + '/join?token=' + res.token);
+                                        setGeneratedLink(window.location.origin + '/join/' + res.token);
                                         showToast(inviteEmail ? "Invitation sent!" : "Link generated!", "success");
                                     } catch (err: any) {
                                         showToast(friendlyError(err.message), "error");

@@ -181,7 +181,7 @@ export const InvitationsManagementView: React.FC = () => {
                                                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button 
                                                         title="Copy Link"
-                                                        onClick={() => invite.token && handleCopy(`${window.location.origin}/join?token=${invite.token}`)}
+                                                        onClick={() => invite.token && handleCopy(`${window.location.origin}/join/${invite.token}`)}
                                                         className="p-1.5 text-zinc-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all"
                                                     >
                                                         <LinkIcon size={16} />

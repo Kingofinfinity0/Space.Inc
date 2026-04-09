@@ -83,21 +83,9 @@ export const inviteService = {
    * This is for the /join/:token flow
    */
   async resolveSpaceToken(token: string): Promise<SpaceInviteTokenResponse> {
-    const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'resolve_space_token',
-        token,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to resolve token: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    return result.data || result;
+    const { data, error } = await supabase.rpc('resolve_space_invite_token', { p_token: token });
+    if (error) throw new Error(error.message);
+    return (data as SpaceInviteTokenResponse);
   },
 
   /**
@@ -268,28 +256,17 @@ export const inviteService = {
       allowed_emails?: string[] | null;
     } = {}
   ): Promise<RegenerateSpaceLinkResponse> {
-    const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
+    const { data, error } = await supabase.rpc('regenerate_space_invite_link', { p_space_id: spaceId });
+    if (error) return { success: false, error: error.message };
+    // RPC returns: data.data.invitation_url and data.data.invitation_token
+    const payload = (data as any)?.data ?? data;
+    return {
+      success: true,
+      data: {
+        invitation_url: payload?.invitation_url,
+        invitation_token: payload?.invitation_token,
       },
-      body: JSON.stringify({
-        action: 'regenerate_space_link',
-        space_id: spaceId,
-        invite_role: options.invite_role || 'client',
-        max_uses: options.max_uses ?? null,
-        expires_at: options.expires_at ?? null,
-        allowed_emails: options.allowed_emails ?? null,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to regenerate link: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    return result || result.data;
+    };
   },
 
   /**

@@ -292,7 +292,7 @@ export const apiService = {
         });
         if (error) throw error;
         // Build robust link from current origin
-        data.invite_link = `${window.location.origin}/join?token=${data.token}`;
+        data.invite_link = `${window.location.origin}/join/${data.token}`;
         return data;
     },
 
@@ -328,7 +328,7 @@ export const apiService = {
         if (error) throw error;
         // Build robust link from current origin if a new token was generated
         if (data.token) {
-            data.invite_link = `${window.location.origin}/join?token=${data.token}`;
+            data.invite_link = `${window.location.origin}/join/${data.token}`;
         }
         return data;
     },
