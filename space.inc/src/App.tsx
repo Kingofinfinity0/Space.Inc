@@ -231,6 +231,12 @@ const App = () => {
     }, [loading, user, userRole]);
 
     useEffect(() => {
+        // Clients use route-level data loading and should not be blocked by
+        // the org-wide dashboard preload gate.
+        if (isAuthenticated && userRole === 'client') {
+            setIsInitialLoading(false);
+            return;
+        }
         if (isAuthenticated && organizationId) {
             console.log('[App] Auth and Tenant ready, initiating data fetch...');
             // Skip full data fetch for clients — they only need their own space data
@@ -603,7 +609,7 @@ const App = () => {
     };
 
     // Only show full-screen skeleton on the very first load if we have no data yet
-    if (loading || (isAuthenticated && isInitialLoading && clients.length === 0)) {
+    if (loading || (isAuthenticated && userRole !== 'client' && isInitialLoading && clients.length === 0)) {
         return (
             <div className="flex h-screen w-full bg-white font-sans animate-pulse">
                 <aside className="w-64 bg-[#ECECF1] border-r border-[#D1D5DB] flex flex-col justify-between p-4 z-20">

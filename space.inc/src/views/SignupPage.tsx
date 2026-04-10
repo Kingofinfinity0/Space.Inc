@@ -30,7 +30,6 @@ export default function SignupPage() {
         setLoading(true);
 
         try {
-            // Check for pending space token from localStorage (set by /join/:token page)
             const pendingToken = localStorage.getItem('pending_space_token');
             const tokenToUse = inviteToken || pendingToken || undefined;
 
@@ -41,44 +40,42 @@ export default function SignupPage() {
 
             if (signUpError) throw signUpError;
 
-            if (inviteToken || pendingToken) {
-                const tokenToAccept = inviteToken || pendingToken;
-
-                // Wait for Supabase to propagate the session — auth.uid() in
-                // the RPC returns NULL if we call it before the JWT is ready.
+            if (tokenToUse) {
+                // Poll for session — Supabase can take a tick to propagate
                 let session = null;
-                for (let i = 0; i < 10; i++) {
+                for (let i = 0; i < 15; i++) {
                     const { data } = await supabase.auth.getSession();
                     if (data.session?.access_token) { session = data.session; break; }
-                    await new Promise(r => setTimeout(r, 500));
+                    await new Promise(r => setTimeout(r, 400));
                 }
-                if (!session) throw new Error('Session did not initialise. Please try signing in.');
 
-                // Call accept_space_link edge function for space invites
+                if (!session) {
+                    // Should never happen with email confirmation disabled,
+                    // but keep the token alive and redirect to login.
+                    localStorage.setItem('pending_space_token', tokenToUse);
+                    navigate('/login?message=check_email', { replace: true });
+                    return;
+                }
+
+                // Call accept_space_link — this creates the space_memberships row
                 const res = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`
+                        'Authorization': `Bearer ${session.access_token}` 
                     },
-                    body: JSON.stringify({
-                        action: 'accept_space_link',
-                        token: tokenToAccept
-                    })
+                    body: JSON.stringify({ action: 'accept_space_link', token: tokenToUse })
                 });
 
                 const result = await res.json();
-
-                // Clear the pending token
                 localStorage.removeItem('pending_space_token');
 
                 if (result.data?.success && result.data?.data?.spaceId) {
-                    // Redirect to the space-specific client path
                     navigate(`/spaces/${result.data.data.spaceId}`, { replace: true });
                     return;
                 }
 
-                // Fallback: use the old RPC method for email invites
+                // Fallback for email-type invitations
                 if (inviteToken) {
                     const inviteData = await apiService.acceptInvitation(inviteToken);
                     if (inviteData?.role === 'client') {
@@ -86,9 +83,11 @@ export default function SignupPage() {
                     } else {
                         navigate('/dashboard', { replace: true });
                     }
-                } else {
-                    navigate('/spaces/pending', { replace: true });
+                    return;
                 }
+
+                // If we still couldn't resolve — send to dashboard, AuthContext will route
+                navigate('/dashboard', { replace: true });
             } else {
                 navigate('/onboarding');
             }
