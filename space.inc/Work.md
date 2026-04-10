@@ -205,3 +205,40 @@ In the wildcard `<Route path="*">`, the existing `userRole === 'client'` branch 
 - [ ] Add client redirect effect in `App.tsx` (query `space_memberships`, `navigate()`)
 - [ ] Replace old inline `ClientPortalView` branch in wildcard with redirect
 - [ ] Handle no-membership edge case: holding screen (no staff UI, no error thrown)
+
+---
+
+## Task 7 — GitHub Merge Conflict Resolution
+
+### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Developer as Developer
+    participant Git as Git Repo
+    participant SignupPage as SignupPage.tsx
+
+    Developer->>Git: git pull origin master
+    Git-->>Developer: Merge Conflict (SignupPage.tsx)
+    Developer->>SignupPage: Inspect conflict markers
+    Note right of SignupPage: Local (HEAD) uses tokenToUse.<br>Remote uses undeclared tokenToAccept.
+    Developer->>SignupPage: Remove conflict markers & keep local version
+    Developer->>Git: git add, git commit, git push
+```
+
+### Thought Process
+
+**Issue:** A git pull resulted in a "Merge conflict in space.inc/src/views/SignupPage.tsx". I need to resolve the conflict so I can push my updates.
+
+**Fix:**
+- Inspect `SignupPage.tsx`. The conflict arises around session validation and redirection.
+- Local (`HEAD`) correctly uses the declared `tokenToUse` instead of the outdated `tokenToAccept`. Furthermore, the required logic is already inserted before the `=======` marker.
+- I will delete lines 59 to 71 containing the conflict markers and the redundant remote code.
+- After fixing, I will `git add src/views/SignupPage.tsx`, commit the merge result, and `git push origin master`.
+
+**Task List:**
+- [x] Inspect both files involved (`LoginPage.tsx` merged cleanly manually).
+- [x] Analyze `SignupPage.tsx` conflict.
+- [x] Remove the conflict markers from `SignupPage.tsx`.
+- [ ] Run `git add` and `git commit` to finalize the merge.
+- [ ] Run `git push origin master` to sync with the remote repository.
