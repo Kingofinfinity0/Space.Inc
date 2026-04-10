@@ -18,6 +18,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const message = searchParams.get('message');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -107,6 +108,12 @@ export default function LoginPage() {
                             {inviteToken ? 'Sign in to accept organizational invitation' : 'Welcome back to your minimal workspace'}
                         </Text>
                     </div>
+
+                    {message === 'check_email' && (
+                        <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl text-blue-700 text-xs font-medium">
+                            Check your email and confirm your account, then sign in here. Your invite link will be applied automatically.
+                        </div>
+                    )}
 
                     {error && (
                         <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs font-bold uppercase tracking-widest animate-[shake_0.5s_ease-in-out]">
