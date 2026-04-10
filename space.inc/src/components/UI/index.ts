@@ -7,3 +7,4 @@ export * from './Modal';
 export * from './Checkbox';
 export * from './Toggle';
 export * from './SkeletonLoader';
+export * from './LoadingScreen';
