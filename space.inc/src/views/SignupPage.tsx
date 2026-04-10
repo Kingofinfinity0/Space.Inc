@@ -52,7 +52,16 @@ export default function SignupPage() {
                     if (data.session?.access_token) { session = data.session; break; }
                     await new Promise(r => setTimeout(r, 500));
                 }
-                if (!session) throw new Error('Session did not initialise. Please try signing in.');
+                // ── NEW: Handle no session (email confirmation required) ──
+                if (!session) {
+                    // Keep the pending token so it's accepted after email confirmation + login
+                    if (tokenToAccept) {
+                        localStorage.setItem('pending_space_token', tokenToAccept);
+                    }
+                    // Redirect to a "check your email" page instead of throwing
+                    navigate('/login?message=check_email', { replace: true });
+                    return;
+                }
 
                 // Call accept_space_link edge function for space invites
                 const res = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
