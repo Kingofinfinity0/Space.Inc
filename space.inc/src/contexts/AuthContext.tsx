@@ -128,6 +128,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       profileCacheRef.current[uid] = data;
     } catch (err) {
       console.warn('Error syncing context:', err);
+      setProfile(null);
     }
   };
 
@@ -234,10 +235,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
           }
 
-          await Promise.all([
-            fetchProfile(currentSession.user.id),
-            refreshCapabilities()
-          ]);
+          try {
+            await Promise.all([
+              fetchProfile(currentSession.user.id),
+              refreshCapabilities()
+            ]);
+          } catch (e) {
+            console.error('[AuthContext] Post-auth data fetch failed:', e);
+          } finally {
+            setLoading(false);
+          }
         }
       } else {
         setUser(null);
