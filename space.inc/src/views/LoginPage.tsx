@@ -13,6 +13,7 @@ export default function LoginPage() {
     
     const inviteToken = searchParams.get('invite_token');
     const invitedEmail = searchParams.get('email');
+    const message = searchParams.get('message');
     
     const [email, setEmail] = useState(invitedEmail || '');
     const [password, setPassword] = useState('');
@@ -64,6 +65,30 @@ export default function LoginPage() {
                         navigate(`/spaces/${result.data.data.spaceId}`, { replace: true });
                         return;
                     }
+
+                    // Handle specific error codes from accept_space_invite
+                    if (result.error) {
+                        switch (result.error) {
+                            case 'NOT_AUTHENTICATED':
+                                navigate('/login', { replace: true });
+                                return;
+                            case 'INVALID_TOKEN':
+                                setError('Invalid invite link');
+                                return;
+                            case 'LINK_EXPIRED':
+                                setError('This invite has expired');
+                                return;
+                            case 'INVITE_FULL':
+                                setError('Invite limit reached');
+                                return;
+                            case 'EMAIL_NOT_ALLOWED':
+                                setError('Your email isn\'t on the allowlist');
+                                return;
+                            default:
+                                setError(result.error || 'Failed to accept invitation');
+                                return;
+                        }
+                    }
                 }
 
                 // Fallback: handle email invite tokens via RPC
@@ -111,6 +136,12 @@ export default function LoginPage() {
                     {error && (
                         <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs font-bold uppercase tracking-widest animate-[shake_0.5s_ease-in-out]">
                             {error}
+                        </div>
+                    )}
+
+                    {message === "check_email" && (
+                        <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-700 text-xs font-medium leading-relaxed">
+                            Check your email and confirm your account, then sign in here. Your invite link will be applied automatically.
                         </div>
                     )}
 

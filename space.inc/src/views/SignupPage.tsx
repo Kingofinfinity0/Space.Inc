@@ -57,14 +57,17 @@ export default function SignupPage() {
                     return;
                 }
 
-                // Call accept_space_link — this creates the space_memberships row
+                // Call accept_space_link edge function for space invites
                 const res = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${session.access_token}` 
                     },
-                    body: JSON.stringify({ action: 'accept_space_link', token: tokenToUse })
+                    body: JSON.stringify({
+                        action: 'accept_space_link',
+                        token: tokenToUse
+                    })
                 });
 
                 const result = await res.json();
@@ -73,6 +76,30 @@ export default function SignupPage() {
                 if (result.data?.success && result.data?.data?.spaceId) {
                     navigate(`/spaces/${result.data.data.spaceId}`, { replace: true });
                     return;
+                }
+
+                // Handle specific error codes from accept_space_invite
+                if (result.error) {
+                    switch (result.error) {
+                        case 'NOT_AUTHENTICATED':
+                            navigate('/login', { replace: true });
+                            return;
+                        case 'INVALID_TOKEN':
+                            setError('Invalid invite link');
+                            return;
+                        case 'LINK_EXPIRED':
+                            setError('This invite has expired');
+                            return;
+                        case 'INVITE_FULL':
+                            setError('Invite limit reached');
+                            return;
+                        case 'EMAIL_NOT_ALLOWED':
+                            setError('Your email isn\'t on the allowlist');
+                            return;
+                        default:
+                            setError(result.error || 'Failed to accept invitation');
+                            return;
+                    }
                 }
 
                 // Fallback for email-type invitations
