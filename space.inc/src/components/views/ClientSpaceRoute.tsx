@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import ClientPortalView from './ClientPortalView';
+import SpaceDetailView from './SpaceDetailView';
 import { ClientSpace, Meeting } from '../../types';
 import { Rocket } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Holding screen — shown when the client has no active membership yet
+// Holding screen — shown when there's no active membership
 // ─────────────────────────────────────────────────────────────────────────────
 const HoldingScreen = () => (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 font-sans">
@@ -48,22 +49,25 @@ const LoadingScreen = () => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ClientSpaceRoute
-// Reads :spaceId from URL → validates membership via RLS → renders ClientPortalView
+// SpaceRoute
+// Reads :spaceId from URL → looks up membership role → renders accordingly:
+//   client  → ClientPortalView (messages, files, meetings only)
+//   staff/admin/owner → SpaceDetailView (full staff view)
 // ─────────────────────────────────────────────────────────────────────────────
-const ClientSpaceRoute: React.FC = () => {
+const SpaceRoute: React.FC = () => {
     const { spaceId } = useParams<{ spaceId: string }>();
-    const { user, userRole, loading: authLoading, signOut } = useAuth();
+    const { user, userRole, loading: authLoading, signOut, session } = useAuth();
+    const navigate = useNavigate();
 
     const [space, setSpace] = useState<ClientSpace | null>(null);
     const [meetings, setMeetings] = useState<Meeting[]>([]);
+    const [membershipRole, setMembershipRole] = useState<string | null>(null);
     const [fetchLoading, setFetchLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
 
     useEffect(() => {
         if (authLoading || !user) return;
 
-        // If no spaceId, this is the pending route - show holding screen
         if (!spaceId) {
             setFetchLoading(false);
             setNotFound(true);
@@ -73,22 +77,23 @@ const ClientSpaceRoute: React.FC = () => {
         const load = async () => {
             setFetchLoading(true);
             try {
-                // 1. Verify the client has an active membership for this space
-                //    RLS already enforces profile_id = auth.uid(), so this is safe
+                // 1. Look up membership role for this user + space
                 const { data: membership, error: memError } = await supabase
                     .from('space_memberships')
-                    .select('space_id')
+                    .select('role, space_id')
                     .eq('space_id', spaceId)
                     .eq('status', 'active')
                     .single();
 
                 if (memError || !membership) {
-                    console.warn('[ClientSpaceRoute] No active membership for spaceId:', spaceId);
+                    console.warn('[SpaceRoute] No active membership for spaceId:', spaceId);
                     setNotFound(true);
                     return;
                 }
 
-                // 2. Fetch the space record (RLS ensures they can only read their space)
+                setMembershipRole(membership.role);
+
+                // 2. Fetch the space record
                 const { data: spaceData, error: spaceError } = await supabase
                     .from('spaces')
                     .select('*')
@@ -96,7 +101,7 @@ const ClientSpaceRoute: React.FC = () => {
                     .single();
 
                 if (spaceError || !spaceData) {
-                    console.warn('[ClientSpaceRoute] Space not found:', spaceId);
+                    console.warn('[SpaceRoute] Space not found:', spaceId);
                     setNotFound(true);
                     return;
                 }
@@ -112,7 +117,7 @@ const ClientSpaceRoute: React.FC = () => {
                 setSpace(spaceData as ClientSpace);
                 setMeetings((meetingsData as Meeting[]) || []);
             } catch (err) {
-                console.error('[ClientSpaceRoute] Load error:', err);
+                console.error('[SpaceRoute] Load error:', err);
                 setNotFound(true);
             } finally {
                 setFetchLoading(false);
@@ -124,34 +129,42 @@ const ClientSpaceRoute: React.FC = () => {
 
     // ── Auth guard ──────────────────────────────────────────────────────────
     if (authLoading) return <LoadingScreen />;
-
-    // Not logged in → go to login
     if (!user) return <Navigate to="/login" replace />;
-
-    // Staff / owner / admin hitting this URL → back to their dashboard
-    // (they should never be here, this route is for clients only)
-    if (userRole && userRole !== 'client') return <Navigate to="/" replace />;
 
     // ── Data loading ────────────────────────────────────────────────────────
     if (fetchLoading) return <LoadingScreen />;
-
-    // No active membership for this spaceId
     if (notFound || !space) return <HoldingScreen />;
 
-    // ── Render existing ClientPortalView with fetched data ──────────────────
+    // ── Role-based rendering ────────────────────────────────────────────────
+    if (membershipRole === 'client') {
+        return (
+            <ClientPortalView
+                client={space}
+                meetings={meetings}
+                onJoin={(meetingId) => {
+                    console.log('[SpaceRoute] Client joining meeting:', meetingId);
+                }}
+                onLogout={signOut}
+            />
+        );
+    }
+
+    // staff / admin / owner → full staff view
     return (
-        <ClientPortalView
-            client={space}
+        <SpaceDetailView
+            spaceId={spaceId!}
+            space={space}
             meetings={meetings}
+            onBack={() => navigate('/dashboard')}
             onJoin={(meetingId) => {
-                // Open meeting in a new tab via daily.co or internal room
-                // No staff functionality — clients just join
-                console.log('[ClientSpaceRoute] Client joining meeting:', meetingId);
-                // Future: navigate to meeting room
+                console.log('[SpaceRoute] Staff joining meeting:', meetingId);
             }}
-            onLogout={signOut}
+            onSchedule={() => {}}
+            onInstantMeet={() => {}}
+            onEndMeeting={() => {}}
+            onDeleteMeeting={() => {}}
         />
     );
 };
 
-export default ClientSpaceRoute;
+export default SpaceRoute;

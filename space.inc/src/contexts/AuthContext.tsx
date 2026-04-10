@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
-import { supabase, onAuthStateChange, getSession } from '../lib/supabase';
+import { supabase, onAuthStateChange, getSession, EDGE_FUNCTION_BASE_URL } from '../lib/supabase';
 import { apiService } from '../services/apiService';
 import { inviteService } from '../services/inviteService';
 import { useNavigate } from 'react-router-dom';
@@ -172,6 +172,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           // Handle pending invite tokens
           if (event === 'SIGNED_IN') {
+            // First check for legacy pending_invite_token format
             const pending = inviteService.getAndClearPendingToken();
             if (pending) {
               const { token, type } = pending;
@@ -196,6 +197,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
               } catch (err) {
                 console.error(`[AuthContext] Error accepting ${type} invite:`, err);
+              }
+            }
+
+            // Check for pending_space_token (from /join/:token flow)
+            const pendingSpaceToken = localStorage.getItem('pending_space_token');
+            if (pendingSpaceToken) {
+              console.log('[AuthContext] Found pending_space_token, calling accept_space_link...');
+              try {
+                const res = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${currentSession.access_token}`
+                  },
+                  body: JSON.stringify({
+                    action: 'accept_space_link',
+                    token: pendingSpaceToken
+                  })
+                });
+
+                const result = await res.json();
+                localStorage.removeItem('pending_space_token');
+
+                if (result.data?.success && result.data?.data?.spaceId) {
+                  // Redirect to the space-specific path, never to /dashboard
+                  window.location.href = `/spaces/${result.data.data.spaceId}`;
+                  return;
+                } else {
+                  console.error('[AuthContext] accept_space_link failed:', result);
+                }
+              } catch (err) {
+                console.error('[AuthContext] Error calling accept_space_link:', err);
+                localStorage.removeItem('pending_space_token');
               }
             }
           }

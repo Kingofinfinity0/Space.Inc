@@ -12,7 +12,7 @@ import {
     Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
     GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
     File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
-    Bell, Eye, Play, X, FileVideo, ChevronLeft, History
+    Bell, Eye, Play, X, FileVideo, ChevronLeft, History, Mail
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer

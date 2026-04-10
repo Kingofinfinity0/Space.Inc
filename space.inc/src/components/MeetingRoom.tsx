@@ -11,7 +11,7 @@ import { MeetingState, MeetingStateContext, getInitialState, isLoading, isInMeet
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { friendlyError } from '../utils/errors';
-import { Button } from './UI';
+import { Button, GlassCard, Heading, Text } from './UI';
 
 interface MeetingRoomProps {
     meetingId: string;

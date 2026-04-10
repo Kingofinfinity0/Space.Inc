@@ -4,7 +4,7 @@ import { apiService } from '@/services/apiService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Heading, Text, GlassCard } from '@/components/UI/index';
 import { Rocket, Shield, ArrowRight, UserPlus } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase, EDGE_FUNCTION_BASE_URL } from '@/lib/supabase';
 
 export default function LoginPage() {
     const [searchParams] = useSearchParams();
@@ -28,7 +28,10 @@ export default function LoginPage() {
             const { error: signInError } = await signIn(email, password);
             if (signInError) throw signInError;
 
-            if (inviteToken) {
+            // Check for pending space token from localStorage (from /join/:token flow)
+            const pendingSpaceToken = localStorage.getItem('pending_space_token');
+
+            if (inviteToken || pendingSpaceToken) {
                 // Ensure session is active before calling the RPC — signIn
                 // resolves slightly before the JWT is available to rpc() calls.
                 let session = null;
@@ -39,11 +42,40 @@ export default function LoginPage() {
                 }
                 if (!session) throw new Error('Session not ready. Please try again.');
 
-                const inviteData = await apiService.acceptInvitation(inviteToken);
-                if (inviteData?.role === 'client') {
-                    navigate('/client/portal');
+                if (pendingSpaceToken) {
+                    // Call accept_space_link edge function for space invites
+                    const res = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`
+                        },
+                        body: JSON.stringify({
+                            action: 'accept_space_link',
+                            token: pendingSpaceToken
+                        })
+                    });
+
+                    const result = await res.json();
+                    localStorage.removeItem('pending_space_token');
+
+                    if (result.data?.success && result.data?.data?.spaceId) {
+                        // Redirect to the space-specific client path
+                        navigate(`/spaces/${result.data.data.spaceId}`, { replace: true });
+                        return;
+                    }
+                }
+
+                // Fallback: handle email invite tokens via RPC
+                if (inviteToken) {
+                    const inviteData = await apiService.acceptInvitation(inviteToken);
+                    if (inviteData?.role === 'client') {
+                        navigate('/spaces/pending', { replace: true });
+                    } else {
+                        navigate('/dashboard', { replace: true });
+                    }
                 } else {
-                    navigate('/dashboard');
+                    navigate('/spaces/pending', { replace: true });
                 }
             } else {
                 navigate('/dashboard');

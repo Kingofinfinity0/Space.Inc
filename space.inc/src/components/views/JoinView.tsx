@@ -28,6 +28,13 @@ export default function JoinView() {
         checkAuth();
     }, []);
 
+    // Store token immediately on page load (before any redirect can happen)
+    useEffect(() => {
+        if (token) {
+            localStorage.setItem('pending_space_token', token);
+        }
+    }, [token]);
+
     // Resolve the token on mount
     useEffect(() => {
         if (!token) {

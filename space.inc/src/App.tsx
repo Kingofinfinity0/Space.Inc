@@ -63,7 +63,7 @@ import HistoryView from './components/views/HistoryView';
 import ClientPortalView from './components/views/ClientPortalView';
 import { InviteStaffModal } from './components/views/InviteStaffModal';
 import { MeetingRoom } from './components/MeetingRoom';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import JoinView from './components/views/JoinView';
 import AcceptInviteView from './components/views/AcceptInviteView';
 import { NotificationBell } from './components/NotificationBell';
@@ -82,6 +82,75 @@ const ErrorView = ({ message }: { message: string }) => (
         </GlassCard>
     </div>
 );
+
+// ── Client Space Picker ─────────────────────────────────────────────────
+// Shown on /dashboard when a client has multiple space memberships.
+const ClientSpacePicker: React.FC = () => {
+    const { user, signOut } = useAuth();
+    const navigate = useNavigate();
+    const [spaces, setSpaces] = useState<Array<{ space_id: string; space_name: string }>>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!user) return;
+        const load = async () => {
+            try {
+                const { data } = await _supabase
+                    .from('space_memberships')
+                    .select('space_id, spaces(name)')
+                    .eq('profile_id', user.id)
+                    .eq('status', 'active');
+                if (data) {
+                    setSpaces(data.map((m: any) => ({ space_id: m.space_id, space_name: m.spaces?.name || 'Untitled Space' })));
+                }
+            } catch (err) {
+                console.error('[ClientSpacePicker] Error loading spaces:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, [user]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-white flex items-center justify-center animate-pulse">
+                <div className="text-center space-y-3">
+                    <div className="h-10 w-10 bg-zinc-100 rounded-xl mx-auto" />
+                    <div className="h-4 w-32 bg-zinc-100 rounded mx-auto" />
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6 font-sans">
+            <div className="max-w-md w-full space-y-8">
+                <div className="text-center space-y-2">
+                    <div className="h-12 w-12 bg-zinc-900 rounded-xl flex items-center justify-center text-white mx-auto mb-4">
+                        <Rocket size={24} />
+                    </div>
+                    <h1 className="text-2xl font-black tracking-tight text-zinc-900">Your Spaces</h1>
+                    <p className="text-zinc-500 text-sm">Select a workspace to continue</p>
+                </div>
+                <div className="space-y-3">
+                    {spaces.map(s => (
+                        <button
+                            key={s.space_id}
+                            onClick={() => navigate(`/spaces/${s.space_id}`, { replace: true })}
+                            className="w-full p-4 bg-white border border-zinc-200 rounded-xl text-left hover:border-zinc-400 hover:shadow-sm transition-all"
+                        >
+                            <span className="font-bold text-sm text-zinc-900">{s.space_name}</span>
+                        </button>
+                    ))}
+                </div>
+                <div className="text-center pt-4">
+                    <button onClick={signOut} className="text-xs text-zinc-400 hover:text-zinc-900 font-bold uppercase tracking-widest transition-colors">Sign Out</button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const App = () => {
     const { user, profile, loading, userRole, organizationId, can, signOut } = useAuth();
@@ -125,35 +194,36 @@ const App = () => {
     }, [user, loading]);
 
     // ── Client role redirect ─────────────────────────────────────────────────
-    // After auth resolves: if the user is a client, look up their active space
-    // membership and redirect them to /client/space/:spaceId.
-    // If no membership exists yet, send them to /client/space/pending so
-    // ClientSpaceRoute can render the holding screen.
+    // After auth resolves: if the user is a client on /dashboard or /,
+    // look up their active space memberships and redirect accordingly.
+    // Single membership → /spaces/:id; Multiple → space picker; None → holding.
     useEffect(() => {
         if (loading || !user || !userRole) return;
         if (userRole !== 'client') return;
 
-        // Only redirect if not already on the client space route
-        const isOnClientRoute = window.location.pathname.startsWith('/client/space/');
-        if (isOnClientRoute) return;
+        const pathname = window.location.pathname;
+        // Only auto-redirect on /dashboard or /
+        if (pathname !== '/dashboard' && pathname !== '/') return;
+        // Don't redirect if already on a space route
+        if (pathname.startsWith('/spaces/')) return;
 
         const redirectClient = async () => {
             try {
-                const { data: membership } = await _supabase
+                const { data: memberships } = await _supabase
                     .from('space_memberships')
                     .select('space_id')
                     .eq('profile_id', user.id)
-                    .eq('status', 'active')
-                    .single();
+                    .eq('status', 'active');
 
-                if (membership?.space_id) {
-                    navigate(`/client/space/${membership.space_id}`, { replace: true });
+                if (memberships && memberships.length === 1) {
+                    navigate(`/spaces/${memberships[0].space_id}`, { replace: true });
+                } else if (memberships && memberships.length > 1) {
+                    // Multiple memberships — stay on /dashboard, picker will show
                 } else {
-                    // No active membership — show holding screen
-                    navigate('/client/space/pending', { replace: true });
+                    navigate('/spaces/pending', { replace: true });
                 }
             } catch {
-                navigate('/client/space/pending', { replace: true });
+                navigate('/spaces/pending', { replace: true });
             }
         };
 
@@ -268,7 +338,7 @@ const App = () => {
             // Default case - redirect to current view
             setMeetingEntrySource({ 
                 view: currentView, 
-                spaceId: currentView === ViewState.SPACE_DETAIL ? selectedSpaceId : undefined 
+                spaceId: currentView === 'SPACE_DETAIL' as ViewState ? selectedSpaceId : undefined 
             });
         }
         
@@ -583,52 +653,19 @@ const App = () => {
                 Locked: ClientSpaceRoute enforces role === 'client' internally.
                 Staff/owner/admin hitting this URL are redirected back to /.
             ─────────────────────────────────────────────────────────────── */}
-            <Route path="/client/space/:spaceId" element={<ClientSpaceRoute />} />
-            <Route path="/client/space/pending" element={<ClientSpaceRoute />} />
-            <Route path="*" element={
+            <Route path="/spaces/:spaceId" element={<ClientSpaceRoute />} />
+            <Route path="/spaces/pending" element={<ClientSpaceRoute />} />
+            <Route path="/dashboard" element={
                 (() => {
                     if (!isAuthenticated) {
                         return <LoginPage />;
                     }
 
                     if (userRole === 'client') {
-                        // ── Route guard ──────────────────────────────────────
-                        // Clients hitting any staff route get redirected to their space
-                        const pathname = window.location.pathname;
-                        
-                        // If not already on a client route, redirect to their space
-                        if (!pathname.startsWith('/client/space/')) {
-                            const redirectClientToSpace = async () => {
-                                try {
-                                    const { data: membership } = await _supabase
-                                        .from('space_memberships')
-                                        .select('space_id')
-                                        .eq('profile_id', user.id)
-                                        .eq('status', 'active')
-                                        .single();
-
-                                    if (membership?.space_id) {
-                                        navigate(`/client/space/${membership.space_id}`, { replace: true });
-                                    } else {
-                                        navigate('/client/space/pending', { replace: true });
-                                    }
-                                } catch {
-                                    navigate('/client/space/pending', { replace: true });
-                                }
-                            };
-                            
-                            redirectClientToSpace();
-                        }
-                        
-                        // Show loading while redirecting
-                        return (
-                            <div className="min-h-screen bg-white flex items-center justify-center">
-                                <div className="text-center space-y-3 animate-pulse">
-                                    <div className="h-10 w-10 bg-zinc-100 rounded-xl mx-auto" />
-                                    <div className="h-4 w-32 bg-zinc-100 rounded mx-auto" />
-                                </div>
-                            </div>
-                        );
+                        // ── Client dashboard ──────────────────────────────────
+                        // Single membership → redirect handled by useEffect above
+                        // Multiple memberships → show space picker
+                        return <ClientSpacePicker />;
                     }
 
                     return (
@@ -802,6 +839,9 @@ const App = () => {
                         </>
                     );
                 })()
+            } />
+            <Route path="*" element={
+                !isAuthenticated ? <LoginPage /> : <Navigate to="/dashboard" replace />
             } />
         </Routes>
     );

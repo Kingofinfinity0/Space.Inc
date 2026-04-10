@@ -4,7 +4,7 @@ import { apiService } from '@/services/apiService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Heading, Text, GlassCard } from '@/components/UI/index';
 import { Rocket, Shield, ArrowRight } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase, EDGE_FUNCTION_BASE_URL } from '@/lib/supabase';
 
 export default function SignupPage() {
     const [searchParams] = useSearchParams();
@@ -30,14 +30,20 @@ export default function SignupPage() {
         setLoading(true);
 
         try {
+            // Check for pending space token from localStorage (set by /join/:token page)
+            const pendingToken = localStorage.getItem('pending_space_token');
+            const tokenToUse = inviteToken || pendingToken || undefined;
+
             const { error: signUpError } = await signUp(email, password, {
                 full_name: fullName,
-                invite_token: inviteToken || undefined
+                invite_token: tokenToUse
             });
 
             if (signUpError) throw signUpError;
 
-            if (inviteToken) {
+            if (inviteToken || pendingToken) {
+                const tokenToAccept = inviteToken || pendingToken;
+
                 // Wait for Supabase to propagate the session — auth.uid() in
                 // the RPC returns NULL if we call it before the JWT is ready.
                 let session = null;
@@ -48,11 +54,40 @@ export default function SignupPage() {
                 }
                 if (!session) throw new Error('Session did not initialise. Please try signing in.');
 
-                const inviteData = await apiService.acceptInvitation(inviteToken);
-                if (inviteData?.role === 'client') {
-                    navigate('/client/portal');
+                // Call accept_space_link edge function for space invites
+                const res = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify({
+                        action: 'accept_space_link',
+                        token: tokenToAccept
+                    })
+                });
+
+                const result = await res.json();
+
+                // Clear the pending token
+                localStorage.removeItem('pending_space_token');
+
+                if (result.data?.success && result.data?.data?.spaceId) {
+                    // Redirect to the space-specific client path
+                    navigate(`/spaces/${result.data.data.spaceId}`, { replace: true });
+                    return;
+                }
+
+                // Fallback: use the old RPC method for email invites
+                if (inviteToken) {
+                    const inviteData = await apiService.acceptInvitation(inviteToken);
+                    if (inviteData?.role === 'client') {
+                        navigate('/spaces/pending', { replace: true });
+                    } else {
+                        navigate('/dashboard', { replace: true });
+                    }
                 } else {
-                    navigate('/dashboard');
+                    navigate('/spaces/pending', { replace: true });
                 }
             } else {
                 navigate('/onboarding');
