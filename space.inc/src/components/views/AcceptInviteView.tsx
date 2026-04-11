@@ -116,10 +116,15 @@ export default function AcceptInviteView() {
         setStatus('accepting');
         try {
             const res = await apiService.acceptInvitation(token);
-            if (res && res.redirect_path) {
+            if (res) {
                 showToast('Invitation accepted successfully!', 'success');
-                // Use window.location for a hard redirect to ensure state refresh if needed
-                window.location.href = res.redirect_path;
+                
+                // Role-based redirect logic
+                if (res.role === 'client') {
+                    window.location.href = `/client/space/${res.spaceId}`;
+                } else {
+                    window.location.href = res.redirect_path;
+                }
             } else {
                 setStatus('invalid');
                 setErrorMsg('Failed to accept invitation. The invitation may no longer be valid.');
