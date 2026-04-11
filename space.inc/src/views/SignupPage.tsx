@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiService } from '@/services/apiService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Heading, Text, GlassCard } from '@/components/UI/index';
-import { Rocket, Shield, ArrowRight } from 'lucide-react';
+import { Rocket, Shield, ArrowRight, Mail } from 'lucide-react';
 import { supabase, EDGE_FUNCTION_BASE_URL } from '@/lib/supabase';
 
 export default function SignupPage() {
@@ -19,9 +19,27 @@ export default function SignupPage() {
     const [fullName, setFullName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
+    const [inviteOrgName, setInviteOrgName] = useState<string | null>(null);
 
     useEffect(() => {
         if (invitedEmail) setEmail(invitedEmail);
+        
+        // Check for pending invite token in sessionStorage
+        const token = sessionStorage.getItem('pending_invite_token');
+        if (token) {
+            setPendingInviteToken(token);
+            // Fetch invite details to show org name using validateInvitationContext
+            apiService.validateInvitationContext(token)
+            .then(data => {
+                if (data && data.org_name) {
+                    setInviteOrgName(data.org_name);
+                }
+            })
+            .catch(err => {
+                console.error('Error fetching invite details:', err);
+            });
+        }
     }, [invitedEmail]);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -149,6 +167,20 @@ export default function SignupPage() {
                     {error && (
                         <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs font-bold uppercase tracking-widest animate-[shake_0.5s_ease-in-out]">
                             {error}
+                        </div>
+                    )}
+
+                    {pendingInviteToken && (
+                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 text-xs font-medium leading-relaxed">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Mail size={16} />
+                                <span className="font-bold uppercase tracking-wider">You're joining an organization</span>
+                            </div>
+                            {inviteOrgName ? (
+                                <p>Create your account to accept your invitation to join <strong>{inviteOrgName}</strong></p>
+                            ) : (
+                                <p>Create your account to accept your organization invitation</p>
+                            )}
                         </div>
                     )}
 

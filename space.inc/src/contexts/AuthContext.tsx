@@ -173,7 +173,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           // Handle pending invite tokens
           if (event === 'SIGNED_IN') {
-            // First check for legacy pending_invite_token format
+            // First check for sessionStorage pending_invite_token (new flow)
+            const pendingSessionToken = sessionStorage.getItem('pending_invite_token');
+            if (pendingSessionToken) {
+              console.log('[AuthContext] Found pending invite token in sessionStorage, accepting...');
+              sessionStorage.removeItem('pending_invite_token');
+              try {
+                const result = await apiService.acceptInvitation(pendingSessionToken);
+                if (result && result.redirect_path) {
+                  window.location.href = result.redirect_path;
+                  return;
+                } else {
+                  console.error("[AuthContext] Failed to accept invitation from sessionStorage");
+                }
+              } catch (err) {
+                console.error('[AuthContext] Error accepting invitation from sessionStorage:', err);
+              }
+            }
+
+            // Then check for legacy pending_invite_token format
             const pending = inviteService.getAndClearPendingToken();
             if (pending) {
               const { token, type } = pending;

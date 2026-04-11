@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiService } from '@/services/apiService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Heading, Text, GlassCard } from '@/components/UI/index';
-import { Rocket, Shield, ArrowRight, UserPlus } from 'lucide-react';
+import { Rocket, Shield, ArrowRight, UserPlus, Mail } from 'lucide-react';
 import { supabase, EDGE_FUNCTION_BASE_URL } from '@/lib/supabase';
 
 export default function LoginPage() {
@@ -19,6 +19,26 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
+    const [inviteOrgName, setInviteOrgName] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Check for pending invite token in sessionStorage
+        const token = sessionStorage.getItem('pending_invite_token');
+        if (token) {
+            setPendingInviteToken(token);
+            // Fetch invite details to show org name using validateInvitationContext
+            apiService.validateInvitationContext(token)
+            .then(data => {
+                if (data && data.org_name) {
+                    setInviteOrgName(data.org_name);
+                }
+            })
+            .catch(err => {
+                console.error('Error fetching invite details:', err);
+            });
+        }
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -142,6 +162,20 @@ export default function LoginPage() {
                     {message === "check_email" && (
                         <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-700 text-xs font-medium leading-relaxed">
                             Check your email and confirm your account, then sign in here. Your invite link will be applied automatically.
+                        </div>
+                    )}
+
+                    {pendingInviteToken && (
+                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 text-xs font-medium leading-relaxed">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Mail size={16} />
+                                <span className="font-bold uppercase tracking-wider">You're joining an organization</span>
+                            </div>
+                            {inviteOrgName ? (
+                                <p>Sign in to accept your invitation to join <strong>{inviteOrgName}</strong></p>
+                            ) : (
+                                <p>Sign in to accept your organization invitation</p>
+                            )}
                         </div>
                     )}
 

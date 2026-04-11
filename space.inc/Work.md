@@ -240,5 +240,5 @@ sequenceDiagram
 - [x] Inspect both files involved (`LoginPage.tsx` merged cleanly manually).
 - [x] Analyze `SignupPage.tsx` conflict.
 - [x] Remove the conflict markers from `SignupPage.tsx`.
-- [ ] Run `git add` and `git commit` to finalize the merge.
-- [ ] Run `git push origin master` to sync with the remote repository.
+- [x] Run `git add` and `git commit` to finalize the merge.
+- [x] Run `git push origin master` to sync with the remote repository.

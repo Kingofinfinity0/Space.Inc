@@ -194,5 +194,58 @@
 }
 
 .accept-invite-spinner-white {
-  border-top-color: white !  important;
+  border-top-color: white !important;
+}
+
+.accept-invite-auth-options {
+  margin-top: 2rem;
+}
+
+.accept-invite-auth-divider {
+  position: relative;
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.accept-invite-auth-divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.accept-invite-auth-divider span {
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0 1rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  position: relative;
+  z-index: 1;
+}
+
+.accept-invite-auth-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.accept-invite-btn-secondary {
+  background: white !important;
+  color: #1d1d1d !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+.accept-invite-btn-secondary:hover {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
 }
