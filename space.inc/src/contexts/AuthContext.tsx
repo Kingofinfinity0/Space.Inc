@@ -194,44 +194,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               }
             }
 
-            // Step 1 — Post-auth redirect for client users
-            // Query by auth user directly rather than through profile object
-            try {
-              const { data: { user }, error: authError } = await supabase.auth.getUser();
+            // Post-auth redirect for client users only
+            if (profile?.role === 'client') {
+              if (!window.location.pathname.startsWith('/spaces/')) {
+                try {
+                  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-              if (authError || !user) {
-                console.error('[AuthContext] Auth user lookup failed:', authError);
-                // Handle auth failure differently - redirect to login
-                window.location.href = '/login?error=session_expired';
-                return;
+                  if (authError || !user) {
+                    window.location.href = '/login?error=session_expired';
+                    return;
+                  }
+
+                  const { data, error: membershipError } = await supabase
+                    .from('space_memberships')
+                    .select('space_id')
+                    .eq('profile_id', user.id)
+                    .eq('status', 'active')
+                    .single();
+
+                  if (membershipError || !data?.space_id) {
+                    window.location.href = '/spaces/pending';
+                    return;
+                  }
+
+                  window.location.href = `/spaces/${data.space_id}`;
+                  return;
+                } catch (err) {
+                  console.error('[AuthContext] Unexpected error in post-auth redirect:', err);
+                  window.location.href = '/spaces/pending';
+                  return;
+                }
               }
-
-              const { data, error: membershipError } = await supabase
-                .from('space_memberships')
-                .select('space_id')
-                .eq('profile_id', user.id)
-                .eq('status', 'active')
-                .single();
-
-              if (membershipError) {
-                console.error('[AuthContext] Membership query failed:', membershipError);
-                // Handle membership lookup failure
-                window.location.href = '/spaces/pending';
-                return;
-              }
-
-              if (data?.space_id) {
-                console.log('[AuthContext] Redirecting client to space:', data.space_id);
-                window.location.href = `/client/space/${data.space_id}`;
-                return;
-              } else {
-                window.location.href = '/spaces/pending';
-                return;
-              }
-            } catch (err) {
-              console.error('[AuthContext] Unexpected error in post-auth redirect:', err);
-              window.location.href = '/spaces/pending';
-              return;
             }
 
             // Then check for legacy pending_invite_token format
