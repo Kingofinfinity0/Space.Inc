@@ -120,10 +120,10 @@ export default function AcceptInviteView() {
                 showToast('Invitation accepted successfully!', 'success');
                 
                 // Role-based redirect logic
-                if (res.role === 'client') {
-                    window.location.href = `/client/space/${res.spaceId}`;
+                if (res.data.role === 'client') {
+                    window.location.href = `/client/space/${res.data.spaceId}`;
                 } else {
-                    window.location.href = res.redirect_path;
+                    window.location.href = res.data.redirect_path;
                 }
             } else {
                 setStatus('invalid');

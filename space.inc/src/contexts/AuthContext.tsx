@@ -180,8 +180,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               sessionStorage.removeItem('pending_invite_token');
               try {
                 const result = await apiService.acceptInvitation(pendingSessionToken);
-                if (result && result.redirect_path) {
-                  window.location.href = result.redirect_path;
+                if (result?.data?.redirect_path) {
+                  window.location.href = result.data.redirect_path;
+                  return;
+                } else if (result?.data?.role === 'client' && result?.data?.spaceId) {
+                  window.location.href = `/client/space/${result.data.spaceId}`;
                   return;
                 } else {
                   console.error("[AuthContext] Failed to accept invitation from sessionStorage");
@@ -192,12 +195,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             // Step 1 — Post-auth redirect for client users
-            if (profile?.role === 'client') {
-              try {
+            // Fetch profile directly to ensure we have fresh data
+            try {
+              const { data: freshProfile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', currentSession.user.id)
+                .single();
+
+              if (freshProfile?.role === 'client') {
                 const { data } = await supabase
                   .from('space_memberships')
                   .select('space_id')
-                  .eq('profile_id', profile.id)
+                  .eq('profile_id', freshProfile.id)
                   .eq('status', 'active')
                   .single();
 
@@ -206,9 +216,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                   window.location.href = `/client/space/${data.space_id}`;
                   return;
                 }
-              } catch (err) {
-                console.error('[AuthContext] Error fetching client space membership:', err);
               }
+            } catch (err) {
+              console.error('[AuthContext] Error in post-auth client redirect:', err);
             }
 
             // Then check for legacy pending_invite_token format

@@ -30,7 +30,7 @@ export default function LoginPage() {
             // Fetch invite details to show org name using validateInvitationContext
             apiService.validateInvitationContext(token)
             .then(data => {
-                if (data && data.org_name) {
+                if (data && data.valid && data.org_name) {
                     setInviteOrgName(data.org_name);
                 }
             })
@@ -114,8 +114,8 @@ export default function LoginPage() {
                 // Fallback: handle email invite tokens via RPC
                 if (inviteToken) {
                     const inviteData = await apiService.acceptInvitation(inviteToken);
-                    if (inviteData?.role === 'client') {
-                        navigate('/spaces/pending', { replace: true });
+                    if (inviteData?.data?.role === 'client') {
+                        navigate('/client/space/' + inviteData?.data?.spaceId, { replace: true });
                     } else {
                         navigate('/dashboard', { replace: true });
                     }
