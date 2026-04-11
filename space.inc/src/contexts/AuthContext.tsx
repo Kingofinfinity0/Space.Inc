@@ -191,6 +191,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               }
             }
 
+            // Step 1 — Post-auth redirect for client users
+            if (profile?.role === 'client') {
+              try {
+                const { data } = await supabase
+                  .from('space_memberships')
+                  .select('space_id')
+                  .eq('profile_id', profile.id)
+                  .eq('status', 'active')
+                  .single();
+
+                if (data?.space_id) {
+                  console.log('[AuthContext] Redirecting client to space:', data.space_id);
+                  window.location.href = `/client/space/${data.space_id}`;
+                  return;
+                }
+              } catch (err) {
+                console.error('[AuthContext] Error fetching client space membership:', err);
+              }
+            }
+
             // Then check for legacy pending_invite_token format
             const pending = inviteService.getAndClearPendingToken();
             if (pending) {
