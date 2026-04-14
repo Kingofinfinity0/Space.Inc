@@ -11,22 +11,46 @@ import { ClientSpace, ViewState, Task } from '../../types';
 const TaskView = ({ tasks, clients, onUpdateStatus, onCreate }: { 
     tasks: Task[], 
     clients: ClientSpace[], 
-    onUpdateStatus: (id: string, status: any) => void, 
+    onUpdateStatus: (id: string, status: Task['status'], beforeId?: string | null, afterId?: string | null) => void,
     onCreate: (t: any) => void 
 }) => {
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [newTaskTitle, setNewTaskTitle] = useState('');
     const [newTaskSpace, setNewTaskSpace] = useState(clients[0]?.id || '');
     const [newTaskDate, setNewTaskDate] = useState('');
+    const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
 
     const handleDragStart = (e: React.DragEvent, taskId: string) => {
         e.dataTransfer.setData('taskId', taskId);
     };
 
-    const handleDrop = (e: React.DragEvent, newStatus: Task['status']) => {
+    const handleDropOnColumn = (e: React.DragEvent, newStatus: Task['status']) => {
         e.preventDefault();
         const taskId = e.dataTransfer.getData('taskId');
-        onUpdateStatus(taskId, newStatus);
+        setDragOverTaskId(null);
+
+        // Find tasks in this column to see if we dropped it at the end
+        const columnTasks = tasks.filter(t => t.status === newStatus);
+        const lastTask = columnTasks[columnTasks.length - 1];
+
+        onUpdateStatus(taskId, newStatus, null, lastTask?.id || null);
+    };
+
+    const handleDropOnTask = (e: React.DragEvent, targetTask: Task) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const taskId = e.dataTransfer.getData('taskId');
+        setDragOverTaskId(null);
+
+        if (taskId === targetTask.id) return;
+
+        const columnTasks = tasks.filter(t => t.status === targetTask.status);
+        const targetIndex = columnTasks.findIndex(t => t.id === targetTask.id);
+
+        const beforeId = targetTask.id;
+        const afterId = targetIndex > 0 ? columnTasks[targetIndex - 1].id : null;
+
+        onUpdateStatus(taskId, targetTask.status, beforeId, afterId);
     };
 
     const handleCreate = () => {
@@ -60,7 +84,7 @@ const TaskView = ({ tasks, clients, onUpdateStatus, onCreate }: {
                         key={status}
                         className="bg-[#F7F7F8] rounded-lg p-4 flex flex-col h-full border border-[#D1D5DB]"
                         onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => handleDrop(e, status)}
+                        onDrop={(e) => handleDropOnColumn(e, status)}
                     >
                         <div className="flex items-center justify-between mb-4 px-2">
                             <h3 className="font-medium text-zinc-500 text-sm uppercase tracking-wider">{status.replace('_', ' ')}</h3>
@@ -76,7 +100,15 @@ const TaskView = ({ tasks, clients, onUpdateStatus, onCreate }: {
                                         key={task.id}
                                         draggable
                                         onDragStart={(e) => handleDragStart(e, task.id)}
-                                        className="bg-white p-4 rounded-md border border-[#D1D5DB] shadow-sm cursor-grab active:cursor-grabbing hover:border-[#10A37F] transition-colors"
+                                        onDragOver={(e) => {
+                                            e.preventDefault();
+                                            setDragOverTaskId(task.id);
+                                        }}
+                                        onDragLeave={() => setDragOverTaskId(null)}
+                                        onDrop={(e) => handleDropOnTask(e, task)}
+                                        className={`bg-white p-4 rounded-md border shadow-sm cursor-grab active:cursor-grabbing transition-colors ${
+                                            dragOverTaskId === task.id ? 'border-[#10A37F] bg-emerald-50/30' : 'border-[#D1D5DB] hover:border-[#10A37F]'
+                                        }`}
                                     >
                                         <div className="flex justify-between items-start mb-2">
                                             <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 truncate max-w-[100px]">
