@@ -189,9 +189,15 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
                 onClose={() => setIsUploadModalOpen(false)}
                 loading={sending}
                 onUpload={async (file) => {
-                    if (!profile?.organization_id && !organizationId) return;
-                    await sendFile(organizationId || profile?.organization_id || '', file);
+                    if (!profile?.organization_id && !organizationId) return false;
+                    try {
+                        await sendFile(organizationId || profile?.organization_id || '', file);
+                        return true;
+                    } catch {
+                        return false;
+                    }
                 }}
+                uploadProgress={0}
             />
         </div>
     );

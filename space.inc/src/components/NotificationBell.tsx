@@ -221,7 +221,7 @@ export const NotificationBell: React.FC = () => {
             </button>
 
             {open && (
-                <div className="absolute right-0 mt-2 w-[380px] max-w-[90vw] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-hidden z-[999]">
+                <div className="fixed sm:absolute right-4 sm:right-0 top-20 sm:top-auto sm:mt-2 w-[calc(100vw-2rem)] sm:w-[420px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-[1000] max-h-[80vh] flex flex-col">
                     <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Bell size={16} className="text-rose-500" />
@@ -237,7 +237,7 @@ export const NotificationBell: React.FC = () => {
                     ) : notifications.length === 0 ? (
                         <div className="p-4 text-sm text-zinc-500">No notifications.</div>
                     ) : (
-                        <div className="max-h-[420px] overflow-y-auto">
+                        <div className="overflow-y-auto flex-1">
                             {notifications.map((n) => {
                                 const isUnread = n?.read !== true;
                                 const title = n.payload?.title || n.payload?.content || n.message || n.type || 'Notification';
@@ -263,10 +263,10 @@ export const NotificationBell: React.FC = () => {
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-start gap-2 justify-between">
                                                 <div className="min-w-0">
-                                                    <p className={`text-sm ${isUnread ? 'font-bold text-zinc-900 dark:text-zinc-100' : 'font-semibold text-zinc-700 dark:text-zinc-300'} truncate`}>
+                                                    <p className={`text-sm ${isUnread ? 'font-bold text-zinc-900 dark:text-zinc-100' : 'font-semibold text-zinc-700 dark:text-zinc-300'} break-words line-clamp-2`}>
                                                         {title}
                                                     </p>
-                                                    <p className="text-[12px] text-zinc-500 truncate mt-1">
+                                                    <p className="text-[12px] text-zinc-500 break-words mt-1">
                                                         {excerpt || '—'}
                                                     </p>
                                                 </div>

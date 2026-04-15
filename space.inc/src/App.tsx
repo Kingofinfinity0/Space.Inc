@@ -8,6 +8,9 @@ import {
     ChevronRight,
     Rocket,
     LayoutGrid,
+    MessageSquare,
+    FileText,
+    Settings,
     Users,
     Inbox,
     UserCheck,
@@ -91,6 +94,8 @@ const ClientSpacePicker: React.FC = () => {
     const [spaces, setSpaces] = useState<Array<{ space_id: string; space_name: string }>>([]);
     const [loading, setLoading] = useState(true);
 
+
+
     useEffect(() => {
         if (!user) return;
         const load = async () => {
@@ -162,12 +167,20 @@ const App = () => {
     // Sidebar/View State
     const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
     const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
+    const [activeSpaceTab, setActiveSpaceTab] = useState<string>("Dashboard");
     const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
     const [activeMeetingRoomUrl, setActiveMeetingRoomUrl] = useState<string | null>(null);
     const [meetingEntrySource, setMeetingEntrySource] = useState<{ view: ViewState; spaceId?: string } | null>(null);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [lastInviteData, setLastInviteData] = useState<{ link: string | null, email: string, status?: string, invite_id?: string } | null>(null);
     const [copiedLink, setCopiedLink] = useState(false);
+    const [isMenuTransitioning, setIsMenuTransitioning] = useState(false);
+
+    useEffect(() => {
+        setIsMenuTransitioning(true);
+        const timer = setTimeout(() => setIsMenuTransitioning(false), 400);
+        return () => clearTimeout(timer);
+    }, [currentView, selectedSpaceId]);
 
     // Data State
     const [clients, setClients] = useState<ClientSpace[]>([]);
@@ -425,13 +438,15 @@ const App = () => {
         }
     };
 
-<<<<<<< HEAD
     const handleUpdateTask = async (taskId: string, updates: Partial<Task>) => {
         try {
             const { error } = await apiService.updateTask(taskId, updates, organizationId || '');
             if (error) throw error;
             setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...updates } : task));
-=======
+        } catch (err: any) {
+            showToast(`Error updating task: ${err.message}`, "error");
+        }
+    };
     const handleTaskStatusUpdate = async (taskId: string, newStatus: Task['status'], beforeId?: string | null, afterId?: string | null) => {
         try {
             // 1. Update status if changed
@@ -453,7 +468,6 @@ const App = () => {
             if (fetchError) throw fetchError;
             if (updatedTasks) setTasks(updatedTasks);
 
->>>>>>> 0d058411de5e79e575f3d482a77170d6bb6c8aec
         } catch (err: any) {
             showToast(`Error updating task: ${err.message}`, "error");
         }
@@ -604,7 +618,7 @@ const App = () => {
                 if (!can('can_view_all_spaces')) return <div className="p-8">Access Denied</div>;
                 return <SpacesView clients={clients} onSelect={(id) => { setSelectedSpaceId(id); setCurrentView(ViewState.SPACE_DETAIL); }} onCreate={handleCreateSpace} />;
             case ViewState.SPACE_DETAIL:
-                return <SpaceDetailView spaceId={selectedSpaceId!} space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setCurrentView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} onEndMeeting={handleEndMeeting} />;
+                return <SpaceDetailView activeTab={activeSpaceTab} onTabChange={setActiveSpaceTab} spaceId={selectedSpaceId!} space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setCurrentView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} onEndMeeting={handleEndMeeting} />;
             case ViewState.INBOX:
                 if (!can('can_view_dashboard')) return <div className="p-8">Access Denied</div>;
                 return <InboxView clients={clients} inboxData={inboxData} />;
@@ -699,6 +713,9 @@ const App = () => {
         {
             label: 'Dashboard',
             icon: LayoutGrid,
+    MessageSquare,
+    FileText,
+    Settings,
             allowed: can('can_view_dashboard'),
             isActive: currentView === ViewState.DASHBOARD,
             onClick: () => setCurrentView(ViewState.DASHBOARD),
@@ -798,119 +815,65 @@ const App = () => {
 
                     return (
                         <>
-                            <AppLayout
-                                sidebar={
-                                    <aside className="relative z-10 hidden w-[300px] flex-col p-6 xl:flex">
-                                        <div className="glass-surface glass-elevated flex h-full flex-col rounded-[30px] p-5 text-slate-100">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.08] text-emerald-300">
-                                                    <Rocket size={22} />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <div className="text-lg font-semibold tracking-[-0.03em] text-white">Space.inc</div>
-                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Workspace OS</div>
-                                                </div>
-                                                <div className="ml-auto">
-                                                    <NotificationBell />
-                                                </div>
-                                            </div>
-
-                                            <div className="relative mt-6">
-                                                <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                                                <input
-                                                    placeholder="Search anything..."
-                                                    className="w-full rounded-2xl border border-white/10 bg-[rgba(7,9,14,0.72)] py-3 pl-10 pr-4 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-white/12"
-                                                />
-                                            </div>
-
-                                            <div className="mt-6 space-y-3">
-                                                <div className="glass-muted rounded-[24px] px-4 py-4">
-                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Current view</div>
-                                                    <div className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">{currentViewLabel}</div>
-                                                    <p className="mt-2 text-sm leading-6 text-slate-400">
-                                                        Slim surfaces, denser lists, and a floating dock now frame the whole workspace.
-                                                    </p>
-                                                </div>
-                                                <div className="glass-muted rounded-[24px] px-4 py-4">
-                                                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                                                        <span>Unread inbox</span>
-                                                        <span>{totalInboxItems}</span>
-                                                    </div>
-                                                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-                                                        <div
-                                                            className="h-full rounded-full bg-emerald-300 transition-all duration-300"
-                                                            style={{ width: `${Math.min(totalInboxItems * 12, 100)}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <button
-                                                onClick={() => setCurrentView(ViewState.SETTINGS)}
-                                                className="interactive-surface mt-auto flex items-center gap-3 rounded-[24px] border border-white/8 bg-white/[0.05] p-3 text-left"
-                                            >
-                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.08] text-xs font-semibold text-white">
-                                                    {profile?.full_name?.substring(0, 2).toUpperCase() || 'AD'}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-medium text-white">{profile?.full_name || 'User'}</p>
-                                                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{userRole || 'Member'}</p>
-                                                </div>
-                                            </button>
-                                        </div>
-                                    </aside>
-                                }
-                            >
+                            <AppLayout>
                                 <div className="flex min-h-screen flex-1 flex-col">
-                                    <header className="sticky top-0 z-20 px-4 pt-4 md:px-8 md:pt-6">
-                                        <div className="glass-surface flex items-center justify-between rounded-[26px] px-4 py-4 md:px-6">
-                                            <div className="flex min-w-0 items-center gap-2">
-                                                <span className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">Main</span>
-                                                <ChevronRight size={14} className="text-slate-600" />
-                                                <span className="truncate text-[11px] font-medium uppercase tracking-[0.22em] text-slate-200">{currentViewLabel}</span>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <div className="hidden md:flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.05] px-3 py-2 text-xs text-slate-400">
-                                                    <Search size={13} />
-                                                    Search
-                                                </div>
-                                                <Button variant="primary" size="sm">Upgrade</Button>
-                                            </div>
-                                        </div>
-                                    </header>
-                                    <div className="flex-1 overflow-y-auto px-4 pb-36 pt-6 md:px-8 md:pb-40 md:pt-8">
+                                    <div className="flex-1 overflow-y-auto px-4 pb-36 pt-6 md:px-8 md:pb-40 md:pt-8 transition-colors duration-300">
                                         <div className="mx-auto max-w-7xl">{renderContent()}</div>
                                     </div>
-                                    <nav className="fixed inset-x-0 bottom-8 z-30 flex justify-center px-4">
-                                        <div className="dock-enter flex max-w-[calc(100vw-1.5rem)] items-center gap-1 overflow-x-auto rounded-full border border-white/10 bg-[rgba(14,18,24,0.8)] px-2 py-2 shadow-[0_20px_50px_rgba(0,0,0,0.3)] backdrop-blur-[12px]">
-                                            {dockItems.map((item, index) => {
+
+                                    <div className="dock-container">
+                                        <div className={`menu-pill ${isMenuTransitioning ? 'condensed' : ''}`}>
+                                            {(currentView === ViewState.SPACE_DETAIL ? [
+                                                { label: 'Dashboard', icon: LayoutGrid, isActive: activeSpaceTab === 'Dashboard', onClick: () => setActiveSpaceTab('Dashboard') },
+                                                { label: 'Chat', icon: MessageSquare, isActive: activeSpaceTab === 'Chat', onClick: () => setActiveSpaceTab('Chat') },
+                                                { label: 'Meeting', icon: Video, isActive: activeSpaceTab === 'Meetings', onClick: () => setActiveSpaceTab('Meetings') },
+                                                { label: 'Task', icon: CheckSquare, isActive: activeSpaceTab === 'Tasks', onClick: () => setActiveSpaceTab('Tasks') },
+                                                { label: 'Docs', icon: FileText, isActive: activeSpaceTab === 'Docs', onClick: () => setActiveSpaceTab('Docs') },
+                                                { label: 'Exit', icon: X, onClick: () => setCurrentView(ViewState.DASHBOARD) }
+                                            ] : [
+                                                { label: 'Dashboard', icon: LayoutGrid, isActive: currentView === ViewState.DASHBOARD, onClick: () => setCurrentView(ViewState.DASHBOARD) },
+                                                { label: 'Spaces', icon: Briefcase, isActive: currentView === ViewState.SPACES, onClick: () => setCurrentView(ViewState.SPACES) },
+                                                { label: 'Meetings', icon: Calendar, isActive: currentView === ViewState.MEETINGS, onClick: () => setCurrentView(ViewState.MEETINGS) },
+                                                { label: 'Tasks', icon: CheckSquare, isActive: currentView === ViewState.TASKS, onClick: () => setCurrentView(ViewState.TASKS) },
+                                                { label: 'Files', icon: FolderClosed, isActive: currentView === ViewState.FILES, onClick: () => setCurrentView(ViewState.FILES) },
+                                                { label: 'Settings', icon: Settings, isActive: currentView === ViewState.SETTINGS, onClick: () => setCurrentView(ViewState.SETTINGS) }
+                                            ]).map((item: any) => {
                                                 const Icon = item.icon;
+                                                if (isMenuTransitioning) return null;
                                                 return (
                                                     <button
                                                         key={item.label}
-                                                        aria-label={item.label}
-                                                        onClick={item.onClick}
-                                                        style={{ animationDelay: `${index * 20}ms` }}
-                                                        className={`group relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border transition-all duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] active:scale-[0.95] ${
-                                                            item.isActive
-                                                                ? 'translate-y-[-4px] scale-[1.05] border-white/14 bg-white/[0.14] text-white shadow-[0_24px_50px_rgba(0,0,0,0.18)]'
-                                                                : 'border-transparent bg-transparent text-slate-400 hover:-translate-y-3 hover:scale-110 hover:border-white/10 hover:bg-white/[0.12] hover:text-white'
-                                                        }`}
+                                                        onClick={() => {
+                                                            if (item.onClick) item.onClick();
+                                                        }}
+                                                        className={`menu-item ${item.isActive ? 'active' : ''}`}
                                                     >
-                                                        <Icon size={18} />
-                                                        {item.badge ? (
-                                                            <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full border border-emerald-400/25 bg-emerald-400 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950">
-                                                                {item.badge}
-                                                            </span>
-                                                        ) : null}
-                                                        <span className="tooltip-enter pointer-events-none absolute -top-9 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-[rgba(12,15,20,0.92)] px-2.5 py-1 text-[11px] font-medium text-slate-100 shadow-[0_16px_34px_rgba(0,0,0,0.24)] group-hover:block">
-                                                            {item.label}
-                                                        </span>
+                                                        <Icon size={20} />
+                                                        <span className="tooltip">{item.label}</span>
                                                     </button>
                                                 );
                                             })}
+                                            {isMenuTransitioning && (
+                                                <div className="flex items-center justify-center w-12 h-12">
+                                                    <div className="w-2 h-2 bg-zinc-400 rounded-full animate-pulse" />
+                                                </div>
+                                            )}
                                         </div>
-                                    </nav>
+                                    </div>
+
+                                    <div className="fixed top-6 right-6 z-50 flex items-center gap-4">
+                                        <NotificationBell />
+                                        <button
+                                            onClick={() => setCurrentView(ViewState.SETTINGS)}
+                                            className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm"
+                                        >
+                                            {profile?.avatar_url ? (
+                                                <img src={profile.avatar_url} alt="Profile" className="h-full w-full object-cover" />
+                                            ) : (
+                                                <span className="text-xs font-bold">{profile?.full_name?.substring(0, 2).toUpperCase() || 'US'}</span>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
                             </AppLayout>
 
