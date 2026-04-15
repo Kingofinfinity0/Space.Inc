@@ -44,7 +44,7 @@ import { supabase } from './lib/supabase';
 import { friendlyError } from './utils/errors';
 
 // Shared Layouts
-import { NavItem, AppLayout, ClientLayout } from './components/Layout';
+import { AppLayout } from './components/Layout';
 
 // View Components
 import StaffDashboardView from './components/views/StaffDashboardView';
@@ -415,21 +415,21 @@ const App = () => {
         }
     };
 
-    const handleCreateTask = async (data: any) => {
+    const handleCreateTask = async (data: Partial<Task>) => {
         try {
             const { data: newTask, error } = await apiService.createTask(data, organizationId || '');
             if (error) throw error;
-            if (newTask) setTasks([newTask, ...tasks]);
+            if (newTask) setTasks((current) => [newTask, ...current]);
         } catch (err: any) {
             showToast(`Error creating task: ${err.message}`, "error");
         }
     };
 
-    const handleTaskStatusUpdate = async (taskId: string, newStatus: Task['status']) => {
+    const handleUpdateTask = async (taskId: string, updates: Partial<Task>) => {
         try {
-            const { error } = await apiService.updateTask(taskId, { status: newStatus }, organizationId || '');
+            const { error } = await apiService.updateTask(taskId, updates, organizationId || '');
             if (error) throw error;
-            setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+            setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...updates } : task));
         } catch (err: any) {
             showToast(`Error updating task: ${err.message}`, "error");
         }
@@ -539,6 +539,8 @@ const App = () => {
                             profile={profile}
                             onJoin={handleJoinMeeting}
                             onInstantMeet={() => handleInstantMeeting(clients[0]?.id)}
+                            onCreateTask={handleCreateTask}
+                            onUpdateTask={handleUpdateTask}
                             onGoToSpace={(spaceId) => {
                                 setSelectedSpaceId(spaceId);
                                 setCurrentView(ViewState.SPACE_DETAIL);
@@ -556,6 +558,8 @@ const App = () => {
                             profile={profile}
                             onJoin={handleJoinMeeting}
                             onInstantMeet={() => handleInstantMeeting(clients[0]?.id)}
+                            onCreateTask={handleCreateTask}
+                            onUpdateTask={handleUpdateTask}
                             onGoToSpace={(spaceId) => {
                                 setSelectedSpaceId(spaceId);
                                 setCurrentView(ViewState.SPACE_DETAIL);
@@ -590,7 +594,10 @@ const App = () => {
                 return <StaffView staff={staff} spaces={clients} onInvite={() => setShowInviteModal(true)} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />;
             case ViewState.TASKS:
                 if (!can('can_view_tasks')) return <div className="p-8">Access Denied</div>;
-                return <TaskView tasks={tasks} clients={clients} onUpdateStatus={handleTaskStatusUpdate} onCreate={handleCreateTask} />;
+                return <TaskView tasks={tasks} clients={clients} onUpdateTask={handleUpdateTask} onCreateTask={handleCreateTask} onOpenSpace={(spaceId) => {
+                    setSelectedSpaceId(spaceId);
+                    setCurrentView(ViewState.SPACE_DETAIL);
+                }} />;
             case ViewState.MEETINGS:
                 if (!can('can_view_meetings')) return <div className="p-8">Access Denied</div>;
                 return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} onDeleteMeeting={handleDeleteMeeting} onEndMeeting={handleEndMeeting} tasks={tasks} />;
@@ -647,6 +654,97 @@ const App = () => {
         );
     }
 
+    const totalInboxItems = inboxData.reduce((acc, curr) => acc + (curr.unread_count || 0), 0);
+    const currentViewLabelMap: Record<ViewState, string> = {
+        [ViewState.DASHBOARD]: 'Dashboard',
+        [ViewState.SPACES]: 'Spaces',
+        [ViewState.SPACE_DETAIL]: 'Space Detail',
+        [ViewState.INBOX]: 'Inbox',
+        [ViewState.MEETINGS]: 'Calendar',
+        [ViewState.FILES]: 'Drive',
+        [ViewState.TASKS]: 'Tasks',
+        [ViewState.STAFF]: 'Team',
+        [ViewState.SETTINGS]: 'Settings',
+        [ViewState.ACTIVITY_LEDGER]: 'History',
+        [ViewState.CLIENTS]: 'Clients',
+        [ViewState.INVITATIONS]: 'Invitations',
+    };
+    const currentViewLabel = currentViewLabelMap[currentView] || 'Workspace';
+
+    const dockItems = [
+        {
+            label: 'Dashboard',
+            icon: LayoutGrid,
+            allowed: can('can_view_dashboard'),
+            isActive: currentView === ViewState.DASHBOARD,
+            onClick: () => setCurrentView(ViewState.DASHBOARD),
+        },
+        {
+            label: 'History',
+            icon: Activity,
+            allowed: can('can_view_history'),
+            isActive: currentView === ViewState.ACTIVITY_LEDGER,
+            onClick: () => setCurrentView(ViewState.ACTIVITY_LEDGER),
+        },
+        {
+            label: 'Spaces',
+            icon: Users,
+            allowed: can('can_view_all_spaces') || can('can_view_assigned_spaces'),
+            isActive: currentView === ViewState.SPACES || currentView === ViewState.SPACE_DETAIL,
+            onClick: () => setCurrentView(ViewState.SPACES),
+        },
+        {
+            label: 'Inbox',
+            icon: Inbox,
+            allowed: can('can_view_dashboard'),
+            isActive: currentView === ViewState.INBOX,
+            onClick: () => setCurrentView(ViewState.INBOX),
+            badge: totalInboxItems,
+        },
+        {
+            label: 'Team',
+            icon: UserCheck,
+            allowed: can('can_manage_team'),
+            isActive: currentView === ViewState.STAFF,
+            onClick: () => setCurrentView(ViewState.STAFF),
+        },
+        {
+            label: 'Invites',
+            icon: Key,
+            allowed: can('can_manage_team'),
+            isActive: currentView === ViewState.INVITATIONS,
+            onClick: () => setCurrentView(ViewState.INVITATIONS),
+        },
+        {
+            label: 'Clients',
+            icon: Briefcase,
+            allowed: userRole === 'owner' || userRole === 'admin',
+            isActive: currentView === ViewState.CLIENTS,
+            onClick: () => setCurrentView(ViewState.CLIENTS),
+        },
+        {
+            label: 'Tasks',
+            icon: CheckSquare,
+            allowed: can('can_view_tasks'),
+            isActive: currentView === ViewState.TASKS,
+            onClick: () => setCurrentView(ViewState.TASKS),
+        },
+        {
+            label: 'Calendar',
+            icon: Calendar,
+            allowed: can('can_view_meetings'),
+            isActive: currentView === ViewState.MEETINGS,
+            onClick: () => setCurrentView(ViewState.MEETINGS),
+        },
+        {
+            label: 'Drive',
+            icon: FolderClosed,
+            allowed: can('can_view_files'),
+            isActive: currentView === ViewState.FILES,
+            onClick: () => setCurrentView(ViewState.FILES),
+        },
+    ].filter((item) => item.allowed);
+
     return (
         <Routes>
             <Route path="/join/:token" element={<JoinView />} />
@@ -678,61 +776,117 @@ const App = () => {
                         <>
                             <AppLayout
                                 sidebar={
-                                    <aside className="w-64 bg-[#ECECF1] border-r border-[#D1D5DB] flex flex-col justify-between p-4 z-20">
-                                        <div className="space-y-8">
-                                            <div className="flex items-center gap-3 px-3 mb-8 mt-2">
-                                                <div className="h-8 w-8 bg-[#1D1D1D] rounded-md flex items-center justify-center text-white"><Rocket size={20} /></div>
-                                                <span className="font-bold text-xl tracking-tight text-[#1D1D1D]">Space.inc</span>
+                                    <aside className="relative z-10 hidden w-[300px] flex-col p-6 xl:flex">
+                                        <div className="glass-surface glass-elevated flex h-full flex-col rounded-[30px] p-5 text-slate-100">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.08] text-emerald-300">
+                                                    <Rocket size={22} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="text-lg font-semibold tracking-[-0.03em] text-white">Space.inc</div>
+                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Workspace OS</div>
+                                                </div>
                                                 <div className="ml-auto">
                                                     <NotificationBell />
                                                 </div>
                                             </div>
-                                            <div className="px-2 relative mb-4">
-                                                <Search size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-[#8E8EA0]" />
-                                                <input placeholder="Search..." className="w-full bg-white border border-[#D1D5DB] rounded-md py-2 pl-10 pr-4 text-xs focus:outline-none" />
+
+                                            <div className="relative mt-6">
+                                                <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                                                <input
+                                                    placeholder="Search anything..."
+                                                    className="w-full rounded-2xl border border-white/10 bg-[rgba(7,9,14,0.72)] py-3 pl-10 pr-4 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-white/12"
+                                                />
                                             </div>
-                                            <nav className="space-y-1">
-                                                {can('can_view_dashboard') && <NavItem icon={<LayoutGrid size={16} />} label="Dashboard" active={currentView === ViewState.DASHBOARD} onClick={() => setCurrentView(ViewState.DASHBOARD)} />}
-                                                {can('can_view_history') && <NavItem icon={<Activity size={16} />} label="History" active={currentView === ViewState.ACTIVITY_LEDGER} onClick={() => setCurrentView(ViewState.ACTIVITY_LEDGER)} />}
-                                                {(can('can_view_all_spaces') || can('can_view_assigned_spaces')) && <NavItem icon={<Users size={16} />} label="Spaces" active={currentView === ViewState.SPACES || currentView === ViewState.SPACE_DETAIL} onClick={() => setCurrentView(ViewState.SPACES)} />}
-                                                {can('can_view_dashboard') && <NavItem icon={<Inbox size={16} />} label="Inbox" active={currentView === ViewState.INBOX} onClick={() => setCurrentView(ViewState.INBOX)} badge={inboxData.reduce((acc, curr) => acc + (curr.unread_count || 0), 0)} />}
-                                                <div className="my-4 pt-4 border-t border-[#D1D5DB]">
-                                                    <p className="text-[10px] font-bold text-[#8E8EA0] uppercase tracking-wider px-3 mb-2">Management</p>
-                                                    {can('can_manage_team') && <NavItem icon={<UserCheck size={16} />} label="Team" active={currentView === ViewState.STAFF} onClick={() => setCurrentView(ViewState.STAFF)} />}
-                                                    {can('can_manage_team') && <NavItem icon={<Key size={16} />} label="Invitations" active={currentView === ViewState.INVITATIONS} onClick={() => setCurrentView(ViewState.INVITATIONS)} />}
-                                                    {(userRole === 'owner' || userRole === 'admin') && <NavItem icon={<Briefcase size={16} />} label="Clients" active={currentView === ViewState.CLIENTS} onClick={() => setCurrentView(ViewState.CLIENTS)} />}
-                                                    {can('can_view_tasks') && <NavItem icon={<CheckSquare size={16} />} label="Tasks" active={currentView === ViewState.TASKS} onClick={() => setCurrentView(ViewState.TASKS)} />}
-                                                    {can('can_view_meetings') && <NavItem icon={<Calendar size={16} />} label="Calendar" active={currentView === ViewState.MEETINGS} onClick={() => setCurrentView(ViewState.MEETINGS)} />}
-                                                    {can('can_view_files') && <NavItem icon={<FolderClosed size={16} />} label="Drive" active={currentView === ViewState.FILES} onClick={() => setCurrentView(ViewState.FILES)} />}
+
+                                            <div className="mt-6 space-y-3">
+                                                <div className="glass-muted rounded-[24px] px-4 py-4">
+                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Current view</div>
+                                                    <div className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">{currentViewLabel}</div>
+                                                    <p className="mt-2 text-sm leading-6 text-slate-400">
+                                                        Slim surfaces, denser lists, and a floating dock now frame the whole workspace.
+                                                    </p>
                                                 </div>
-                                            </nav>
-                                        </div>
-                                        <div className="p-2 border-t border-[#D1D5DB] pt-4">
-                                            <div onClick={() => setCurrentView(ViewState.SETTINGS)} className="flex items-center gap-3 p-2 rounded-md hover:bg-[#D1D5DB]/30 cursor-pointer">
-                                                <div className="h-9 w-9 bg-[#1D1D1D] rounded-md flex items-center justify-center text-white text-xs font-bold overflow-hidden">
+                                                <div className="glass-muted rounded-[24px] px-4 py-4">
+                                                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                                                        <span>Unread inbox</span>
+                                                        <span>{totalInboxItems}</span>
+                                                    </div>
+                                                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                                                        <div
+                                                            className="h-full rounded-full bg-emerald-300 transition-all duration-300"
+                                                            style={{ width: `${Math.min(totalInboxItems * 12, 100)}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <button
+                                                onClick={() => setCurrentView(ViewState.SETTINGS)}
+                                                className="interactive-surface mt-auto flex items-center gap-3 rounded-[24px] border border-white/8 bg-white/[0.05] p-3 text-left"
+                                            >
+                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.08] text-xs font-semibold text-white">
                                                     {profile?.full_name?.substring(0, 2).toUpperCase() || 'AD'}
                                                 </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-medium text-sm text-[#1D1D1D] truncate">{profile?.full_name || 'User'}</p>
-                                                    <p className="text-[10px] text-[#565869] font-medium uppercase">{userRole || 'Member'}</p>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium text-white">{profile?.full_name || 'User'}</p>
+                                                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{userRole || 'Member'}</p>
                                                 </div>
-                                            </div>
+                                            </button>
                                         </div>
                                     </aside>
                                 }
                             >
-                                <header className="h-16 border-b border-[#D1D5DB] flex items-center justify-between px-8 bg-white z-10 sticky top-0">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[#8E8EA0] text-[10px] font-black uppercase tracking-[0.2em]">Main</span>
-                                        <ChevronRight size={14} className="text-[#D1D5DB]" />
-                                        <span className="text-[#1D1D1D] text-[10px] font-black uppercase tracking-[0.2em]">{Object.keys(ViewState).find(key => ViewState[key as keyof typeof ViewState] === currentView)}</span>
+                                <div className="flex min-h-screen flex-1 flex-col">
+                                    <header className="sticky top-0 z-20 px-4 pt-4 md:px-8 md:pt-6">
+                                        <div className="glass-surface flex items-center justify-between rounded-[26px] px-4 py-4 md:px-6">
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                <span className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">Main</span>
+                                                <ChevronRight size={14} className="text-slate-600" />
+                                                <span className="truncate text-[11px] font-medium uppercase tracking-[0.22em] text-slate-200">{currentViewLabel}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="hidden md:flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.05] px-3 py-2 text-xs text-slate-400">
+                                                    <Search size={13} />
+                                                    Search
+                                                </div>
+                                                <Button variant="primary" size="sm">Upgrade</Button>
+                                            </div>
+                                        </div>
+                                    </header>
+                                    <div className="flex-1 overflow-y-auto px-4 pb-36 pt-6 md:px-8 md:pb-40 md:pt-8">
+                                        <div className="mx-auto max-w-7xl">{renderContent()}</div>
                                     </div>
-                                    <div className="flex items-center gap-6">
-                                        <Button variant="primary" size="sm" className="font-black uppercase tracking-widest text-[10px]">Upgrade</Button>
-                                    </div>
-                                </header>
-                                <div className="flex-1 overflow-y-auto bg-zinc-50/30">
-                                    <div className="max-w-7xl mx-auto px-8 py-10">{renderContent()}</div>
+                                    <nav className="fixed inset-x-0 bottom-8 z-30 flex justify-center px-4">
+                                        <div className="dock-enter flex max-w-[calc(100vw-1.5rem)] items-center gap-1 overflow-x-auto rounded-full border border-white/10 bg-[rgba(14,18,24,0.8)] px-2 py-2 shadow-[0_20px_50px_rgba(0,0,0,0.3)] backdrop-blur-[12px]">
+                                            {dockItems.map((item, index) => {
+                                                const Icon = item.icon;
+                                                return (
+                                                    <button
+                                                        key={item.label}
+                                                        aria-label={item.label}
+                                                        onClick={item.onClick}
+                                                        style={{ animationDelay: `${index * 20}ms` }}
+                                                        className={`group relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border transition-all duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] active:scale-[0.95] ${
+                                                            item.isActive
+                                                                ? 'translate-y-[-4px] scale-[1.05] border-white/14 bg-white/[0.14] text-white shadow-[0_24px_50px_rgba(0,0,0,0.18)]'
+                                                                : 'border-transparent bg-transparent text-slate-400 hover:-translate-y-3 hover:scale-110 hover:border-white/10 hover:bg-white/[0.12] hover:text-white'
+                                                        }`}
+                                                    >
+                                                        <Icon size={18} />
+                                                        {item.badge ? (
+                                                            <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full border border-emerald-400/25 bg-emerald-400 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950">
+                                                                {item.badge}
+                                                            </span>
+                                                        ) : null}
+                                                        <span className="tooltip-enter pointer-events-none absolute -top-9 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-[rgba(12,15,20,0.92)] px-2.5 py-1 text-[11px] font-medium text-slate-100 shadow-[0_16px_34px_rgba(0,0,0,0.24)] group-hover:block">
+                                                            {item.label}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </nav>
                                 </div>
                             </AppLayout>
 

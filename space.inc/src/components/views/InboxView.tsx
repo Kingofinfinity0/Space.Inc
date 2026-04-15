@@ -34,7 +34,7 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
     const { showToast } = useToast(); // Added useToast hook
 
     // Use realtime messages hook
-    const { messages, loading, error, sendMessage, sendFile, messagesEndRef } = useRealtimeMessages(selectedSpaceId || '', organizationId || '');
+    const { messages, loading, error, sendMessage, sendFile, messagesEndRef, uploadProgress } = useRealtimeMessages(selectedSpaceId || '', organizationId || '');
 
     const activeClient = clients.find(c => c.id === selectedSpaceId);
 
@@ -182,9 +182,11 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                             isOpen={isUploadModalOpen}
                             onClose={() => setIsUploadModalOpen(false)}
                             loading={sending}
+                            uploadProgress={uploadProgress}
                             onUpload={async (file) => {
-                                if (!selectedSpaceId || !organizationId) return;
-                                await sendFile(organizationId, file);
+                                if (!selectedSpaceId || !organizationId) return false;
+                                const result = await sendFile(organizationId, file);
+                                return result.success;
                             }}
                         />
                     </>

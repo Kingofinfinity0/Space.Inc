@@ -1,5 +1,84 @@
+import { Upload as TusUpload } from 'tus-js-client';
 import { supabase, EDGE_FUNCTION_BASE_URL, ANON_KEY } from '../lib/supabase';
 import { StaffMember, ClientLifecycle } from '../types';
+
+const STANDARD_UPLOAD_MAX_BYTES = 6 * 1024 * 1024;
+const RESUMABLE_CHUNK_SIZE = 6 * 1024 * 1024;
+const STORAGE_BUCKET = 'space-files';
+
+const getDirectStorageUploadEndpoint = () => {
+    const parsedUrl = new URL(EDGE_FUNCTION_BASE_URL);
+    parsedUrl.hostname = parsedUrl.hostname.replace('.supabase.co', '.storage.supabase.co');
+    parsedUrl.pathname = '/storage/v1/upload/resumable';
+    parsedUrl.search = '';
+    return parsedUrl.toString();
+};
+
+const uploadFileStandard = async (
+    file: File,
+    storagePath: string,
+    onProgress?: (progress: number) => void
+) => {
+    const { error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(storagePath, file, {
+            contentType: file.type || 'application/octet-stream',
+            upsert: false
+        });
+
+    if (error) throw error;
+    onProgress?.(100);
+};
+
+const uploadFileResumable = async (
+    file: File,
+    storagePath: string,
+    onProgress?: (progress: number) => void
+) => {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+        throw new Error('Not authenticated');
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        const upload = new TusUpload(file, {
+            endpoint: getDirectStorageUploadEndpoint(),
+            retryDelays: [0, 3000, 5000, 10000, 20000],
+            headers: {
+                authorization: `Bearer ${session.access_token}`,
+                apikey: ANON_KEY,
+                'x-upsert': 'false'
+            },
+            uploadDataDuringCreation: true,
+            removeFingerprintOnSuccess: true,
+            chunkSize: RESUMABLE_CHUNK_SIZE,
+            metadata: {
+                bucketName: STORAGE_BUCKET,
+                objectName: storagePath,
+                contentType: file.type || 'application/octet-stream',
+                cacheControl: '3600'
+            },
+            onError: (error) => reject(error),
+            onProgress: (bytesUploaded, bytesTotal) => {
+                if (!bytesTotal) return;
+                onProgress?.(Math.round((bytesUploaded / bytesTotal) * 100));
+            },
+            onSuccess: () => {
+                onProgress?.(100);
+                resolve();
+            }
+        });
+
+        upload.findPreviousUploads().then((previousUploads) => {
+            if (previousUploads.length > 0) {
+                upload.resumeFromPreviousUpload(previousUploads[0]);
+            }
+
+            upload.start();
+        }).catch(reject);
+    });
+};
 
 /**
  * apiService.ts - The bridge between Frontend and "Industrial Grade" Edge Functions
@@ -352,9 +431,7 @@ export const apiService = {
 
     async getUnifiedInbox(organizationId: string): Promise<any[]> {
         if (!organizationId) return [];
-        const { data, error } = await supabase.rpc('get_unified_inbox', {
-            p_organization_id: organizationId
-        });
+        const { data, error } = await supabase.rpc('get_unified_inbox');
         if (error) throw error;
         return data || [];
     },
@@ -383,9 +460,7 @@ export const apiService = {
 
     async getStaffMembers(organizationId: string): Promise<StaffMember[]> {
         if (!organizationId) return [];
-        const { data, error } = await supabase.rpc('get_staff_members', {
-            p_organization_id: organizationId
-        });
+        const { data, error } = await supabase.rpc('get_staff_members');
         if (error) throw error;
         return data || [];
     },
@@ -664,6 +739,12 @@ export const apiService = {
         return { data: data || [], error: null };
     },
 
+    async getTrashFiles(spaceId?: string) {
+        const rpcArgs = spaceId ? { p_space_id: spaceId } : {};
+        const { data, error } = await supabase.rpc('get_trash_files', rpcArgs);
+        return { data: data || [], error };
+    },
+
     async getFileVersions(fileId: string, parentId?: string) {
         const rootId = parentId || fileId;
         const { data, error } = await supabase
@@ -751,7 +832,7 @@ export const apiService = {
     },
 
 
-    async uploadFile(spaceId: string, organizationId: string, file: File) {
+    async uploadFile(spaceId: string, organizationId: string, file: File, onProgress?: (progress: number) => void) {
         console.log('🚀 Starting Upload Process for:', file.name);
 
         // 1. Calculate Checksum
@@ -764,26 +845,45 @@ export const apiService = {
         console.log('Step 1: Requesting Voucher...');
         const { data: voucher, error: voucherError } = await this.requestUploadVoucher(spaceId, organizationId, file.name, file.type, checksum, file.size);
 
-        if (voucherError || !voucher?.upload_url) {
+        if (voucherError || (!voucher?.upload_url && !voucher?.storage_path)) {
             console.error('❌ Voucher Request Failed:', voucherError);
             throw new Error(voucherError?.message || 'Failed to get upload voucher');
         }
 
-        // 3. Upload directly to storage using signed URL
-        console.log('Step 2: Uploading to Storage (PUT)...', voucher.upload_url);
+        // 3. Upload directly to storage
+        console.log('Step 2: Uploading to Storage...', voucher.upload_url);
 
         try {
-            const uploadResponse = await fetch(voucher.upload_url, {
-                method: 'PUT',
-                body: file,
-                headers: {
-                    'Content-Type': file.type || 'application/octet-stream'
-                }
-            });
+            const canUseResumableUpload = file.size > STANDARD_UPLOAD_MAX_BYTES && !!voucher.storage_path;
 
-            if (!uploadResponse.ok) {
-                console.error('❌ PUT Request Failed:', uploadResponse.status, uploadResponse.statusText);
-                throw new Error(`Upload failed with status ${uploadResponse.status}`);
+            if (canUseResumableUpload) {
+                await uploadFileResumable(file, voucher.storage_path, onProgress);
+            } else {
+                await uploadFileStandard(file, voucher.storage_path || voucher.path || file.name, onProgress);
+                /* await new Promise<void>((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('PUT', voucher.upload_url);
+                    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+                    xhr.upload.onprogress = (event) => {
+                        if (!event.lengthComputable) return;
+                        onProgress?.(Math.round((event.loaded / event.total) * 100));
+                    };
+
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            onProgress?.(100);
+                            resolve();
+                            return;
+                        }
+
+                        console.error('❌ PUT Request Failed:', xhr.status, xhr.statusText);
+                        reject(new Error(`Upload failed with status ${xhr.status}`));
+                    };
+
+                    xhr.onerror = () => reject(new Error('Upload failed due to a network error'));
+                    xhr.send(file);
+                }); */
             }
             console.log('✅ Storage Upload Complete');
         } catch (uploadErr) {
@@ -793,7 +893,13 @@ export const apiService = {
 
         // 4. Confirm upload with backend
         console.log('Step 3: Confirming Upload...');
-        const { data: fileData, error: confirmError } = await this.confirmUpload(voucher.file_id, organizationId);
+        const { data: fileData, error: confirmError } = await this.confirmUpload(
+            voucher.file_id,
+            organizationId,
+            voucher.storage_path,
+            checksum,
+            file.size
+        );
 
         if (confirmError) {
             console.error('❌ Confirmation Failed:', confirmError);
@@ -816,15 +922,20 @@ export const apiService = {
         if (voucherError) throw voucherError;
 
         // 3. Upload to new path
-        const uploadResponse = await fetch(voucher.upload_url, {
-            method: 'PUT',
-            body: file,
-            headers: {
-                'Content-Type': file.type || 'application/octet-stream'
-            }
-        });
+        if (file.size > STANDARD_UPLOAD_MAX_BYTES && voucher.storage_path) {
+            await uploadFileResumable(file, voucher.storage_path);
+        } else {
+            await uploadFileStandard(file, voucher.storage_path || voucher.path || file.name);
+            /* const uploadResponse = await fetch(voucher.upload_url, {
+                method: 'PUT',
+                body: file,
+                headers: {
+                    'Content-Type': file.type || 'application/octet-stream'
+                }
+            });
 
-        if (!uploadResponse.ok) throw new Error(`Upload failed: ${uploadResponse.status}`);
+            if (!uploadResponse.ok) throw new Error(`Upload failed: ${uploadResponse.status}`); */
+        }
 
         // 4. Confirm version replacement
         const { data: fileData, error: confirmError } = await this.confirmUpload(voucher.file_id, organizationId, voucher.storage_path, checksum, file.size);
@@ -844,20 +955,39 @@ export const apiService = {
     },
 
     async restoreFile(file_id: string, organizationId: string) {
-        const { data, error } = await supabase.functions.invoke('files-api', {
-            method: 'POST',
-            body: { action: 'RESTORE', file_id, organization_id: organizationId }
+        const { data, error } = await supabase.rpc('restore_file', {
+            p_file_id: file_id
         });
-        if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to restore file' } };
+        if (error) return { data: null, error: { message: error.message || 'Failed to restore file' } };
         return { data, error: null };
     },
 
     async hardDeleteFile(file_id: string, organizationId: string) {
-        const { data, error } = await supabase.functions.invoke('files-api', {
-            method: 'POST',
-            body: { action: 'HARD_DELETE', file_id, organization_id: organizationId }
+        const { data, error } = await supabase.rpc('permanent_delete_file', {
+            p_file_id: file_id
         });
-        if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to permanently delete file' } };
+
+        if (error) {
+            if (error.message?.includes('FILE_NOT_IN_TRASH')) {
+                return { data: null, error: { message: 'This file is not in the trash and cannot be permanently deleted.' } };
+            }
+            if (error.message?.includes('FILE_LEGAL_HOLD')) {
+                return { data: null, error: { message: 'This file is under legal hold and cannot be deleted.' } };
+            }
+            return { data: null, error: { message: error.message || 'Failed to permanently delete file' } };
+        }
+
+        const storagePath = data?.storage_path;
+        if (storagePath) {
+            const { error: storageError } = await supabase.storage
+                .from(STORAGE_BUCKET)
+                .remove([storagePath]);
+
+            if (storageError) {
+                console.warn('Storage object deletion failed after DB delete:', storageError);
+            }
+        }
+
         return { data, error: null };
     }
 };

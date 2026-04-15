@@ -67,7 +67,6 @@ serve(async (req: Request) => {
 
                     // 4. SQL RPC handles: capability check, org scoping, pending file insert
                     const { data: voucher, error: rpcError } = await supabase.rpc('request_upload_voucher', {
-                        p_organization_id: organization_id,
                         p_space_id: space_id,
                         p_filename: file_name,
                         p_content_type: content_type || 'application/octet-stream',
@@ -137,8 +136,7 @@ serve(async (req: Request) => {
 
                     // RPC: marks file available + enqueues virus scan job atomically
                     const { data: file, error: rpcError } = await supabase.rpc('confirm_file_upload', {
-                        p_file_id: file_id,
-                        p_organization_id: organization_id
+                        p_file_id: file_id
                     })
 
                     if (rpcError) throw rpcError
@@ -182,8 +180,7 @@ serve(async (req: Request) => {
                     if (!file_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'file_id' }))
 
                     const { data: result, error: rpcError } = await supabase.rpc('soft_delete_file', {
-                        p_file_id: file_id,
-                        p_organization_id: organization_id
+                        p_file_id: file_id
                     })
 
                     if (rpcError) throw rpcError
@@ -199,8 +196,7 @@ serve(async (req: Request) => {
                     if (!file_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'file_id' }))
 
                     const { data: file, error: rpcError } = await supabase.rpc('restore_file', {
-                        p_file_id: file_id,
-                        p_organization_id: organization_id
+                        p_file_id: file_id
                     })
 
                     if (rpcError) throw rpcError
@@ -217,8 +213,7 @@ serve(async (req: Request) => {
 
                     // RPC: validates role (staff+), legal hold check, deletes DB row, returns storage_path
                     const { data: result, error: rpcError } = await supabase.rpc('hard_delete_file', {
-                        p_file_id: file_id,
-                        p_organization_id: organization_id
+                        p_file_id: file_id
                     })
 
                     if (rpcError) throw rpcError

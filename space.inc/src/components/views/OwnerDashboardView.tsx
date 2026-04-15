@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
 import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { Calendar, Users, Video, Activity, ArrowRight, Shield, CheckCircle2, AlertTriangle, FileText, MessageSquare } from 'lucide-react';
-import { ClientSpace, Meeting, Message, StaffMember, Task } from '../../types';
+import { Calendar, Activity, FileText, MessageSquare } from 'lucide-react';
+import { ClientSpace, Meeting, Message, Task } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/apiService';
+import TaskWorkspace from '../tasks/TaskWorkspace';
 
 type OwnerDashboardProps = {
     clients: ClientSpace[];
@@ -18,6 +18,8 @@ type OwnerDashboardProps = {
     profile: any;
     onJoin: (id: string) => void;
     onInstantMeet?: () => void;
+    onCreateTask: (task: Partial<Task>) => Promise<void> | void;
+    onUpdateTask: (id: string, updates: Partial<Task>) => Promise<void> | void;
     onGoToSpace?: (spaceId: string) => void;
 };
 
@@ -34,28 +36,13 @@ function timeAgo(dateStr?: string) {
     return `${days}d ago`;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-    message_sent: 'sent a message',
-    file_uploaded: 'uploaded a file',
-    file_downloaded: 'viewed a file',
-    meeting_started: 'started a meeting',
-    meeting_ended: 'ended a meeting',
-    meeting_outcome_recorded: 'recorded a meeting outcome',
-    meeting_created: 'scheduled a meeting',
-    space_created: 'created a new space',
-    invitation_accepted: 'joined the team',
-    task_created: 'created a task',
-    task_completed: 'completed a task',
-};
-
 export default function OwnerDashboardView({
     clients,
-    messages,
     meetings,
     tasks,
-    profile,
     onJoin,
-    onInstantMeet,
+    onCreateTask,
+    onUpdateTask,
     onGoToSpace
 }: OwnerDashboardProps) {
     const { user, organizationId } = useAuth();
@@ -63,10 +50,9 @@ export default function OwnerDashboardView({
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
-    const [tasksFeed, setTasksFeed] = useState<any[]>([]);
     const [upcomingMeetings, setUpcomingMeetings] = useState<any[]>([]);
     const [notifications, setNotifications] = useState<any[]>([]);
-    const [analytics, setAnalytics] = useState<any>({
+    const [analytics, setAnalytics] = useState({
         activeSpaces: 0,
         activeClients: 0,
         totalMessagesWeek: 0,
@@ -74,150 +60,118 @@ export default function OwnerDashboardView({
         filesMonth: 0
     });
 
-    const load = async () => {
-        if (!user || !organizationId) return;
-        setLoading(true);
-        try {
-            const now = new Date().toISOString();
-            const [tasksRes, meetingsRes, notificationsRes, analyticsRes] = await Promise.all([
-                apiService.getDashboardFeed(organizationId),
-                apiService.getMeetings(organizationId), // Scoped by organizationId
-                apiService.getUnifiedNotifications(organizationId, user.id),
-                apiService.getDashboardMetrics(organizationId)
-            ]);
-
-            setTasksFeed(tasksRes.data || []);
-            setUpcomingMeetings((meetingsRes.data || []).filter((m: any) => m.starts_at > now && m.status === 'scheduled').slice(0, 10));
-            setNotifications(notificationsRes.data || []);
-            setAnalytics(analyticsRes.data || {
-                activeSpaces: 0,
-                activeClients: 0,
-                totalMessagesWeek: 0,
-                meetingsMonth: 0,
-                filesMonth: 0
-            });
-        } catch (err: any) {
-            console.error('[OwnerDashboardView] load failed:', err);
-            showToast(friendlyError(err?.message), 'error');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user?.id]);
-
-    const silentAlert = false;
-    const totalClients = clients.length;
-    const newThisMonth = 0; 
-    const activeSpaces = analytics.activeSpaces;
-    const planQuota = null;
-
     const goToSpace = (spaceId: string) => {
         if (onGoToSpace) return onGoToSpace(spaceId);
-        // Fallback: rely on route config only if you have a route; otherwise no-op.
         navigate(`/spaces/${spaceId}`);
     };
 
-    const successRateColor = (rate: number) => {
-        if (rate >= 60) return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-        if (rate >= 40) return 'bg-amber-50 text-amber-700 border-amber-100';
-        return 'bg-rose-50 text-rose-700 border-rose-100';
-    };
+    useEffect(() => {
+        const load = async () => {
+            if (!user || !organizationId) return;
+            setLoading(true);
+            try {
+                const now = new Date().toISOString();
+                const [meetingsRes, notificationsRes, analyticsRes] = await Promise.all([
+                    apiService.getMeetings(organizationId),
+                    apiService.getUnifiedNotifications(organizationId, user.id),
+                    apiService.getDashboardMetrics(organizationId)
+                ]);
+
+                setUpcomingMeetings((meetingsRes.data || []).filter((m: any) => m.starts_at > now && m.status === 'scheduled').slice(0, 10));
+                setNotifications(notificationsRes.data || []);
+                setAnalytics(analyticsRes.data || {
+                    activeSpaces: 0,
+                    activeClients: 0,
+                    totalMessagesWeek: 0,
+                    meetingsMonth: 0,
+                    filesMonth: 0
+                });
+            } catch (err: any) {
+                console.error('[OwnerDashboardView] load failed:', err);
+                showToast(friendlyError(err?.message), 'error');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        load();
+    }, [organizationId, showToast, user]);
 
     return (
         <div className="space-y-6">
             <header className="flex justify-between items-end mb-8">
                 <div>
-                    <Heading level={1}>Executive Analytics</Heading>
+                    <Heading level={1}>Overview</Heading>
                     <Text variant="secondary" className="mt-1">
-                        Real engagement, meetings, and activity signals.
+                        Your task system now lives directly inside the executive overview.
                     </Text>
                 </div>
             </header>
 
-            {/* Widget 4: Business Analytics */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Spaces</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
+                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Clients (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeClients}</div>
+                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeClients}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Messages (7d)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.totalMessagesWeek}</div>
+                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.totalMessagesWeek}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Meetings (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.meetingsMonth}</div>
+                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.meetingsMonth}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Files Shared (Month)</Text>
-                    <div className="text-2xl font-semibold mt-1">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.filesMonth}</div>
+                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.filesMonth}</div>
                 </GlassCard>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                    {/* Widget 1: Task Management */}
-                    <GlassCard className="p-6">
-                        <Heading level={3} className="mb-6">Task Management</Heading>
-                        {loading ? (
-                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
-                        ) : tasksFeed.length === 0 ? (
-                            <div className="text-zinc-400 text-sm italic py-4">No recent activity tasks.</div>
-                        ) : (
-                            <div className="space-y-3">
-                                {tasksFeed.map(item => (
-                                    <div key={item.id} className="p-4 border border-zinc-100 rounded-xl bg-white flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            <div className="h-10 w-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400">
-                                                {item.action_type === 'file_uploaded' ? <FileText size={18} /> : <Video size={18} />}
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-medium text-zinc-900">{item.actor_name} {ACTION_LABELS[item.action_type]}</p>
-                                                <p className="text-xs text-zinc-500">{item.space_name} • {timeAgo(item.created_at)}</p>
-                                            </div>
-                                        </div>
-                                        <Button variant="ghost" size="sm" icon={<ArrowRight size={14} />} />
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </GlassCard>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                <div className="space-y-6 lg:col-span-2">
+                    <TaskWorkspace
+                        tasks={tasks}
+                        clients={clients}
+                        loading={loading}
+                        compact
+                        title="Task Management"
+                        subtitle="Switch between board, list, timeline, calendar, and space views without leaving the overview."
+                        groupOptions={['Design', 'Engineering', 'Marketing']}
+                        onCreateTask={onCreateTask}
+                        onUpdateTask={onUpdateTask}
+                        onOpenSpace={goToSpace}
+                        emptyTitle="No tasks in motion"
+                        emptyDescription="Create the first task from the overview and it will show up across every connected space."
+                    />
 
-                    {/* Widget 2: Calendar / Upcoming Schedule */}
                     <GlassCard className="p-6">
                         <Heading level={3} className="mb-6">Upcoming Schedule</Heading>
                         {loading ? (
                             <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
                         ) : upcomingMeetings.length === 0 ? (
-                            <div className="text-zinc-400 text-sm italic py-4">No upcoming meetings scheduled.</div>
+                            <div className="py-4 text-sm italic text-zinc-400">No upcoming meetings scheduled.</div>
                         ) : (
                             <div className="space-y-4">
-                                {upcomingMeetings.map(m => {
-                                    const startTime = new Date(m.starts_at);
+                                {upcomingMeetings.map((meeting) => {
+                                    const startTime = new Date(meeting.starts_at);
                                     const canJoin = (startTime.getTime() - Date.now()) < 30 * 60 * 1000;
                                     return (
-                                        <div key={m.id} className="flex items-center justify-between p-4 border border-zinc-100 rounded-xl">
+                                        <div key={meeting.id} className="flex items-center justify-between rounded-xl border border-zinc-100 p-4">
                                             <div className="flex items-center gap-4">
-                                                <div className="text-center min-w-[50px]">
+                                                <div className="min-w-[50px] text-center">
                                                     <p className="text-[10px] font-black uppercase text-zinc-400">{startTime.toLocaleString('en-US', { month: 'short' })}</p>
                                                     <p className="text-xl font-bold text-zinc-900">{startTime.getDate()}</p>
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-zinc-900">{m.title}</p>
-                                                    <p className="text-xs text-zinc-500">{m.space_name} • {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                    <p className="text-sm font-bold text-zinc-900">{meeting.title}</p>
+                                                    <p className="text-xs text-zinc-500">{meeting.space_name} · {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                                 </div>
                                             </div>
-                                            {canJoin && (
-                                                <Button variant="primary" size="sm" onClick={() => onJoin(m.id)}>Join Now</Button>
-                                            )}
+                                            {canJoin && <Button variant="primary" size="sm" onClick={() => onJoin(meeting.id)}>Join Now</Button>}
                                         </div>
                                     );
                                 })}
@@ -227,33 +181,38 @@ export default function OwnerDashboardView({
                 </div>
 
                 <div className="space-y-6">
-                    {/* Widget 3: Inbox / Notifications */}
                     <GlassCard className="p-6">
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="mb-6 flex items-center justify-between">
                             <Heading level={3}>Inbox</Heading>
                             <Button variant="ghost" size="sm" onClick={async () => {
                                 await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
-                                load();
-                            }}>Mark all read</Button>
+                                setNotifications([]);
+                            }}>
+                                Mark all read
+                            </Button>
                         </div>
                         {loading ? (
                             <div className="space-y-3"><SkeletonLoader height="50px" borderRadius="10px" /></div>
                         ) : notifications.length === 0 ? (
-                            <div className="text-center py-10">
-                                <Activity className="mx-auto text-zinc-200 mb-2" size={32} />
-                                <p className="text-zinc-400 text-xs italic">Inbox is clear.</p>
+                            <div className="py-10 text-center">
+                                <Activity className="mx-auto mb-2 text-zinc-200" size={32} />
+                                <p className="text-xs italic text-zinc-400">Inbox is clear.</p>
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {notifications.map(n => (
-                                    <div key={n.id} className="p-3 bg-white border border-zinc-100 rounded-xl cursor-pointer hover:border-zinc-300 transition-colors" onClick={() => n.space_id && goToSpace(n.space_id)}>
+                                {notifications.map((notification) => (
+                                    <div key={notification.id} className="cursor-pointer rounded-xl border border-zinc-100 bg-white p-3 transition-colors hover:border-zinc-300" onClick={() => notification.space_id && goToSpace(notification.space_id)}>
                                         <div className="flex items-center gap-3">
                                             <div className="text-zinc-400">
-                                                {n.type === 'file_uploaded' ? <FileText size={16} /> : n.type === 'message_received' ? <MessageSquare size={16} /> : <Calendar size={16} />}
+                                                {notification.type === 'file_uploaded'
+                                                    ? <FileText size={16} />
+                                                    : notification.type === 'message_received'
+                                                        ? <MessageSquare size={16} />
+                                                        : <Calendar size={16} />}
                                             </div>
-                                            <p className="text-xs text-zinc-800 line-clamp-2">{n.message}</p>
+                                            <p className="line-clamp-2 text-xs text-zinc-800">{notification.message}</p>
                                         </div>
-                                        <p className="text-[10px] text-zinc-400 mt-2">{timeAgo(n.created_at)}</p>
+                                        <p className="mt-2 text-[10px] text-zinc-400">{timeAgo(notification.created_at)}</p>
                                     </div>
                                 ))}
                             </div>
@@ -264,4 +223,3 @@ export default function OwnerDashboardView({
         </div>
     );
 }
-

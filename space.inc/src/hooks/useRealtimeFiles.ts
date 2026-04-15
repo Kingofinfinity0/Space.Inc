@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { apiService } from '../services/apiService';
 
@@ -9,16 +9,34 @@ export const useRealtimeFiles = (spaceId: string, organizationId: string, showDe
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
+    const upsertFile = useCallback((incomingFile: SpaceFile) => {
+        setFiles((prev) => {
+            const withoutDuplicate = prev.filter((file) => file.id !== incomingFile.id);
+            return [incomingFile, ...withoutDuplicate].sort((a, b) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+        });
+    }, []);
+
+    const removeFile = useCallback((fileId: string) => {
+        setFiles((prev) => prev.filter((file) => file.id !== fileId));
+    }, []);
+
+    const fetchFiles = useCallback(async () => {
         if (!organizationId) {
-            console.warn('[useRealtimeFiles] Missing organizationId, skipping fetch');
+            setFiles([]);
             setLoading(false);
             return;
         }
 
-        const fetchFiles = async () => {
-            try {
-                setLoading(true);
+        try {
+            setLoading(true);
+            if (showDeleted) {
+                const { data, error: fetchError } = await apiService.getTrashFiles(spaceId || undefined);
+
+                if (fetchError) throw fetchError;
+                setFiles(data || []);
+            } else {
                 let query = supabase
                     .from('files')
                     .select('*')
@@ -29,23 +47,30 @@ export const useRealtimeFiles = (spaceId: string, organizationId: string, showDe
                     query = query.eq('space_id', spaceId);
                 }
 
-                if (showDeleted) {
-                    query = query.eq('status', 'deleted').not('deleted_at', 'is', null);
-                } else {
-                    query = query.eq('status', 'available').is('deleted_at', null);
-                }
-
+                query = query.is('deleted_at', null).neq('status', 'deleted');
                 const { data, error: fetchError } = await query;
 
                 if (fetchError) throw fetchError;
                 setFiles(data || []);
-            } catch (err: any) {
-                console.error('Error fetching files:', err);
-                setError(err.message);
-            } finally {
-                setLoading(false);
             }
-        };
+        } catch (err: any) {
+            console.error('Error fetching files:', err);
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    }, [organizationId, showDeleted, spaceId]);
+
+    useEffect(() => {
+        if (!organizationId) {
+            console.warn('[useRealtimeFiles] Missing organizationId, skipping fetch');
+            setFiles([]);
+            setLoading(false);
+            return;
+        }
+
+        setFiles([]);
+        setError(null);
 
         fetchFiles();
 
@@ -65,32 +90,25 @@ export const useRealtimeFiles = (spaceId: string, organizationId: string, showDe
                     if (newFile.organization_id !== organizationId) return; // Defense-in-depth
 
                     if (payload.eventType === 'INSERT') {
-                        const isMatch = showDeleted ? (newFile.status === 'deleted' && newFile.deleted_at) : (newFile.status === 'available' && !newFile.deleted_at);
+                        const isMatch = showDeleted
+                            ? (newFile.status === 'deleted')
+                            : (!newFile.deleted_at && newFile.status !== 'deleted');
                         if (isMatch) {
-                            setFiles(prev => [newFile, ...prev]);
+                            upsertFile(newFile);
                         }
                     } else if (payload.eventType === 'DELETE') {
-                        setFiles(prev => prev.filter(f => f.id !== payload.old.id));
+                        removeFile(payload.old.id);
                     } else if (payload.eventType === 'UPDATE') {
                         // Handle transitions (e.g. available -> deleted)
-                        const isActiveMatch = (newFile.status === 'available' && !newFile.deleted_at);
-                        const isDeletedMatch = (newFile.status === 'deleted' && newFile.deleted_at);
+                        const isActiveMatch = (!newFile.deleted_at && newFile.status !== 'deleted');
+                        const isDeletedMatch = (newFile.status === 'deleted');
 
                         const isMatch = showDeleted ? isDeletedMatch : isActiveMatch;
 
                         if (!isMatch) {
-                            setFiles(prev => prev.filter(f => f.id !== newFile.id));
+                            removeFile(newFile.id);
                         } else {
-                            setFiles(prev => {
-                                const exists = prev.find(f => f.id === newFile.id);
-                                if (exists) {
-                                    return prev.map(f => f.id === newFile.id ? newFile : f);
-                                } else {
-                                    return [newFile, ...prev].sort((a, b) =>
-                                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                                    );
-                                }
-                            });
+                            upsertFile(newFile);
                         }
                     }
                 }
@@ -100,7 +118,7 @@ export const useRealtimeFiles = (spaceId: string, organizationId: string, showDe
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [spaceId, showDeleted]);
+    }, [fetchFiles, organizationId, removeFile, showDeleted, spaceId, upsertFile]);
 
-    return { files, loading, error };
+    return { files, loading, error, refreshFiles: fetchFiles, upsertFile, removeFile };
 };

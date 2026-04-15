@@ -4,14 +4,16 @@ import { X, Upload, File, CheckCircle2, AlertCircle, Loader2 } from 'lucide-reac
 interface FileUploadModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onUpload: (file: File) => Promise<void>;
+    onUpload: (file: File) => Promise<boolean>;
     loading: boolean;
+    uploadProgress: number | null;
 }
 
-export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClose, onUpload, loading }) => {
+export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClose, onUpload, loading, uploadProgress }) => {
     const [file, setFile] = useState<File | null>(null);
     const [dragActive, setDragActive] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+    const visibleProgress = loading ? Math.max(uploadProgress ?? 0, 8) : (uploadProgress ?? 0);
 
     if (!isOpen) return null;
 
@@ -42,7 +44,10 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClos
 
     const handleSubmit = async () => {
         if (!file) return;
-        await onUpload(file);
+        const success = await onUpload(file);
+        if (!success) return;
+
+        await new Promise((resolve) => setTimeout(resolve, 220));
         setFile(null);
         onClose();
     };
@@ -109,10 +114,27 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClos
                                 </p>
                                 <button
                                     onClick={() => setFile(null)}
-                                    className="mt-4 text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline"
+                                    disabled={loading}
+                                    className="mt-4 text-xs text-zinc-500 hover:text-zinc-700 disabled:opacity-50 transition-colors underline"
                                 >
                                     Select another file
                                 </button>
+                            </div>
+                        )}
+
+                        {loading && (
+                            <div className="mt-6 w-full max-w-xs">
+                                <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                                    <span>Uploading</span>
+                                    <span>{uploadProgress ?? 0}%</span>
+                                </div>
+                                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-zinc-200/80">
+                                    <div
+                                        className="h-full rounded-full bg-black transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                                        style={{ width: `${visibleProgress}%` }}
+                                    />
+                                    <div className="upload-progress-sheen absolute inset-y-0 left-0 w-16" />
+                                </div>
                             </div>
                         )}
                     </div>
@@ -133,7 +155,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClos
                         className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium rounded-lg transition-all shadow-lg flex items-center gap-2"
                     >
                         {loading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                        {loading ? 'Uploading...' : 'Send File'}
+                        {loading ? `Uploading… ${uploadProgress ?? 0}%` : 'Send File'}
                     </button>
                 </div>
             </div>

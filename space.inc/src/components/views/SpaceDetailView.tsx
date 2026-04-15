@@ -29,6 +29,7 @@ import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
 import SpaceChatPanel from './SpaceChatPanel';
 import { CalendarWidget } from '../CalendarWidget';
+import TaskWorkspace from '../tasks/TaskWorkspace';
 
 
 // 3. Space Detail View
@@ -62,8 +63,6 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     
     const [tasks, setTasks] = useState<Task[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
-    const [newTaskTitle, setNewTaskTitle] = useState('');
-
     const canManageInvites = userRole === 'owner' || userRole === 'admin' || userRole === 'staff';
 
     const loadActivityIndicators = useCallback(async () => {
@@ -313,12 +312,28 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         setIsScheduleModalOpen(false);
     };
 
-    const { files, loading: filesLoading } = useRealtimeFiles(space.id, organizationId || '', showTrash);
-    const { sendFile, loading: uploadLoading } = useRealtimeMessages(space.id, organizationId || profile?.organization_id);
+    const { files, loading: filesLoading, refreshFiles, upsertFile, removeFile } = useRealtimeFiles(space.id, organizationId || '', showTrash);
+    const { sendFile, loading: uploadLoading, uploadProgress } = useRealtimeMessages(space.id, organizationId || profile?.organization_id);
 
     const handleFileUpload = async (file: File) => {
-        if (!organizationId) return;
-        await sendFile(organizationId, file);
+        if (!organizationId) return false;
+
+        const result = await sendFile(organizationId, file);
+
+        if (result.success && result.fileData && !showTrash) {
+            upsertFile(result.fileData);
+            setTimeout(() => {
+                refreshFiles();
+            }, 1200);
+        }
+
+        if (result.success) {
+            showToast(`${file.name} uploaded successfully`, 'success');
+        } else {
+            showToast('Upload failed — please try again', 'error');
+        }
+
+        return result.success;
     };
 
     return (
@@ -786,95 +801,47 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     </div>
                 )}
                 {activeTab === 'Tasks' && (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <h3 className="text-lg font-medium">Space Tasks</h3>
-                                <p className="text-xs text-zinc-500">Manage tasks and action items for this workspace.</p>
-                            </div>
-                        </div>
-
-                        <GlassCard className="p-4 mb-6">
-                            <div className="flex gap-2">
-                                <Input 
-                                    className="flex-1" 
-                                    placeholder="Add a new task for this space..." 
-                                    value={newTaskTitle} 
-                                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                                />
-                                <Button onClick={() => {
-                                    (async () => {
-                                        if (!organizationId) return;
-                                        if (!newTaskTitle.trim()) return;
-                                        try {
-                                            const { data, error } = await apiService.createTask(
-                                                {
-                                                    title: newTaskTitle.trim(),
-                                                    space_id: space.id,
-                                                    status: 'pending'
-                                                },
-                                                organizationId
-                                            );
-                                            if (error) throw error;
-                                            if (data) {
-                                                setTasks(prev => [data as any, ...prev]);
-                                                setNewTaskTitle('');
-                                                showToast('Task created.', 'success');
-                                            }
-                                        } catch (err: any) {
-                                            showToast(friendlyError(err?.message || 'Failed to create task'), 'error');
-                                        }
-                                    })();
-                                }}>
-                                    Add Task
-                                </Button>
-                            </div>
-                        </GlassCard>
-
-                        {tasksLoading ? (
-                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
-                        ) : tasks.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-16 bg-zinc-50/50 rounded-xl border border-dashed border-zinc-200">
-                                <ListTodo size={40} className="text-zinc-300 mb-3 opacity-50" />
-                                <p className="text-zinc-500 text-sm italic">No tasks assigned to this space.</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {tasks.map(task => (
-                                    <GlassCard key={task.id} className={`p-4 flex items-center justify-between ${task.status === 'done' ? 'opacity-60 bg-zinc-50' : ''}`}>
-                                        <div className="flex items-center gap-4">
-                                            <div 
-                                                className={`h-6 w-6 rounded-full border-2 flex items-center justify-center cursor-pointer ${task.status === 'done' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-zinc-300'}`}
-                                                onClick={() => {
-                                                    (async () => {
-                                                        if (!organizationId) return;
-                                                        const nextStatus: Task['status'] = task.status === 'done' ? 'pending' : 'done';
-                                                        try {
-                                                            const { error } = await apiService.updateTask(task.id, { status: nextStatus }, organizationId);
-                                                            if (error) throw error;
-                                                            setTasks(prev => prev.map(t => (t.id === task.id ? { ...t, status: nextStatus } : t)));
-                                                        } catch (err: any) {
-                                                            showToast(friendlyError(err?.message || 'Failed to update task'), 'error');
-                                                        }
-                                                    })();
-                                                }}
-                                            >
-                                                {task.status === 'done' && <CheckSquare size={12} />}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className={`text-sm font-medium ${task.status === 'done' ? 'line-through text-zinc-500' : 'text-zinc-900'}`}>{task.title}</p>
-                                                <div className="flex items-center gap-3 mt-1 text-[10px] text-zinc-500">
-                                                    {task.due_date && <span className="flex items-center gap-1"><Calendar size={10} /> {new Date(task.due_date).toLocaleDateString()}</span>}
-                                                    {task.priority && <span className="uppercase tracking-wider">Priority: {task.priority}</span>}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <Button variant="ghost" size="sm"><MoreVertical size={16} /></Button>
-                                    </GlassCard>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    <TaskWorkspace
+                        tasks={tasks}
+                        clients={[space]}
+                        loading={tasksLoading}
+                        title={`${space.name} Tasks`}
+                        subtitle="Manage action items for this workspace with the same multi-view system used in the main overview."
+                        scopeSpaceId={space.id}
+                        groupOptions={['Design', 'Engineering', 'Marketing']}
+                        emptyTitle="No tasks assigned to this space"
+                        emptyDescription="Create the next action item here and move it through To Do, In Progress, Review, and Done."
+                        onCreateTask={async (draft) => {
+                            if (!organizationId) return;
+                            try {
+                                const { data, error } = await apiService.createTask(
+                                    {
+                                        ...draft,
+                                        space_id: space.id,
+                                        status: draft.status || 'todo'
+                                    },
+                                    organizationId
+                                );
+                                if (error) throw error;
+                                if (data) {
+                                    setTasks((current) => [data as Task, ...current]);
+                                    showToast('Task created.', 'success');
+                                }
+                            } catch (err: any) {
+                                showToast(friendlyError(err?.message || 'Failed to create task'), 'error');
+                            }
+                        }}
+                        onUpdateTask={async (taskId, updates) => {
+                            if (!organizationId) return;
+                            try {
+                                const { error } = await apiService.updateTask(taskId, updates, organizationId);
+                                if (error) throw error;
+                                setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...updates } : task));
+                            } catch (err: any) {
+                                showToast(friendlyError(err?.message || 'Failed to update task'), 'error');
+                            }
+                        }}
+                    />
                 )}
                 {activeTab === 'Docs' && (
                     <div className="space-y-4">
@@ -911,92 +878,114 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                 <DocIcon size={20} />
                                             </div>
                                             <div>
-                                                <p className="font-medium text-[#1D1D1D]">{file.name}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-medium text-[#1D1D1D]">{file.name}</p>
+                                                    {!showTrash && file.status && file.status !== 'available' && (
+                                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                                            file.status === 'pending'
+                                                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                        }`}>
+                                                            {file.status === 'pending' ? 'Uploading' : 'Processing'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-zinc-500">
                                                     {file.file_size ? `${(file.file_size / (1024 * 1024)).toFixed(2)} MB` : 'Size unknown'} • {new Date(file.created_at).toLocaleDateString()}
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center gap-2 shrink-0">
                                             {!showTrash ? (
                                                 <>
-                                                    <Button
-                                                        variant="ghost"
-                                                        className="h-8 w-8 p-0 text-zinc-400 hover:text-[#1D1D1D]"
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950"
                                                         onClick={() => setViewingFile(file as any)}
+                                                        title="Preview"
+                                                        aria-label={`Preview ${file.name}`}
                                                     >
                                                         <Eye size={16} />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
+                                                    </button>
+                                                    <button
+                                                        type="button"
                                                         onClick={async () => {
                                                             const { data } = await apiService.getSignedUrl(file.id, organizationId || '');
                                                             if (data?.signedUrl) window.open(data.signedUrl, '_blank');
                                                         }}
-                                                        className="h-8 w-8 p-0"
+                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950"
                                                         title="Download"
+                                                        aria-label={`Download ${file.name}`}
                                                     >
                                                         <Download size={16} />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        className="h-8 w-8 p-0 text-zinc-400 hover:text-indigo-500"
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
                                                         onClick={() => setVersioningFile(file as any)}
                                                         title="Version History"
+                                                        aria-label={`View version history for ${file.name}`}
                                                     >
                                                         <History size={16} />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
+                                                    </button>
+                                                    <button
+                                                        type="button"
                                                         onClick={async () => {
                                                             if (confirm('Are you sure you want to move this file to trash?')) {
-                                                                 try {
-                                                                     await apiService.deleteFile(file.id, organizationId || '');
-                                                                     showToast('File moved to trash.', "success");
+                                                         try {
+                                                             await apiService.deleteFile(file.id, organizationId || '');
+                                                             removeFile(file.id);
+                                                             showToast('File moved to trash.', "success");
                                                                  } catch (err: any) {
                                                                     showToast(friendlyError(err?.message), "error");
                                                                  }
                                                             }
                                                         }}
-                                                        className="h-8 w-8 p-0 text-zinc-500 hover:text-rose-500"
+                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                                                        title="Move to trash"
+                                                        aria-label={`Move ${file.name} to trash`}
                                                     >
                                                         <Trash2 size={16} />
-                                                    </Button>
+                                                    </button>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <Button
-                                                        variant="ghost"
+                                                    <button
+                                                        type="button"
                                                         onClick={async () => {
                                                             try {
                                                                 await apiService.restoreFile(file.id, organizationId || '');
+                                                                removeFile(file.id);
                                                                 showToast('File restored.', "success");
                                                             } catch (err: any) {
                                                                     showToast(friendlyError(err?.message), "error");
                                                             }
                                                         }}
-                                                        className="h-8 w-8 p-0 text-zinc-400 hover:text-emerald-500"
+                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
                                                         title="Restore File"
+                                                        aria-label={`Restore ${file.name}`}
                                                     >
                                                         <ArrowLeft size={16} />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
+                                                    </button>
+                                                    <button
+                                                        type="button"
                                                         onClick={async () => {
                                                             if (confirm('PERMANENT DELETE: Are you sure? This cannot be undone.')) {
                                                                 try {
                                                                     await apiService.hardDeleteFile(file.id, organizationId || '');
+                                                                    removeFile(file.id);
                                                                     showToast('File permanently deleted.', "success");
                                                                 } catch (err: any) {
                                                                     showToast(friendlyError(err?.message), "error");
                                                                 }
                                                             }
                                                         }}
-                                                        className="h-8 w-8 p-0 text-zinc-400 hover:text-rose-600"
+                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
                                                         title="Delete Permanently"
+                                                        aria-label={`Delete ${file.name} permanently`}
                                                     >
                                                         <Trash2 size={16} />
-                                                    </Button>
+                                                    </button>
                                                 </>
                                             )}
                                         </div>
@@ -1013,6 +1002,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                 onClose={() => setIsUploadModalOpen(false)}
                 onUpload={handleFileUpload}
                 loading={uploadLoading}
+                uploadProgress={uploadProgress}
             />
 
             {viewingFile && (

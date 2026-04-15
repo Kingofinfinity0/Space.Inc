@@ -169,11 +169,14 @@ export interface Task {
   id: string;
   title: string;
   description?: string;
-  due_date: string;
-  status: 'pending' | 'in_progress' | 'done';
-  space_id: string;
-  assignee_id: string;
-  priority?: 'low' | 'medium' | 'high';
+  due_date?: string;
+  status: 'todo' | 'pending' | 'in_progress' | 'review' | 'done';
+  space_id?: string;
+  assignee_id?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  assigned_group?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface SpaceFile {

@@ -3,12 +3,18 @@ import { supabase } from '../lib/supabase';
 import { apiService } from '../services/apiService';
 import { friendlyError } from '../utils/errors';
 
-import { Message } from '../types';
+import { Message, SpaceFile } from '../types';
+
+type SendFileResult = {
+    success: boolean;
+    fileData?: SpaceFile | null;
+};
 
 export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Scroll to bottom helper
@@ -125,13 +131,17 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
     };
 
     // Send file function
-    const sendFile = async (currentOrgId: string, file: File): Promise<boolean> => {
+    const sendFile = async (currentOrgId: string, file: File): Promise<SendFileResult> => {
         const effectiveOrgId = currentOrgId || orgId;
-        if (!spaceId || !effectiveOrgId || !file) return false;
+        if (!spaceId || !effectiveOrgId || !file) return { success: false, fileData: null };
 
         try {
             setLoading(true);
-            const fileData = await apiService.uploadFile(spaceId, effectiveOrgId, file);
+            setError(null);
+            setUploadProgress(0);
+            const fileData = await apiService.uploadFile(spaceId, effectiveOrgId, file, (progress) => {
+                setUploadProgress(progress);
+            });
 
             // Now send a chat message pointing to this file
             const { data, error: sendError } = await apiService.sendMessage(
@@ -144,12 +154,28 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
             );
 
             if (sendError) throw sendError;
-            return true;
+            setUploadProgress(100);
+            const normalizedFileData: SpaceFile = {
+                ...(fileData as SpaceFile),
+                name: fileData?.name || file.name,
+                mime_type: fileData?.mime_type || file.type,
+                file_size: fileData?.file_size || file.size,
+                created_at: fileData?.created_at || new Date().toISOString(),
+                status: fileData?.status || 'pending',
+                space_id: fileData?.space_id || spaceId,
+                organization_id: fileData?.organization_id || effectiveOrgId
+            };
+
+            return { success: true, fileData: normalizedFileData };
         } catch (err: any) {
             console.error('Failed to upload file:', err);
             setError(friendlyError(err?.message));
-            return false;
+            setUploadProgress(null);
+            return { success: false, fileData: null };
         } finally {
+            setTimeout(() => {
+                setUploadProgress(null);
+            }, 350);
             setLoading(false);
         }
     };
@@ -159,6 +185,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string) {
         messages,
         loading,
         error,
+        uploadProgress,
         sendMessage,
         sendFile,
         messagesEndRef // For attaching to scroll container
