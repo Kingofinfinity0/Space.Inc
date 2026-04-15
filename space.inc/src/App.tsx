@@ -425,11 +425,35 @@ const App = () => {
         }
     };
 
+<<<<<<< HEAD
     const handleUpdateTask = async (taskId: string, updates: Partial<Task>) => {
         try {
             const { error } = await apiService.updateTask(taskId, updates, organizationId || '');
             if (error) throw error;
             setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...updates } : task));
+=======
+    const handleTaskStatusUpdate = async (taskId: string, newStatus: Task['status'], beforeId?: string | null, afterId?: string | null) => {
+        try {
+            // 1. Update status if changed
+            const task = tasks.find(t => t.id === taskId);
+            if (task && task.status !== newStatus) {
+                const { error } = await apiService.updateTask(taskId, { status: newStatus });
+                if (error) throw error;
+            }
+
+            // 2. Perform reordering via RPC
+            const { error: reorderError } = await apiService.reorderTask(taskId, beforeId, afterId);
+            if (reorderError) throw reorderError;
+
+            // 3. Refresh tasks (using listTasks if a space is selected, otherwise getTasks)
+            const { data: updatedTasks, error: fetchError } = selectedSpaceId
+                ? await apiService.listTasks(selectedSpaceId)
+                : await apiService.getTasks(organizationId || '');
+
+            if (fetchError) throw fetchError;
+            if (updatedTasks) setTasks(updatedTasks);
+
+>>>>>>> 0d058411de5e79e575f3d482a77170d6bb6c8aec
         } catch (err: any) {
             showToast(`Error updating task: ${err.message}`, "error");
         }

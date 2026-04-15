@@ -535,17 +535,28 @@ export const apiService = {
     // --- Tasks ---
     async getTasks(organizationId: string, spaceId?: string) {
         if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
-        let query = supabase
+
+        if (spaceId) {
+            return this.listTasks(spaceId);
+        }
+
+        const { data, error } = await supabase
             .from('tasks')
             .select('*')
             .eq('organization_id', organizationId)
             .order('created_at', { ascending: false });
 
-        if (spaceId) {
-            query = query.eq('space_id', spaceId);
-        }
+        if (error) return { data: null, error };
+        return { data: data || [], error: null };
+    },
 
-        const { data, error } = await query;
+    async listTasks(spaceId: string, filters: { priority?: string, search?: string } = {}) {
+        const { data, error } = await supabase.rpc('list_tasks', {
+            p_space_id: spaceId,
+            p_priority: filters.priority,
+            p_search: filters.search
+        });
+
         if (error) return { data: null, error };
         return { data: data || [], error: null };
     },
@@ -559,19 +570,30 @@ export const apiService = {
         return { data: res, error: null };
     },
 
-    async updateTask(id: string, updates: any, organizationId: string) {
-        const { data, error } = await supabase.functions.invoke('tasks-api', {
-            method: 'PATCH',
-            body: { task_id: id, ...updates, organization_id: organizationId }
-        });
-        if (error || data?.error) return { data: null, error: data?.error || { message: error?.message || 'Failed to update task' } };
-        return { data, error: null };
+    async updateTask(id: string, updates: any, _organizationId?: string) {
+        const { data, error } = await supabase
+            .from('tasks')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) return { data: null, error };
+        return { data: data || null, error: null };
     },
 
-    // --- Meetings ---
+    async reorderTask(taskId: string, beforeId?: string | null, afterId?: string | null) {
+        const { data, error } = await supabase.rpc('reorder_task', {
+            p_task_id: taskId,
+            p_before_id: beforeId,
+            p_after_id: afterId
+        });
+
+        if (error) return { data: null, error };
+        return { data, error: null };
+    },
     async getMeetings(organizationId: string, spaceId?: string) {
         if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
-        
         try {
             const { data, error } = await supabase.rpc('list_meetings_v2', {
                 p_space_id: spaceId || null
