@@ -10,7 +10,7 @@ export const NavItem = ({ icon, label, active, onClick, badge }: { icon: any; la
     }`}
   >
     <div className="flex items-center gap-3">
-      <div className={`${active ? 'text-emerald-300' : 'text-slate-500 group-hover:text-slate-100'}`}>
+      <div className={active ? 'text-emerald-300' : 'text-slate-500 group-hover:text-slate-100'}>
         {icon}
       </div>
       <span className="text-sm font-medium tracking-[-0.01em]">{label}</span>
@@ -23,10 +23,9 @@ export const NavItem = ({ icon, label, active, onClick, badge }: { icon: any; la
   </button>
 );
 
-export const AppLayout: React.FC<{ children: React.ReactNode; sidebar: React.ReactNode }> = ({ children, sidebar }) => (
-  <div className="relative flex min-h-screen bg-transparent font-sans text-slate-100">
-    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_34%),radial-gradient(circle_at_bottom,_rgba(52,211,153,0.08),_transparent_24%)]" />
-    {sidebar}
+export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="relative flex min-h-screen bg-white dark:bg-zinc-950 font-sans text-zinc-900 dark:text-zinc-100 transition-colors duration-300">
+    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(0,0,0,0.02),_transparent_34%),radial-gradient(circle_at_bottom,_rgba(52,211,153,0.04),_transparent_24%)] dark:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_34%)]" />
     <main className="relative flex min-h-screen flex-1 overflow-hidden">
       {children}
     </main>
@@ -34,7 +33,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode; sidebar: React.Rea
 );
 
 export const ClientLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="min-h-screen bg-transparent font-sans text-slate-100">
+  <div className="min-h-screen bg-white dark:bg-zinc-950 font-sans text-zinc-900 dark:text-zinc-100">
     {children}
   </div>
 );

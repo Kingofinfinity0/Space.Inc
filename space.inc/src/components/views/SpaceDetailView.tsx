@@ -33,7 +33,7 @@ import TaskWorkspace from '../tasks/TaskWorkspace';
 
 
 // 3. Space Detail View
-const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet, onEndMeeting, onDeleteMeeting }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void, onEndMeeting?: (id: string, outcome: string, notes: string) => void, onDeleteMeeting?: (meetingId: string) => void }) => {
+const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet, onEndMeeting, onDeleteMeeting, activeTab: propActiveTab, onTabChange }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void, onEndMeeting?: (id: string, outcome: string, notes: string) => void, onDeleteMeeting?: (meetingId: string) => void, activeTab?: string, onTabChange?: (tab: string) => void }) => {
     const navigate = useNavigate();
     const { user, profile, organizationId, userRole, session } = useAuth();
     const { showToast } = useToast();
@@ -49,7 +49,8 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         recentFilesCount: number;
     }>({ unreadCount: 0, upcomingMeetings: [], recentFilesCount: 0 });
 
-    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Tasks' | 'Docs'>('Dashboard');
+    const activeTab = (propActiveTab as any) || 'Dashboard';
+    const setActiveTab = onTabChange || (() => {});
     const [invites, setInvites] = useState<any[]>([]);
     const [invitesLoading, setInvitesLoading] = useState(false);
     const [spaceInviteUrl, setSpaceInviteUrl] = useState<string>('');
