@@ -3,20 +3,20 @@ import React from 'react';
 export const NavItem = ({ icon, label, active, onClick, badge }: { icon: any; label: string; active?: boolean; onClick?: () => void; badge?: number }) => (
   <button
     onClick={onClick}
-    className={`interactive-surface flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left ${
+    className={`interactive-surface flex w-full items-center justify-between rounded-[8px] border px-3 py-2.5 text-left ${
       active
-        ? 'border-white/10 bg-white/[0.1] text-white shadow-[0_20px_40px_rgba(0,0,0,0.18)]'
-        : 'border-transparent bg-transparent text-slate-400 hover:border-white/8 hover:bg-white/[0.06] hover:text-white'
+        ? 'border-[#E5E5E5] bg-white text-[#0D0D0D]'
+        : 'border-transparent bg-transparent text-[#6E6E80] hover:border-[#E5E5E5] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]'
     }`}
   >
     <div className="flex items-center gap-3">
-      <div className={`${active ? 'text-emerald-300' : 'text-slate-500 group-hover:text-slate-100'}`}>
+      <div className={`${active ? 'text-[#0D0D0D]' : 'text-[#6E6E80] group-hover:text-[#0D0D0D]'}`}>
         {icon}
       </div>
       <span className="text-sm font-medium tracking-[-0.01em]">{label}</span>
     </div>
     {badge !== undefined && badge > 0 && (
-      <span className="min-w-[20px] rounded-full border border-emerald-400/25 bg-emerald-400/20 px-1.5 py-0.5 text-center text-[10px] font-semibold text-emerald-200">
+      <span className="min-w-[20px] rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-1.5 py-0.5 text-center text-[10px] font-semibold text-[#6E6E80]">
         {badge}
       </span>
     )}
@@ -24,8 +24,7 @@ export const NavItem = ({ icon, label, active, onClick, badge }: { icon: any; la
 );
 
 export const AppLayout: React.FC<{ children: React.ReactNode; sidebar: React.ReactNode }> = ({ children, sidebar }) => (
-  <div className="relative flex min-h-screen bg-transparent font-sans text-slate-100">
-    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_34%),radial-gradient(circle_at_bottom,_rgba(52,211,153,0.08),_transparent_24%)]" />
+  <div className="relative flex min-h-screen bg-[#FFFFFF] font-sans text-[#0D0D0D]">
     {sidebar}
     <main className="relative flex min-h-screen flex-1 overflow-hidden">
       {children}
@@ -34,7 +33,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode; sidebar: React.Rea
 );
 
 export const ClientLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="min-h-screen bg-transparent font-sans text-slate-100">
+  <div className="min-h-screen bg-[#FFFFFF] font-sans text-[#0D0D0D]">
     {children}
   </div>
 );

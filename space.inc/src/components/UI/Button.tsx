@@ -20,21 +20,21 @@ export const Button: React.FC<ButtonProps> = ({
   icon,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-full border text-sm font-medium tracking-[-0.01em] transition-all duration-[260ms] [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-0 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.95] active:translate-y-[1px]';
+  const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-[6px] border text-sm font-medium tracking-[-0.01em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 focus-visible:ring-offset-0 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]';
 
   const variantStyles = {
-    primary: 'border-emerald-400/30 bg-emerald-400 text-slate-950 shadow-[0_18px_40px_rgba(16,185,129,0.28)] hover:bg-emerald-300 hover:shadow-[0_28px_60px_rgba(16,185,129,0.18)]',
-    secondary: 'border-white/8 bg-white/[0.08] text-slate-100 hover:bg-white/[0.14] hover:border-white/14',
-    ghost: 'border-transparent bg-transparent text-slate-300 hover:bg-white/[0.08] hover:text-white',
-    outline: 'border-white/10 bg-slate-950/30 text-slate-100 hover:bg-white/[0.08] hover:border-white/18',
-    link: 'border-transparent bg-transparent px-0 text-slate-200 hover:text-white',
-    danger: 'border-red-400/20 bg-red-500/80 text-white shadow-[0_18px_36px_rgba(239,68,68,0.22)] hover:bg-red-400',
+    primary: 'border-black bg-black text-white hover:bg-[#1A1A1A]',
+    secondary: 'border-[#E5E5E5] bg-white text-[#0D0D0D] hover:bg-[#F7F7F8]',
+    ghost: 'border-transparent bg-transparent text-[#6E6E80] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]',
+    outline: 'border-[#E5E5E5] bg-white text-[#0D0D0D] hover:bg-[#F7F7F8]',
+    link: 'border-transparent bg-transparent px-0 text-[#0D0D0D] hover:text-[#6E6E80]',
+    danger: 'border-[#E5E5E5] bg-white text-[#B42318] hover:bg-[#FEF2F2]',
   };
 
   const sizeStyles = {
-    sm: 'h-9 px-3.5 text-xs',
-    md: 'h-11 px-4.5 text-sm',
-    lg: 'h-12 px-6 text-[15px]',
+    sm: 'h-8 px-3 text-xs',
+    md: 'h-10 px-4 text-sm',
+    lg: 'h-11 px-5 text-[15px]',
   };
 
   return (
@@ -45,8 +45,8 @@ export const Button: React.FC<ButtonProps> = ({
     >
       {isLoading ? (
         <>
-          <svg
-            className="h-4 w-4 animate-spin text-current"
+        <svg
+          className="h-4 w-4 animate-spin text-current"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"

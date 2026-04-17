@@ -11,7 +11,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', 
     <div
       onClick={onClick}
       className={[
-        'glass-surface rounded-[24px] text-white interactive-surface',
+        'glass-surface rounded-[var(--radius)] text-[#0D0D0D] interactive-surface',
         onClick ? 'cursor-pointer' : '',
         className,
       ].join(' ')}

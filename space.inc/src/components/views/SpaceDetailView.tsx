@@ -340,19 +340,19 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         <div className="animate-[fadeIn_0.5s_ease-out] flex flex-col h-[calc(100vh-64px)]">
             {/* Navigation Header */}
             <div className="flex items-center gap-4 mb-6">
-                <button title="Go Back" onClick={onBack} className="p-2 rounded-full hover:bg-zinc-100 transition-colors">
-                    <ArrowLeft size={20} className="text-zinc-500" />
+                <button title="Go Back" onClick={onBack} className="p-2 rounded-[6px] border border-[#E5E5E5] bg-white hover:bg-[#F7F7F8] transition-colors">
+                    <ArrowLeft size={20} className="text-[#6E6E80]" />
                 </button>
                 <div>
-                    <h1 className="text-2xl font-light text-[#1D1D1D]">{space.name}</h1>
-                    <p className="text-sm text-zinc-500">Managed by You</p>
+                    <h1 className="text-2xl font-semibold text-[#0D0D0D]">{space.name}</h1>
+                    <p className="text-sm text-[#6E6E80]">Managed by You</p>
                 </div>
-                <div className="ml-auto flex bg-white/50 p-1 rounded-md border border-zinc-200">
+                <div className="ml-auto flex rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-1">
                     {['Dashboard', 'Chat', 'Meetings', 'Tasks', 'Docs'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab as any)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab ? 'bg-[#1D1D1D] text-white shadow-sm' : 'text-zinc-500 hover:text-[#1D1D1D]'}`}
+                            className={`px-4 py-2 rounded-[6px] text-sm font-medium transition-all ${activeTab === tab ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}
                         >
                             {tab}
                         </button>
@@ -363,16 +363,16 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             {/* Activity Indicators (Task 7) */}
             <div className="flex gap-2 flex-wrap mb-6">
                 {spaceStatsLoading ? (
-                    <span className="px-3 py-1 text-[10px] rounded-full bg-zinc-100 text-zinc-400">Loading indicators...</span>
+                    <span className="px-3 py-1 text-[10px] rounded-full bg-[#F7F7F8] text-[#6E6E80] border border-[#E5E5E5]">Loading indicators...</span>
                 ) : (
                     <>
                         {activityIndicators.unreadCount > 0 && (
-                            <span className="px-3 py-1 text-[10px] font-bold rounded-full bg-rose-50 border border-rose-100 text-rose-600 flex items-center gap-1.5">
-                                <div className="h-1.5 w-1.5 bg-rose-500 rounded-full animate-pulse" /> {activityIndicators.unreadCount} unread
+                            <span className="px-3 py-1 text-[10px] font-semibold rounded-full bg-[#F7F7F8] border border-[#E5E5E5] text-[#0D0D0D] flex items-center gap-1.5">
+                                <div className="h-1.5 w-1.5 bg-black rounded-full animate-pulse" /> {activityIndicators.unreadCount} unread
                             </span>
                         )}
                         {activityIndicators.upcomingMeetings.length > 0 && (
-                            <span className="px-3 py-1 text-[10px] font-bold rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center gap-1.5">
+                            <span className="px-3 py-1 text-[10px] font-semibold rounded-full bg-[#F7F7F8] border border-[#E5E5E5] text-[#0D0D0D] flex items-center gap-1.5">
                                 <Calendar size={10} />
                                 {(() => {
                                     const next = activityIndicators.upcomingMeetings[0];
@@ -383,14 +383,14 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             </span>
                         )}
                         {activityIndicators.recentFilesCount > 0 && (
-                            <span className="px-3 py-1 text-[10px] font-bold rounded-full bg-blue-50 border border-blue-100 text-blue-600 flex items-center gap-1.5">
+                            <span className="px-3 py-1 text-[10px] font-semibold rounded-full bg-[#F7F7F8] border border-[#E5E5E5] text-[#0D0D0D] flex items-center gap-1.5">
                                 <FolderClosed size={10} /> {activityIndicators.recentFilesCount} new files
                             </span>
                         )}
                         {!activityIndicators.unreadCount && !activityIndicators.upcomingMeetings.length && !activityIndicators.recentFilesCount && (
-                            <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-400">No new activity</span>
+                            <span className="px-3 py-1 text-[10px] rounded-full bg-white border border-[#E5E5E5] text-[#6E6E80]">No new activity</span>
                         )}
-                        <span className="px-3 py-1 text-[10px] rounded-full bg-white/60 border border-zinc-200 text-zinc-700 ml-auto">
+                        <span className="px-3 py-1 text-[10px] rounded-full bg-white border border-[#E5E5E5] text-[#0D0D0D] ml-auto">
                             Last active: {spaceStats?.last_activity_at ? new Date(spaceStats.last_activity_at).toLocaleString() : '—'}
                         </span>
                     </>
@@ -419,9 +419,9 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                         <SkeletonText lines={2} />
                                     ) : members.length > 0 ? (
                                         members.map(member => (
-                                            <div key={member.profile_id} className="flex items-center gap-3 p-2 hover:bg-zinc-50 rounded-lg transition-colors border border-transparent">
+                                            <div key={member.profile_id} className="flex items-center gap-3 p-2 hover:bg-[#F7F7F8] rounded-[8px] transition-colors border border-transparent">
                                                 {/* Avatar */}
-                                                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs uppercase">
+                                                <div className="h-8 w-8 rounded-[8px] bg-black flex items-center justify-center text-white font-semibold text-xs uppercase">
                                                     {member.avatar_url ? (
                                                         <img src={member.avatar_url} alt={member.full_name} className="h-8 w-8 rounded-full object-cover" />
                                                     ) : (
@@ -430,24 +430,24 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2">
-                                                        <p className="text-sm font-medium text-zinc-900 truncate">
+                                                        <p className="text-sm font-medium text-[#0D0D0D] truncate">
                                                             {member.full_name || 'Pending User'}
                                                         </p>
                                                         {/* Online indicator */}
-                                                        <div className={`h-2 w-2 rounded-full ${member.is_online ? 'bg-green-500' : 'bg-gray-300'}`} title={member.is_online ? 'Online' : 'Offline'} />
+                                                        <div className={`h-2 w-2 rounded-full ${member.is_online ? 'bg-black' : 'bg-[#D4D4D8]'}`} title={member.is_online ? 'Online' : 'Offline'} />
                                                     </div>
                                                     <div className="flex items-center gap-2 mt-0.5">
                                                         {/* Role badge */}
-                                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-medium ${
-                                                            member.membership_role === 'client' ? 'bg-blue-100 text-blue-700' :
-                                                            member.membership_role === 'staff' ? 'bg-emerald-100 text-emerald-700' :
-                                                            member.membership_role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                                                            'bg-gray-100 text-gray-700'
+                                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-medium border ${
+                                                            member.membership_role === 'client' ? 'bg-[#F7F7F8] text-[#0D0D0D] border-[#E5E5E5]' :
+                                                            member.membership_role === 'staff' ? 'bg-[#F7F7F8] text-[#0D0D0D] border-[#E5E5E5]' :
+                                                            member.membership_role === 'admin' ? 'bg-[#F7F7F8] text-[#0D0D0D] border-[#E5E5E5]' :
+                                                            'bg-[#F7F7F8] text-[#6E6E80] border-[#E5E5E5]'
                                                         }`}>
                                                             {member.membership_role}
                                                         </span>
                                                         {/* Joined date */}
-                                                        <span className="text-[9px] text-zinc-400">
+                                                        <span className="text-[9px] text-[#6E6E80]">
                                                             Joined {member.joined_at ? new Date(member.joined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                                                         </span>
                                                     </div>
@@ -455,7 +455,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                             </div>
                                         ))
                                     ) : (
-                                        <p className="text-xs text-zinc-400 italic">No members yet. Share the invite link to get started.</p>
+                                        <p className="text-xs text-[#6E6E80] italic">No members yet. Share the invite link to get started.</p>
                                     )}
                                 </div>
                             </GlassCard>
@@ -465,7 +465,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                     <div className="flex justify-between items-center mb-4">
                                         <div>
                                             <Heading level={3}>Shareable Space Link</Heading>
-                                            <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Public/Ghost Access</p>
+                                            <p className="text-[10px] text-[#6E6E80] uppercase tracking-wider font-semibold">Public/Ghost Access</p>
                                         </div>
                                         <Button 
                                             variant="outline" 
@@ -478,7 +478,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                     </div>
                                     <div className="space-y-4">
                                         <div className="flex items-center gap-2">
-                                            <div className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-2 text-sm font-mono text-zinc-600 truncate">
+                                            <div className="flex-1 bg-white border border-[#E5E5E5] rounded-[8px] px-4 py-2 text-sm font-mono text-[#6E6E80] truncate">
                                                 {spaceInviteUrl || 'No active link'}
                                             </div>
                                             <Button
@@ -495,8 +495,8 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                 <Copy size={14} />
                                             </Button>
                                         </div>
-                                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex gap-3">
-                                            <LinkIcon size={16} className="text-blue-500 shrink-0 mt-0.5" />
+                                        <div className="bg-[#F7F7F8] border border-[#E5E5E5] rounded-[8px] p-3 flex gap-3">
+                                            <LinkIcon size={16} className="text-[#6E6E80] shrink-0 mt-0.5" />
                                             <Text variant="secondary" className="text-xs leading-relaxed">
                                                 Clients using this link will be added to this space immediately. Recommended for generic onboarding.
                                             </Text>

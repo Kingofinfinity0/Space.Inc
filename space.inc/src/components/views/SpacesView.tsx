@@ -77,16 +77,16 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                         className="p-6 group relative cursor-pointer"
                     >
                         <div className="flex justify-between items-start mb-4">
-                            <div className="h-12 w-12 rounded-xl bg-zinc-50 flex items-center justify-center text-lg font-bold text-zinc-400 group-hover:bg-zinc-900 group-hover:text-white transition-all">
+                            <div className="h-12 w-12 rounded-[8px] bg-[#F7F7F8] flex items-center justify-center text-lg font-semibold text-[#6E6E80] group-hover:bg-black group-hover:text-white transition-all">
                                 {client.name ? client.name.substring(0, 2).toUpperCase() : 'SP'}
                             </div>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${client.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase border ${client.status === 'active' ? 'bg-[#F7F7F8] text-[#0D0D0D] border-[#E5E5E5]' : 'bg-[#F7F7F8] text-[#6E6E80] border-[#E5E5E5]'}`}>
                                 {client.status}
                             </span>
                         </div>
-                        <h3 className="text-xl font-bold text-zinc-900 mb-1">{client.name}</h3>
-                        <p className="text-sm text-zinc-500 font-light mb-6">{client.description || 'Verified Portal Environment'}</p>
-                        <div className="py-4 border-t border-zinc-50 mb-2">
+                        <h3 className="text-xl font-semibold text-[#0D0D0D] mb-1">{client.name}</h3>
+                        <p className="text-sm text-[#6E6E80] mb-6">{client.description || 'Verified Portal Environment'}</p>
+                        <div className="py-4 border-t border-[#E5E5E5] mb-2">
                             <SpaceActivityIndicators spaceId={client.id} />
                         </div>
                     </GlassCard>
@@ -96,17 +96,17 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Provision New Space">
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Space Name</label>
+                        <label className="block text-[10px] font-semibold uppercase text-[#6E6E80] tracking-widest mb-2">Space Name</label>
                         <Input placeholder="Client Name or Project" value={newClientName} onChange={e => setNewClientName(e.target.value)} />
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Invitee Email (Optional)</label>
+                        <label className="block text-[10px] font-semibold uppercase text-[#6E6E80] tracking-widest mb-2">Invitee Email (Optional)</label>
                         <Input placeholder="client@example.com" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} />
                     </div>
 
                     <div className="pt-2">
-                        <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-4">Included Features</label>
+                        <label className="block text-[10px] font-semibold uppercase text-[#6E6E80] tracking-widest mb-4">Included Features</label>
                         <div className="grid grid-cols-2 gap-4">
                             <Checkbox
                                 label="Messages"
@@ -175,7 +175,7 @@ const SpaceActivityIndicators = ({ spaceId }: { spaceId: string }) => {
         load();
     }, [spaceId, organizationId]);
 
-    if (loading) return <div className="h-10 flex items-center justify-center"><div className="h-4 w-4 border-2 border-zinc-200 border-t-zinc-400 rounded-full animate-spin" /></div>;
+    if (loading) return <div className="h-10 flex items-center justify-center"><div className="h-4 w-4 border-2 border-[#E5E5E5] border-t-black rounded-full animate-spin" /></div>;
 
     return (
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
@@ -195,7 +195,7 @@ const SpaceActivityIndicators = ({ spaceId }: { spaceId: string }) => {
                 </span>
             )}
             {!indicators.unreadCount && !indicators.upcomingMeetingsCount && !indicators.recentFilesCount && (
-                <span className="text-[9px] text-zinc-400 italic">No new activity</span>
+                <span className="text-[9px] text-[#6E6E80] italic">No new activity</span>
             )}
         </div>
     );

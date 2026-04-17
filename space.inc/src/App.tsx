@@ -71,13 +71,13 @@ import ClientSpaceRoute from './components/views/ClientSpaceRoute';
 import { supabase as _supabase } from './lib/supabase';
 
 const ErrorView = ({ message }: { message: string }) => (
-    <div className="h-screen w-full flex items-center justify-center bg-zinc-50 p-4">
-        <GlassCard className="max-w-md w-full p-8 text-center border-red-100 shadow-xl">
-            <div className="h-16 w-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Shield className="text-red-500" size={32} />
+    <div className="h-screen w-full flex items-center justify-center bg-[#FFFFFF] p-4">
+        <GlassCard className="max-w-md w-full p-8 text-center">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8]">
+                <Shield className="text-[#0D0D0D]" size={32} />
             </div>
-            <Heading level={2} className="text-zinc-900 mb-2">Access Denied</Heading>
-            <Text className="text-zinc-500 mb-8">{message}</Text>
+            <Heading level={2} className="mb-2">Access Denied</Heading>
+            <Text className="mb-8 text-[#6E6E80]">{message}</Text>
             <Button variant="primary" className="w-full" onClick={() => window.location.assign('/')}>Return to Login</Button>
         </GlassCard>
     </div>
@@ -124,28 +124,28 @@ const ClientSpacePicker: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6 font-sans">
+        <div className="min-h-screen bg-[#FFFFFF] flex items-center justify-center p-6 font-sans">
             <div className="max-w-md w-full space-y-8">
                 <div className="text-center space-y-2">
-                    <div className="h-12 w-12 bg-zinc-900 rounded-xl flex items-center justify-center text-white mx-auto mb-4">
+                    <div className="h-12 w-12 bg-black rounded-[8px] flex items-center justify-center text-white mx-auto mb-4">
                         <Rocket size={24} />
                     </div>
-                    <h1 className="text-2xl font-black tracking-tight text-zinc-900">Your Spaces</h1>
-                    <p className="text-zinc-500 text-sm">Select a workspace to continue</p>
+                    <h1 className="text-2xl font-semibold tracking-tight text-[#0D0D0D]">Your Spaces</h1>
+                    <p className="text-[#6E6E80] text-sm">Select a workspace to continue</p>
                 </div>
                 <div className="space-y-3">
                     {spaces.map(s => (
                         <button
                             key={s.space_id}
                             onClick={() => navigate(`/spaces/${s.space_id}`, { replace: true })}
-                            className="w-full p-4 bg-white border border-zinc-200 rounded-xl text-left hover:border-zinc-400 hover:shadow-sm transition-all"
+                            className="w-full rounded-[8px] border border-[#E5E5E5] bg-white p-4 text-left hover:bg-[#F7F7F8] transition-all"
                         >
-                            <span className="font-bold text-sm text-zinc-900">{s.space_name}</span>
+                            <span className="font-medium text-sm text-[#0D0D0D]">{s.space_name}</span>
                         </button>
                     ))}
                 </div>
                 <div className="text-center pt-4">
-                    <button onClick={signOut} className="text-xs text-zinc-400 hover:text-zinc-900 font-bold uppercase tracking-widest transition-colors">Sign Out</button>
+                    <button onClick={signOut} className="text-xs text-[#6E6E80] hover:text-[#0D0D0D] font-semibold uppercase tracking-widest transition-colors">Sign Out</button>
                 </div>
             </div>
         </div>
@@ -425,35 +425,11 @@ const App = () => {
         }
     };
 
-<<<<<<< HEAD
     const handleUpdateTask = async (taskId: string, updates: Partial<Task>) => {
         try {
             const { error } = await apiService.updateTask(taskId, updates, organizationId || '');
             if (error) throw error;
             setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...updates } : task));
-=======
-    const handleTaskStatusUpdate = async (taskId: string, newStatus: Task['status'], beforeId?: string | null, afterId?: string | null) => {
-        try {
-            // 1. Update status if changed
-            const task = tasks.find(t => t.id === taskId);
-            if (task && task.status !== newStatus) {
-                const { error } = await apiService.updateTask(taskId, { status: newStatus });
-                if (error) throw error;
-            }
-
-            // 2. Perform reordering via RPC
-            const { error: reorderError } = await apiService.reorderTask(taskId, beforeId, afterId);
-            if (reorderError) throw reorderError;
-
-            // 3. Refresh tasks (using listTasks if a space is selected, otherwise getTasks)
-            const { data: updatedTasks, error: fetchError } = selectedSpaceId
-                ? await apiService.listTasks(selectedSpaceId)
-                : await apiService.getTasks(organizationId || '');
-
-            if (fetchError) throw fetchError;
-            if (updatedTasks) setTasks(updatedTasks);
-
->>>>>>> 0d058411de5e79e575f3d482a77170d6bb6c8aec
         } catch (err: any) {
             showToast(`Error updating task: ${err.message}`, "error");
         }
@@ -801,14 +777,14 @@ const App = () => {
                             <AppLayout
                                 sidebar={
                                     <aside className="relative z-10 hidden w-[300px] flex-col p-6 xl:flex">
-                                        <div className="glass-surface glass-elevated flex h-full flex-col rounded-[30px] p-5 text-slate-100">
+                                        <div className="glass-surface glass-elevated flex h-full flex-col rounded-[8px] p-5 text-[#0D0D0D]">
                                             <div className="flex items-center gap-3">
-                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.08] text-emerald-300">
+                                                <div className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-white text-[#6E6E80]">
                                                     <Rocket size={22} />
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <div className="text-lg font-semibold tracking-[-0.03em] text-white">Space.inc</div>
-                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Workspace OS</div>
+                                                    <div className="text-lg font-semibold tracking-[-0.03em] text-[#0D0D0D]">Space.inc</div>
+                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">Workspace OS</div>
                                                 </div>
                                                 <div className="ml-auto">
                                                     <NotificationBell />
@@ -816,29 +792,29 @@ const App = () => {
                                             </div>
 
                                             <div className="relative mt-6">
-                                                <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                                                <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#6E6E80]" />
                                                 <input
                                                     placeholder="Search anything..."
-                                                    className="w-full rounded-2xl border border-white/10 bg-[rgba(7,9,14,0.72)] py-3 pl-10 pr-4 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-white/12"
+                                                    className="w-full rounded-[8px] border border-[#E5E5E5] bg-white py-3 pl-10 pr-4 text-sm text-[#0D0D0D] placeholder:text-[#6E6E80] focus:outline-none focus:border-black"
                                                 />
                                             </div>
 
                                             <div className="mt-6 space-y-3">
-                                                <div className="glass-muted rounded-[24px] px-4 py-4">
-                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Current view</div>
-                                                    <div className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">{currentViewLabel}</div>
-                                                    <p className="mt-2 text-sm leading-6 text-slate-400">
-                                                        Slim surfaces, denser lists, and a floating dock now frame the whole workspace.
+                                                <div className="glass-muted rounded-[8px] px-4 py-4">
+                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">Current view</div>
+                                                    <div className="mt-2 text-xl font-semibold tracking-[-0.03em] text-[#0D0D0D]">{currentViewLabel}</div>
+                                                    <p className="mt-2 text-sm leading-6 text-[#6E6E80]">
+                                                        Minimal surfaces, denser lists, and a calmer dock frame the whole workspace.
                                                     </p>
                                                 </div>
-                                                <div className="glass-muted rounded-[24px] px-4 py-4">
-                                                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                                                <div className="glass-muted rounded-[8px] px-4 py-4">
+                                                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">
                                                         <span>Unread inbox</span>
                                                         <span>{totalInboxItems}</span>
                                                     </div>
-                                                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                                                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#F7F7F8]">
                                                         <div
-                                                            className="h-full rounded-full bg-emerald-300 transition-all duration-300"
+                                                            className="h-full rounded-full bg-black transition-all duration-300"
                                                             style={{ width: `${Math.min(totalInboxItems * 12, 100)}%` }}
                                                         />
                                                     </div>
@@ -847,14 +823,14 @@ const App = () => {
 
                                             <button
                                                 onClick={() => setCurrentView(ViewState.SETTINGS)}
-                                                className="interactive-surface mt-auto flex items-center gap-3 rounded-[24px] border border-white/8 bg-white/[0.05] p-3 text-left"
+                                                className="interactive-surface mt-auto flex items-center gap-3 rounded-[8px] border border-[#E5E5E5] bg-white p-3 text-left"
                                             >
-                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.08] text-xs font-semibold text-white">
+                                                <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-[#F7F7F8] text-xs font-semibold text-[#0D0D0D]">
                                                     {profile?.full_name?.substring(0, 2).toUpperCase() || 'AD'}
                                                 </div>
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-medium text-white">{profile?.full_name || 'User'}</p>
-                                                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{userRole || 'Member'}</p>
+                                                    <p className="truncate text-sm font-medium text-[#0D0D0D]">{profile?.full_name || 'User'}</p>
+                                                    <p className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">{userRole || 'Member'}</p>
                                                 </div>
                                             </button>
                                         </div>
@@ -863,14 +839,14 @@ const App = () => {
                             >
                                 <div className="flex min-h-screen flex-1 flex-col">
                                     <header className="sticky top-0 z-20 px-4 pt-4 md:px-8 md:pt-6">
-                                        <div className="glass-surface flex items-center justify-between rounded-[26px] px-4 py-4 md:px-6">
+                                        <div className="glass-surface flex items-center justify-between rounded-[8px] px-4 py-4 md:px-6">
                                             <div className="flex min-w-0 items-center gap-2">
-                                                <span className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">Main</span>
-                                                <ChevronRight size={14} className="text-slate-600" />
-                                                <span className="truncate text-[11px] font-medium uppercase tracking-[0.22em] text-slate-200">{currentViewLabel}</span>
+                                                <span className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#6E6E80]">Main</span>
+                                                <ChevronRight size={14} className="text-[#6E6E80]" />
+                                                <span className="truncate text-[11px] font-medium uppercase tracking-[0.22em] text-[#0D0D0D]">{currentViewLabel}</span>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <div className="hidden md:flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.05] px-3 py-2 text-xs text-slate-400">
+                                                <div className="hidden md:flex items-center gap-2 rounded-[8px] border border-[#E5E5E5] bg-white px-3 py-2 text-xs text-[#6E6E80]">
                                                     <Search size={13} />
                                                     Search
                                                 </div>
@@ -882,7 +858,7 @@ const App = () => {
                                         <div className="mx-auto max-w-7xl">{renderContent()}</div>
                                     </div>
                                     <nav className="fixed inset-x-0 bottom-8 z-30 flex justify-center px-4">
-                                        <div className="dock-enter flex max-w-[calc(100vw-1.5rem)] items-center gap-1 overflow-x-auto rounded-full border border-white/10 bg-[rgba(14,18,24,0.8)] px-2 py-2 shadow-[0_20px_50px_rgba(0,0,0,0.3)] backdrop-blur-[12px]">
+                                        <div className="dock-enter flex max-w-[calc(100vw-1.5rem)] items-center gap-1 overflow-x-auto rounded-[8px] border border-[#E5E5E5] bg-white px-2 py-2 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                                             {dockItems.map((item, index) => {
                                                 const Icon = item.icon;
                                                 return (
@@ -891,19 +867,19 @@ const App = () => {
                                                         aria-label={item.label}
                                                         onClick={item.onClick}
                                                         style={{ animationDelay: `${index * 20}ms` }}
-                                                        className={`group relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border transition-all duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] active:scale-[0.95] ${
+                                                        className={`group relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[8px] border transition-all duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] active:scale-[0.95] ${
                                                             item.isActive
-                                                                ? 'translate-y-[-4px] scale-[1.05] border-white/14 bg-white/[0.14] text-white shadow-[0_24px_50px_rgba(0,0,0,0.18)]'
-                                                                : 'border-transparent bg-transparent text-slate-400 hover:-translate-y-3 hover:scale-110 hover:border-white/10 hover:bg-white/[0.12] hover:text-white'
+                                                                ? 'border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]'
+                                                                : 'border-transparent bg-transparent text-[#6E6E80] hover:border-[#E5E5E5] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]'
                                                         }`}
                                                     >
                                                         <Icon size={18} />
                                                         {item.badge ? (
-                                                            <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full border border-emerald-400/25 bg-emerald-400 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950">
+                                                            <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-1.5 py-0.5 text-[10px] font-semibold text-[#6E6E80]">
                                                                 {item.badge}
                                                             </span>
                                                         ) : null}
-                                                        <span className="tooltip-enter pointer-events-none absolute -top-9 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-[rgba(12,15,20,0.92)] px-2.5 py-1 text-[11px] font-medium text-slate-100 shadow-[0_16px_34px_rgba(0,0,0,0.24)] group-hover:block">
+                                                        <span className="tooltip-enter pointer-events-none absolute -top-9 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-medium text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)] group-hover:block">
                                                             {item.label}
                                                         </span>
                                                     </button>
@@ -936,18 +912,18 @@ const App = () => {
                             )}
 
                             {isInstantMeetingModalOpen && (
-                                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 p-4">
                                     <GlassCard className="max-w-md w-full p-8 relative">
-                                        <button title="Close" onClick={() => setIsInstantMeetingModalOpen(false)} className="absolute right-4 top-4 p-2 rounded-full"><X size={18} /></button>
-                                        <Heading level={2} className="mb-6 flex items-center gap-2 uppercase tracking-tighter"><Video className="text-emerald-500" /> Instant Meeting</Heading>
-                                        <input placeholder="Meeting Title" value={instantMeetingTitle} onChange={(e) => setInstantMeetingTitle(e.target.value)} className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-sm mb-6" />
+                                        <button title="Close" onClick={() => setIsInstantMeetingModalOpen(false)} className="absolute right-4 top-4 rounded-[6px] border border-[#E5E5E5] bg-white p-2 text-[#6E6E80]"><X size={18} /></button>
+                                        <Heading level={2} className="mb-6 flex items-center gap-2"><Video className="text-[#6E6E80]" /> Instant Meeting</Heading>
+                                        <input placeholder="Meeting Title" value={instantMeetingTitle} onChange={(e) => setInstantMeetingTitle(e.target.value)} className="mb-6 w-full rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-3 text-sm text-[#0D0D0D]" />
                         <div className="mb-6">
-                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Category</label>
+                            <label className="block text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80] mb-2 ml-1">Category</label>
                             <select
                                 title="Meeting Category"
                                 value={instantMeetingCategory}
                                 onChange={(e) => setInstantMeetingCategory(e.target.value)}
-                                className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                                className="w-full rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-3 text-sm text-[#0D0D0D] focus:outline-none"
                             >
                                 <option value="sales_call">Sales Call</option>
                                 <option value="onboarding">Onboarding</option>
@@ -967,24 +943,24 @@ const App = () => {
                             )}
 
                             {showInviteModal && lastInviteData && (
-                                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/30 p-4">
                                     <GlassCard className="max-w-md w-full p-10 text-center relative overflow-hidden">
-                                        <div className="h-20 w-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner border border-emerald-100/50">
-                                            <Rocket className="text-emerald-500" size={40} />
+                                        <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8]">
+                                            <Rocket className="text-[#0D0D0D]" size={40} />
                                         </div>
-                                        <h2 className="text-3xl font-extrabold mb-2 tracking-tight text-zinc-900 uppercase">Space Ready!</h2>
-                                        <p className="text-zinc-500 mb-8 font-light leading-relaxed text-sm">
+                                        <h2 className="text-3xl font-semibold mb-2 tracking-tight text-[#0D0D0D]">Space ready</h2>
+                                        <p className="text-[#6E6E80] mb-8 leading-relaxed text-sm">
                                             Invite generated for <strong>{lastInviteData.email}</strong>.<br/> Share the link below with your client.
                                         </p>
                                         
                                         <div className="space-y-4 mb-10 text-left">
-                                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Secure Link</label>
+                                            <label className="block text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80] mb-2 ml-1">Secure Link</label>
                                             <div className="flex gap-2">
                                                 <input 
                                                     readOnly 
                                                     title="Invitation Link"
                                                     value={lastInviteData.link || ''} 
-                                                    className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-[10px] font-mono text-zinc-600 focus:outline-none"
+                                                    className="flex-1 rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-3 text-[10px] font-mono text-[#6E6E80] focus:outline-none"
                                                 />
                                                 <Button 
                                                     variant={copiedLink ? "primary" : "secondary"}
@@ -1002,14 +978,14 @@ const App = () => {
                                                 </Button>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">
+                                                <div className="h-1.5 w-1.5 bg-black rounded-full animate-pulse" />
+                                                <p className="text-[10px] text-[#6E6E80] font-semibold uppercase tracking-widest">
                                                     This link expires in 72 hours
                                                 </p>
                                             </div>
                                         </div>
 
-                                        <Button variant="primary" className="w-full py-4 text-xs font-black uppercase tracking-[0.3em] shadow-xl shadow-zinc-200/50" onClick={() => { setShowInviteModal(false); setLastInviteData(null); }}>Done</Button>
+                                        <Button variant="primary" className="w-full py-4 text-xs font-semibold uppercase tracking-[0.3em]" onClick={() => { setShowInviteModal(false); setLastInviteData(null); }}>Done</Button>
                                     </GlassCard>
                                 </div>
                             )}

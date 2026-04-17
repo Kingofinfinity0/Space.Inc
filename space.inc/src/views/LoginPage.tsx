@@ -10,11 +10,11 @@ export default function LoginPage() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { signIn } = useAuth();
-    
+
     const inviteToken = searchParams.get('invite_token');
     const invitedEmail = searchParams.get('email');
     const message = searchParams.get('message');
-    
+
     const [email, setEmail] = useState(invitedEmail || '');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -23,20 +23,18 @@ export default function LoginPage() {
     const [inviteOrgName, setInviteOrgName] = useState<string | null>(null);
 
     useEffect(() => {
-        // Check for pending invite token in sessionStorage
         const token = sessionStorage.getItem('pending_invite_token');
         if (token) {
             setPendingInviteToken(token);
-            // Fetch invite details to show org name using validateInvitationContext
             apiService.validateInvitationContext(token)
-            .then(data => {
-                if (data && data.valid && data.org_name) {
-                    setInviteOrgName(data.org_name);
-                }
-            })
-            .catch(err => {
-                console.error('Error fetching invite details:', err);
-            });
+                .then(data => {
+                    if (data && data.valid && data.org_name) {
+                        setInviteOrgName(data.org_name);
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching invite details:', err);
+                });
         }
     }, []);
 
@@ -49,22 +47,21 @@ export default function LoginPage() {
             const { error: signInError } = await signIn(email, password);
             if (signInError) throw signInError;
 
-            // Check for pending space token from localStorage (from /join/:token flow)
             const pendingSpaceToken = localStorage.getItem('pending_space_token');
 
             if (inviteToken || pendingSpaceToken) {
-                // Ensure session is active before calling the RPC — signIn
-                // resolves slightly before the JWT is available to rpc() calls.
                 let session = null;
                 for (let i = 0; i < 10; i++) {
                     const { data } = await supabase.auth.getSession();
-                    if (data.session?.access_token) { session = data.session; break; }
+                    if (data.session?.access_token) {
+                        session = data.session;
+                        break;
+                    }
                     await new Promise(r => setTimeout(r, 300));
                 }
                 if (!session) throw new Error('Session not ready. Please try again.');
 
                 if (pendingSpaceToken) {
-                    // Call accept_space_link edge function for space invites
                     const res = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
                         method: 'POST',
                         headers: {
@@ -81,12 +78,10 @@ export default function LoginPage() {
                     localStorage.removeItem('pending_space_token');
 
                     if (result.data?.success && result.data?.data?.spaceId) {
-                        // Redirect to the space-specific client path
                         navigate(`/spaces/${result.data.data.spaceId}`, { replace: true });
                         return;
                     }
 
-                    // Handle specific error codes from accept_space_invite
                     if (result.error) {
                         switch (result.error) {
                             case 'NOT_AUTHENTICATED':
@@ -102,7 +97,7 @@ export default function LoginPage() {
                                 setError('Invite limit reached');
                                 return;
                             case 'EMAIL_NOT_ALLOWED':
-                                setError('Your email isn\'t on the allowlist');
+                                setError("Your email isn't on the allowlist");
                                 return;
                             default:
                                 setError(result.error || 'Failed to accept invitation');
@@ -111,7 +106,6 @@ export default function LoginPage() {
                     }
                 }
 
-                // Fallback: handle email invite tokens via RPC
                 if (inviteToken) {
                     const inviteData = await apiService.acceptInvitation(inviteToken);
                     if (inviteData?.data?.role === 'client') {
@@ -133,69 +127,69 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6 font-sans selection:bg-indigo-500 selection:text-white">
-            <div className="max-w-[450px] w-full relative">
-                <div className="absolute -top-24 -left-24 h-64 w-64 bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
-                <GlassCard className="p-10 border-white/60 shadow-2xl backdrop-blur-xl rounded-3xl">
-                    <div className="text-zinc-900 font-bold text-xl mb-12 tracking-tighter flex items-center justify-center gap-2 group cursor-default">
-                        <div className="h-8 w-8 bg-zinc-900 rounded-lg flex items-center justify-center text-white shadow-lg">
+        <div className="flex min-h-screen items-center justify-center bg-[#FFFFFF] p-6">
+            <div className="w-full max-w-[460px]">
+                <GlassCard className="p-8 md:p-10">
+                    <div className="mb-10 flex items-center justify-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-black text-white">
                             <Rocket size={18} />
                         </div>
-                        <span>Space.inc</span>
+                        <span className="text-lg font-semibold tracking-[-0.03em] text-[#0D0D0D]">Space.inc</span>
                     </div>
 
-                    <div className="text-center mb-10">
-                        <Heading level={1} className="text-3xl font-black text-zinc-900 tracking-tight mb-2 uppercase">
-                            Sign In
+                    <div className="mb-8 text-center">
+                        <Heading level={1} className="text-3xl font-semibold">
+                            Sign in
                         </Heading>
-                        <Text className="text-zinc-500 text-sm font-medium">
-                            {inviteToken ? 'Sign in to accept organizational invitation' : 'Welcome back to your minimal workspace'}
+                        <Text variant="secondary" className="mt-2">
+                            {inviteToken ? 'Sign in to accept your invitation.' : 'Welcome back to your workspace.'}
                         </Text>
                     </div>
 
                     {error && (
-                        <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs font-bold uppercase tracking-widest animate-[shake_0.5s_ease-in-out]">
+                        <div className="mb-6 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4 text-sm text-[#B42318]">
                             {error}
                         </div>
                     )}
 
-                    {message === "check_email" && (
-                        <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-700 text-xs font-medium leading-relaxed">
-                            Check your email and confirm your account, then sign in here. Your invite link will be applied automatically.
+                    {message === 'check_email' && (
+                        <div className="mb-6 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4 text-sm text-[#0D0D0D]">
+                            Check your email, confirm your account, then sign in here.
                         </div>
                     )}
 
                     {pendingInviteToken && (
-                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 text-xs font-medium leading-relaxed">
-                            <div className="flex items-center gap-2 mb-2">
+                        <div className="mb-6 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4 text-sm text-[#0D0D0D]">
+                            <div className="mb-2 flex items-center gap-2 text-[#6E6E80]">
                                 <Mail size={16} />
-                                <span className="font-bold uppercase tracking-wider">You're joining an organization</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">Organization invite detected</span>
                             </div>
                             {inviteOrgName ? (
-                                <p>Sign in to accept your invitation to join <strong>{inviteOrgName}</strong></p>
+                                <p>Sign in to accept your invitation to join <strong>{inviteOrgName}</strong>.</p>
                             ) : (
-                                <p>Sign in to accept your organization invitation</p>
+                                <p>Sign in to accept your organization invitation.</p>
                             )}
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="space-y-5">
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div className="space-y-4">
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Work Email</label>
+                                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Work Email</label>
                                 <Input
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="name@company.com"
                                     required
-                                    className="bg-white/50 border-zinc-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-xl py-3 text-sm font-medium placeholder:text-zinc-300"
                                 />
                             </div>
                             <div>
-                                <div className="flex items-center justify-between mb-2 ml-1">
-                                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400">Password</label>
-                                    <button type="button" className="text-[10px] text-zinc-400 hover:text-zinc-900 font-bold uppercase tracking-widest transition-colors">Forgot?</button>
+                                <div className="mb-2 flex items-center justify-between">
+                                    <label className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Password</label>
+                                    <button type="button" className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80] hover:text-[#0D0D0D]">
+                                        Forgot?
+                                    </button>
                                 </div>
                                 <Input
                                     type="password"
@@ -203,45 +197,37 @@ export default function LoginPage() {
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
                                     required
-                                    className="bg-white/50 border-zinc-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-xl py-3 text-sm font-medium placeholder:text-zinc-300"
                                 />
                             </div>
                         </div>
 
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            className="w-full py-4 mt-2 font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-500/20 active:scale-95 transition-all text-sm group"
-                            disabled={loading}
-                        >
+                        <Button type="submit" variant="primary" className="w-full" disabled={loading}>
                             {loading ? (
-                                <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto" />
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                             ) : (
                                 <div className="flex items-center justify-center gap-2">
-                                    Log In <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                                    Log In <ArrowRight size={16} />
                                 </div>
                             )}
                         </Button>
                     </form>
 
-                    <div className="mt-12 pt-8 border-t border-zinc-50 text-center">
-                        <Text className="text-zinc-400 text-xs font-semibold">
+                    <div className="mt-8 border-t border-[#E5E5E5] pt-6 text-center">
+                        <Text variant="secondary" className="text-sm">
                             Don't have an account?{' '}
-                            <button 
-                                onClick={() => navigate(`/signup${window.location.search}`)} 
-                                className="text-zinc-900 font-black uppercase tracking-widest hover:underline flex items-center gap-2 mx-auto mt-2 transition-all hover:gap-3"
+                            <button
+                                onClick={() => navigate(`/signup${window.location.search}`)}
+                                className="mt-2 inline-flex items-center gap-2 font-medium text-[#0D0D0D] hover:text-[#6E6E80]"
                             >
-                                <UserPlus size={14} /> Create Account
+                                <UserPlus size={14} /> Create account
                             </button>
                         </Text>
                     </div>
                 </GlassCard>
-                
-                <div className="mt-10 flex items-center justify-center gap-6 opacity-30">
-                    <div className="flex items-center gap-2">
-                        <Shield size={12} className="text-zinc-400" />
-                        <span className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">End-to-End Ledger</span>
-                    </div>
+
+                <div className="mt-8 flex items-center justify-center gap-2 text-[#6E6E80]">
+                    <Shield size={12} />
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.24em]">Secure access</span>
                 </div>
             </div>
         </div>

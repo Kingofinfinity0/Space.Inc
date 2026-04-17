@@ -64,12 +64,12 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
     return (
         <div className="h-[calc(100vh-140px)] flex gap-6">
             {/* List Sidebar */}
-            <GlassCard className="w-1/3 flex flex-col h-full overflow-hidden border-[#D1D5DB] rounded-lg">
-                <div className="p-4 border-b border-[#D1D5DB] bg-[#F7F7F8]">
+            <GlassCard className="w-1/3 flex flex-col h-full overflow-hidden rounded-[8px]">
+                <div className="p-4 border-b border-[#E5E5E5] bg-[#F7F7F8]">
                     <Heading level={2} className="mb-4">Inbox</Heading>
                     <div className="relative">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8E8EA0]" />
-                        <input type="text" placeholder="Search chats..." className="w-full bg-white border border-[#D1D5DB] rounded-md pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#10A37F] focus:border-[#10A37F] transition-all" />
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6E6E80]" />
+                        <input type="text" placeholder="Search chats..." className="w-full rounded-[8px] border border-[#E5E5E5] bg-white pl-10 pr-4 py-2 text-sm text-[#0D0D0D] focus:outline-none focus:border-black transition-all" />
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
@@ -77,20 +77,20 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                         <div
                             key={item.space_id}
                             onClick={() => setSelectedSpaceId(item.space_id)}
-                            className={`p-4 border-b border-zinc-50 cursor-pointer hover:bg-zinc-50 transition-colors ${selectedSpaceId === item.space_id ? 'bg-zinc-50 border-l-2 border-l-[#10A37F]' : ''}`}
+                            className={`p-4 border-b border-[#E5E5E5] cursor-pointer hover:bg-[#F7F7F8] transition-colors ${selectedSpaceId === item.space_id ? 'bg-[#F7F7F8] border-l-2 border-l-black' : ''}`}
                         >
                             <div className="flex justify-between mb-1">
-                                <span className={`font-medium ${selectedSpaceId === item.space_id ? 'text-[#1D1D1D]' : 'text-zinc-700'}`}>{item.space_name}</span>
-                                <span className="text-[10px] text-zinc-400">
+                                <span className={`font-medium ${selectedSpaceId === item.space_id ? 'text-[#0D0D0D]' : 'text-[#6E6E80]'}`}>{item.space_name}</span>
+                                <span className="text-[10px] text-[#6E6E80]">
                                     {item.last_message_at ? new Date(item.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Join'}
                                 </span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <p className="text-xs text-zinc-500 truncate max-w-[180px]">
+                                <p className="text-xs text-[#6E6E80] truncate max-w-[180px]">
                                     {item.last_message_content || 'No messages yet'}
                                 </p>
                                 {item.unread_count > 0 && (
-                                    <div className="h-4 w-4 bg-[#10A37F] text-white text-[10px] flex items-center justify-center rounded-full font-bold">
+                                    <div className="h-4 w-4 bg-black text-white text-[10px] flex items-center justify-center rounded-full font-semibold">
                                         {item.unread_count}
                                     </div>
                                 )}
@@ -101,18 +101,18 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
             </GlassCard>
 
             {/* Chat Area */}
-            <GlassCard className="flex-1 flex flex-col h-full overflow-hidden relative">
+            <GlassCard className="flex-1 flex flex-col h-full overflow-hidden relative rounded-[8px]">
                 {selectedSpaceId ? (
                     <>
                         {/* Chat Header */}
-                        <div className="p-4 border-b border-zinc-100 flex justify-between items-center bg-white/50 backdrop-blur-sm">
+                        <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center bg-white">
                             <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-[#1D1D1D] text-white flex items-center justify-center font-bold">
+                                <div className="h-10 w-10 rounded-[8px] bg-black text-white flex items-center justify-center font-semibold">
                                     {activeClient?.name.substring(0, 2)}
                                 </div>
                                 <div>
-                                    <h3 className="font-medium text-[#1D1D1D]">{activeClient?.name}</h3>
-                                    <p className="text-xs text-zinc-500">
+                                    <h3 className="font-medium text-[#0D0D0D]">{activeClient?.name}</h3>
+                                    <p className="text-xs text-[#6E6E80]">
                                         {loading ? 'Loading...' : `${messages.length} messages`}
                                     </p>
                                 </div>
@@ -121,9 +121,9 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                         </div>
 
                         {/* Messages Feed */}
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-zinc-50/30">
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#FFFFFF]">
                             {loading ? (
-                                <div className="flex items-center justify-center h-full text-zinc-400">
+                                <div className="flex items-center justify-center h-full text-[#6E6E80]">
                                     <div className="animate-pulse">Loading messages...</div>
                                 </div>
                             ) : error ? (
@@ -150,17 +150,17 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                         </div>
 
                         {/* Input Area */}
-                        <div className="p-4 bg-white border-t border-zinc-100">
+                        <div className="p-4 bg-white border-t border-[#E5E5E5]">
                             <div className="flex items-center gap-3">
                                 <Button
                                     variant="ghost"
-                                    className="p-2 text-zinc-400 hover:text-indigo-500"
+                                    className="p-2 text-[#6E6E80] hover:text-[#0D0D0D]"
                                     onClick={() => setIsUploadModalOpen(true)}
                                 >
                                     <FilePlus2 size={20} />
                                 </Button>
                                 <input
-                                    className="flex-1 bg-zinc-100 rounded-full px-5 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-300"
+                                    className="flex-1 rounded-[8px] border border-[#E5E5E5] bg-white px-5 py-3 text-sm text-[#0D0D0D] focus:outline-none focus:border-black"
                                     placeholder="Type a message..."
                                     value={messageInput}
                                     onChange={(e) => setMessageInput(e.target.value)}
@@ -169,7 +169,7 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                                 />
                                 <button
                                     title="Send Message"
-                                    className="h-10 w-10 bg-[#1D1D1D] text-white rounded-full flex items-center justify-center hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    className="h-10 w-10 bg-black text-white rounded-[8px] flex items-center justify-center hover:bg-[#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     onClick={handleSend}
                                     disabled={sending || !messageInput.trim()}
                                 >
@@ -191,7 +191,7 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                         />
                     </>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-zinc-400">
+                    <div className="flex-1 flex flex-col items-center justify-center text-[#6E6E80]">
                         <MessageSquare size={48} className="mb-4 opacity-20" />
                         <p>Select a conversation to start chatting</p>
                     </div>

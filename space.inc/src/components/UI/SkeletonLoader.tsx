@@ -20,7 +20,7 @@ export const SkeletonLoader: React.FC<SkeletonProps> = ({
             alt=""
             width={width}
             height={height}
-            className={`skeleton-shimmer bg-[#F7F7F8] relative overflow-hidden border border-[#D1D5DB]/30 block rounded-md ${className}`}
+            className={`skeleton-shimmer bg-[#F7F7F8] relative overflow-hidden border border-[#E5E5E5] block rounded-md ${className}`}
         />
     );
 };
@@ -47,7 +47,7 @@ export const SkeletonText: React.FC<SkeletonProps & { lines?: number }> = ({
 
 export const SkeletonCard: React.FC<{ className?: string }> = ({ className = '' }) => {
     return (
-        <div className={`p-4 border border-[#D1D5DB] rounded-lg shadow-none bg-white ${className}`}>
+        <div className={`p-4 border border-[#E5E5E5] rounded-[8px] shadow-none bg-white ${className}`}>
             <SkeletonLoader height="120px" className="mb-4 rounded-md" />
             <SkeletonText lines={2} />
         </div>

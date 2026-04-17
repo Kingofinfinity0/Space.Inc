@@ -78,13 +78,13 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
             </header>
 
             {/* Tabs */}
-            <div className="flex gap-1 mb-6 bg-zinc-100 p-1 rounded-xl w-fit">
+            <div className="flex gap-1 mb-6 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-1 w-fit">
                 <button
                     onClick={() => setTab('Upcoming')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                         tab === 'Upcoming' 
-                            ? 'bg-white text-zinc-900 shadow-sm' 
-                            : 'text-zinc-600 hover:text-zinc-900'
+                            ? 'bg-white text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)]' 
+                            : 'text-[#6E6E80] hover:text-[#0D0D0D]'
                     }`}
                 >
                     Upcoming
@@ -93,8 +93,8 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                     onClick={() => setTab('History')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                         tab === 'History' 
-                            ? 'bg-white text-zinc-900 shadow-sm' 
-                            : 'text-zinc-600 hover:text-zinc-900'
+                            ? 'bg-white text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)]' 
+                            : 'text-[#6E6E80] hover:text-[#0D0D0D]'
                     }`}
                 >
                     History
@@ -111,27 +111,27 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                         .map(meeting => (
                             <GlassCard key={meeting.id} className="p-6 flex items-center justify-between">
                                 <div className="flex items-center gap-6">
-                                    <div className="bg-[#F7F7F8] border border-[#D1D5DB]/30 rounded-md px-4 py-3 text-center min-w-[80px]">
-                                        <p className="text-[10px] text-[#8E8EA0] uppercase font-bold tracking-wider">
+                                    <div className="bg-[#F7F7F8] border border-[#E5E5E5] rounded-[8px] px-4 py-3 text-center min-w-[80px]">
+                                        <p className="text-[10px] text-[#6E6E80] uppercase font-semibold tracking-wider">
                                             {new Date(meeting.starts_at).toLocaleString('default', { month: 'short' })}
                                         </p>
-                                        <p className="text-xl font-medium text-[#1D1D1D]">
+                                        <p className="text-xl font-medium text-[#0D0D0D]">
                                             {new Date(meeting.starts_at).getDate()}
                                         </p>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-medium text-[#1D1D1D]">{meeting.title}</h3>
+                                        <h3 className="text-lg font-medium text-[#0D0D0D]">{meeting.title}</h3>
                                         <div className="flex items-center gap-3 mt-1">
-                                            <span className="text-sm text-zinc-500 flex items-center gap-1">
+                                            <span className="text-sm text-[#6E6E80] flex items-center gap-1">
                                                 <Clock size={14} />
                                                 {new Date(meeting.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
-                                            <span className="text-sm text-zinc-500">
+                                            <span className="text-sm text-[#6E6E80]">
                                                 {clients.find(c => c.id === meeting.space_id)?.name || 'Unknown'}
                                             </span>
                                             {meeting.status === 'active' || meeting.status === 'live' ? (
-                                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full flex items-center gap-1">
-                                                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                                                <span className="px-2 py-0.5 border border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D] text-[10px] font-semibold rounded-full flex items-center gap-1">
+                                                    <span className="w-1.5 h-1.5 bg-black rounded-full animate-pulse" />
                                                     LIVE
                                                 </span>
                                             ) : null}
@@ -186,32 +186,32 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                         .map(meeting => (
                             <GlassCard
                                 key={meeting.id}
-                                className="p-6 flex items-center justify-between opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
+                                className="p-6 flex items-center justify-between opacity-90 hover:opacity-100 transition-opacity cursor-pointer"
                                 onClick={() => setSelectedMeeting(meeting)}
                             >
                                 <div className="flex items-center gap-6">
-                                    <div className="bg-[#F7F7F8] border border-[#D1D5DB]/50 rounded-md px-4 py-2 text-center min-w-[80px]">
-                                        <p className="text-[10px] text-[#8E8EA0] font-bold">ENDED</p>
-                                        <p className="text-lg font-medium text-zinc-500">
+                                    <div className="bg-[#F7F7F8] border border-[#E5E5E5] rounded-[8px] px-4 py-2 text-center min-w-[80px]">
+                                        <p className="text-[10px] text-[#6E6E80] font-semibold">ENDED</p>
+                                        <p className="text-lg font-medium text-[#6E6E80]">
                                             {new Date(meeting.starts_at).getDate()}
                                         </p>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-medium text-zinc-700">{meeting.title}</h3>
+                                        <h3 className="text-lg font-medium text-[#0D0D0D]">{meeting.title}</h3>
                                         <div className="flex items-center gap-3 mt-1">
-                                            <span className="text-sm text-zinc-400">
+                                            <span className="text-sm text-[#6E6E80]">
                                                 {new Date(meeting.starts_at).toLocaleDateString()}
                                             </span>
-                                            <span className="text-sm text-zinc-400">
+                                            <span className="text-sm text-[#6E6E80]">
                                                 {clients.find(c => c.id === meeting.space_id)?.name || 'Unknown'}
                                             </span>
                                             {/* Outcome badge */}
                                             {meeting.outcome && (
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                    meeting.outcome === 'successful' ? 'bg-emerald-100 text-emerald-700' :
-                                                    meeting.outcome === 'no_show' ? 'bg-red-100 text-red-700' :
-                                                    meeting.outcome === 'follow_up_needed' ? 'bg-amber-100 text-amber-700' :
-                                                    'bg-zinc-100 text-zinc-600'
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                                    meeting.outcome === 'successful' ? 'border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]' :
+                                                    meeting.outcome === 'no_show' ? 'border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]' :
+                                                    meeting.outcome === 'follow_up_needed' ? 'border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]' :
+                                                    'border-[#E5E5E5] bg-[#F7F7F8] text-[#6E6E80]'
                                                 }`}>
                                                     {meeting.outcome.replace(/_/g, ' ')}
                                                 </span>
@@ -255,7 +255,7 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                         <label className="block text-sm font-medium text-zinc-700 mb-1">Select Space</label>
                         <select
                             title="Select Space"
-                            className="w-full bg-white/40 border border-zinc-200 rounded-lg px-5 py-3 text-zinc-800 text-sm focus:outline-none"
+                            className="w-full rounded-[8px] border border-[#E5E5E5] bg-white px-5 py-3 text-sm text-[#0D0D0D] focus:outline-none"
                             value={newMeetingSpace}
                             onChange={(e) => setNewMeetingSpace(e.target.value)}
                         >
@@ -278,7 +278,7 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                         <select
                             value={newMeetingCategory}
                             onChange={(e) => setNewMeetingCategory(e.target.value)}
-                            className="w-full bg-white/40 border border-zinc-200 rounded-lg px-5 py-3 text-zinc-800 text-sm focus:outline-none"
+                            className="w-full rounded-[8px] border border-[#E5E5E5] bg-white px-5 py-3 text-sm text-[#0D0D0D] focus:outline-none"
                             title="Meeting category"
                         >
                             <option value="sales_call">Sales Call</option>
@@ -299,7 +299,7 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                 <div className="space-y-4">
                     <Text variant="secondary" className="mb-2">This marks the meeting as complete and notifies all participants.</Text>
                     <div>
-                        <label className="block text-sm font-medium text-zinc-700 mb-2">Outcome</label>
+                        <label className="block text-sm font-medium text-[#0D0D0D] mb-2">Outcome</label>
                         <div className="grid grid-cols-2 gap-2 mb-4">
                             {[
                                 { id: 'successful', label: '✅ Successful' },
@@ -312,8 +312,8 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                                     onClick={() => setEndOutcome(opt.id)}
                                     className={`px-3 py-2 rounded-xl border text-sm transition-all ${
                                         endOutcome === opt.id
-                                            ? 'bg-emerald-50 border-emerald-500 text-emerald-700 font-bold shadow-sm'
-                                            : 'bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50'
+                                                    ? 'bg-[#F7F7F8] border-black text-[#0D0D0D] font-medium'
+                                                    : 'bg-white border-[#E5E5E5] text-[#6E6E80] hover:bg-[#F7F7F8]'
                                     }`}
                                 >
                                     {opt.label}
@@ -322,13 +322,13 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-zinc-700 mb-2">Notes (optional)</label>
+                        <label className="block text-sm font-medium text-[#0D0D0D] mb-2">Notes (optional)</label>
                         <textarea
                             value={endNotes}
                             onChange={e => setEndNotes(e.target.value)}
                             placeholder="Add any final unstructured notes..."
                             disabled={isEnding}
-                            className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-sm text-zinc-800 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 min-h-[100px]"
+                            className="w-full rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-3 text-sm text-[#0D0D0D] outline-none focus:border-black min-h-[100px]"
                         />
                     </div>
                     <div className="flex gap-3 pt-2">

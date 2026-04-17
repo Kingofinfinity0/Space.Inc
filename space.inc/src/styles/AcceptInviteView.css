@@ -1,251 +1,177 @@
 .accept-invite-page {
   min-height: 100vh;
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at top right, #f8fafc, #f1f5f9);
-  padding: 2rem;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #ffffff;
+  padding: 24px;
 }
 
 .accept-invite-card {
   width: 100%;
-  max-width: 480px;
-  background: rgba(255, 255, 255, 0.7);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 24px;
-  padding: 3rem;
-  box-shadow: 
-    0 20px 25px -5px rgba(0, 0, 0, 0.05),
-    0 10px 10px -5px rgba(0, 0, 0, 0.02),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  max-width: 460px;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  padding: 40px;
   text-align: center;
-  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 .accept-invite-logo {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
-  margin-bottom: 2.5rem;
+  gap: 12px;
+  margin-bottom: 32px;
 }
 
 .accept-invite-logo-box {
-  background: #1d1d1d;
-  color: white;
   width: 32px;
   height: 32px;
   border-radius: 8px;
+  background: #0d0d0d;
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  font-size: 1.125rem;
+  font-weight: 700;
 }
 
 .accept-invite-logo-text {
-  font-weight: 700;
-  font-size: 1.25rem;
-  color: #1d1d1d;
-  letter-spacing: -0.025em;
+  color: #0d0d0d;
+  font-weight: 600;
+  font-size: 1.125rem;
 }
 
 .accept-invite-icon-wrapper {
-  width: 80px;
-  height: 80px;
-  background: white;
-  border-radius: 24px;
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  background: #f7f7f8;
+  border: 1px solid #e5e5e5;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 2rem;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+  margin: 0 auto 24px;
 }
 
 .accept-invite-title {
   font-size: 1.875rem;
   font-weight: 700;
-  color: #1d1d1d;
-  margin-bottom: 0.75rem;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
+  color: #0d0d0d;
+  margin-bottom: 12px;
 }
 
 .accept-invite-subtitle {
   font-size: 1rem;
-  color: #64748b;
-  margin-bottom: 2.5rem;
+  color: #6e6e80;
   line-height: 1.6;
+  margin-bottom: 28px;
 }
 
 .accept-invite-highlight {
-  color: #1d1d1d;
+  color: #0d0d0d;
   font-weight: 600;
-}
-
-.accept-invite-expiry {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 9999px;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #475569;
-  margin-bottom: 2.5rem;
-}
-
-.accept-invite-expiry-icon {
-  width: 6px;
-  height: 6px;
-  background: #10b981;
-  border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.5); opacity: 0.5; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-.accept-invite-error {
-  background: #fef2f2;
-  border: 1px solid #fee2e2;
-  color: #b91c1c;
-  padding: 1rem;
-  border-radius: 12px;
-  font-size: 0.875rem;
-  margin-bottom: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
 }
 
 .accept-invite-btn {
   width: 100%;
-  padding: 1rem;
-  background: #1d1d1d;
-  color: white;
-  border-radius: 14px;
-  font-weight: 700;
-  font-size: 0.9375rem;
-  border: none;
+  padding: 14px 16px;
+  border-radius: 6px;
+  background: #0d0d0d;
+  color: #ffffff;
+  border: 1px solid #0d0d0d;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  transition: background-color 180ms ease, transform 180ms ease;
 }
 
 .accept-invite-btn:hover {
-  transform: translateY(-2px);
-  background: #2d2d2d;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  background: #1a1a1a;
 }
 
 .accept-invite-btn:active {
-  transform: translateY(0);
+  transform: scale(0.98);
 }
 
 .accept-invite-spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  border-top-color: #1d1d1d;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
+  border-radius: 999px;
+  animation: accept-invite-spin 0.8s linear infinite;
   margin: 0 auto;
 }
 
-@keyframes spin {
+@keyframes accept-invite-spin {
   to { transform: rotate(360deg); }
 }
 
 .accept-invite-footer {
-  margin-top: 2rem;
+  margin-top: 24px;
   font-size: 0.75rem;
-  color: #94a3b8;
-  font-weight: 500;
+  color: #6e6e80;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
 .accept-invite-footer-loading {
-  margin-top: 1.5rem !important;
+  margin-top: 16px !important;
 }
 
-.accept-invite-icon-error {
-  background: #fef2f2 !important;
-}
-
+.accept-invite-icon-error,
 .accept-invite-icon-success {
-  background: #f0fdf4 !important;
+  background: #f7f7f8 !important;
 }
 
 .accept-invite-spinner-white {
-  border-top-color: white !important;
+  border-top-color: #ffffff !important;
 }
 
 .accept-invite-auth-options {
-  margin-top: 2rem;
+  margin-top: 24px;
 }
 
 .accept-invite-auth-divider {
   position: relative;
   text-align: center;
-  margin: 1.5rem 0;
+  margin: 20px 0 0;
 }
 
 .accept-invite-auth-divider::before {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
+  inset: 50% 0 auto 0;
   height: 1px;
-  background: #e2e8f0;
+  background: #e5e5e5;
 }
 
 .accept-invite-auth-divider span {
-  background: rgba(255, 255, 255, 0.7);
-  padding: 0 1rem;
-  font-size: 0.75rem;
-  color: #94a3b8;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   position: relative;
   z-index: 1;
+  background: #ffffff;
+  padding: 0 12px;
+  font-size: 0.75rem;
+  color: #6e6e80;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .accept-invite-auth-buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-top: 1.5rem;
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .accept-invite-btn-secondary {
-  background: white !important;
-  color: #1d1d1d !important;
-  border: 1px solid #e2e8f0 !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+  background: #ffffff !important;
+  color: #0d0d0d !important;
+  border: 1px solid #e5e5e5 !important;
 }
 
 .accept-invite-btn-secondary:hover {
-  background: #f8fafc !important;
-  border-color: #cbd5e1 !important;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+  background: #f7f7f8 !important;
 }

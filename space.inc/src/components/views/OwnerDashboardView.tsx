@@ -195,24 +195,24 @@ export default function OwnerDashboardView({
                             <div className="space-y-3"><SkeletonLoader height="50px" borderRadius="10px" /></div>
                         ) : notifications.length === 0 ? (
                             <div className="py-10 text-center">
-                                <Activity className="mx-auto mb-2 text-zinc-200" size={32} />
-                                <p className="text-xs italic text-zinc-400">Inbox is clear.</p>
+                                <Activity className="mx-auto mb-2 text-[#D4D4D8]" size={32} />
+                                <p className="text-xs italic text-[#6E6E80]">Inbox is clear.</p>
                             </div>
                         ) : (
                             <div className="space-y-3">
                                 {notifications.map((notification) => (
-                                    <div key={notification.id} className="cursor-pointer rounded-xl border border-zinc-100 bg-white p-3 transition-colors hover:border-zinc-300" onClick={() => notification.space_id && goToSpace(notification.space_id)}>
+                                    <div key={notification.id} className="cursor-pointer rounded-[8px] border border-[#E5E5E5] bg-white p-3 transition-colors hover:bg-[#F7F7F8]" onClick={() => notification.space_id && goToSpace(notification.space_id)}>
                                         <div className="flex items-center gap-3">
-                                            <div className="text-zinc-400">
+                                            <div className="text-[#6E6E80]">
                                                 {notification.type === 'file_uploaded'
                                                     ? <FileText size={16} />
                                                     : notification.type === 'message_received'
                                                         ? <MessageSquare size={16} />
                                                         : <Calendar size={16} />}
                                             </div>
-                                            <p className="line-clamp-2 text-xs text-zinc-800">{notification.message}</p>
+                                            <p className="line-clamp-2 text-xs text-[#0D0D0D]">{notification.message}</p>
                                         </div>
-                                        <p className="mt-2 text-[10px] text-zinc-400">{timeAgo(notification.created_at)}</p>
+                                        <p className="mt-2 text-[10px] text-[#6E6E80]">{timeAgo(notification.created_at)}</p>
                                     </div>
                                 ))}
                             </div>

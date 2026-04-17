@@ -65,19 +65,19 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
             <div className="space-y-8">
                 {groupedFiles.map(({ client, files }) => (
                     <div key={client.id}>
-                        <h3 className="text-lg font-medium text-[#1D1D1D] mb-4 flex items-center gap-2">
-                            <Briefcase size={18} className="text-zinc-400" /> {client.name}
+                        <h3 className="text-lg font-medium text-[#0D0D0D] mb-4 flex items-center gap-2">
+                            <Briefcase size={18} className="text-[#6E6E80]" /> {client.name}
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {files.length > 0 ? files.map(file => (
                                 <GlassCard key={file.id} className="p-4 flex justify-between items-center">
                                     <div className="flex items-center gap-3">
-                                        <div className="bg-zinc-100 p-2 rounded-lg text-zinc-600">
+                                        <div className="bg-[#F7F7F8] p-2 rounded-[8px] text-[#6E6E80] border border-[#E5E5E5]">
                                             <FileText size={20} />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-[#1D1D1D] truncate max-w-[150px]">{file.name}</p>
-                                            <p className="text-xs text-zinc-500">
+                                            <p className="text-sm font-medium text-[#0D0D0D] truncate max-w-[150px]">{file.name}</p>
+                                            <p className="text-xs text-[#6E6E80]">
                                                 {file.is_global ? 'Global Asset' : (file.file_size ? `${(file.file_size / (1024 * 1024)).toFixed(2)} MB • ` : '') + new Date(file.created_at).toLocaleDateString()}
                                             </p>
                                         </div>
@@ -87,14 +87,14 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                             <>
                                                 <Button
                                                     variant="ghost"
-                                                    className="h-8 w-8 p-0 text-zinc-400 hover:text-[#1D1D1D]"
+                                                    className="h-8 w-8 p-0 text-[#6E6E80] hover:text-[#0D0D0D]"
                                                     onClick={() => setViewingFile(file as any)}
                                                 >
                                                     <Eye size={16} />
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
-                                                    className="h-8 w-8 p-0"
+                                                    className="h-8 w-8 p-0 text-[#6E6E80] hover:text-[#0D0D0D]"
                                                     onClick={async () => {
                                                         const { data } = await apiService.getSignedUrl(file.id, organizationId || '');
                                                         if (data?.signedUrl) window.open(data.signedUrl, '_blank');
@@ -105,7 +105,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
-                                                    className="h-8 w-8 p-0 text-zinc-400 hover:text-indigo-500"
+                                                    className="h-8 w-8 p-0 text-[#6E6E80] hover:text-[#0D0D0D]"
                                                     onClick={() => setVersioningFile(file as any)}
                                                     title="Version History"
                                                 >
@@ -123,7 +123,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                             }
                                                         }
                                                     }}
-                                                    className="h-8 w-8 p-0 text-zinc-500 hover:text-rose-500"
+                                                    className="h-8 w-8 p-0 text-[#6E6E80] hover:text-[#0D0D0D]"
                                                 >
                                                     <Trash2 size={16} />
                                                 </Button>
@@ -140,7 +140,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                             showToast(friendlyError(err?.message), "error");
                                                         }
                                                     }}
-                                                    className="h-8 w-8 p-0 text-zinc-400 hover:text-emerald-500"
+                                                    className="h-8 w-8 p-0 text-[#6E6E80] hover:text-[#0D0D0D]"
                                                     title="Restore File"
                                                 >
                                                     <ArrowLeft size={16} />
@@ -157,7 +157,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                                             }
                                                         }
                                                     }}
-                                                    className="h-8 w-8 p-0 text-zinc-400 hover:text-rose-600"
+                                                    className="h-8 w-8 p-0 text-[#6E6E80] hover:text-[#0D0D0D]"
                                                     title="Delete Permanently"
                                                 >
                                                     <Trash2 size={16} />
@@ -167,7 +167,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                                     </div>
                                 </GlassCard>
                             )) : (
-                                <div className="col-span-3 text-center py-8 border border-dashed border-[#D1D5DB] rounded-lg text-[#8E8EA0] text-sm">
+                                <div className="col-span-3 text-center py-8 border border-dashed border-[#E5E5E5] rounded-[8px] text-[#6E6E80] text-sm">
                                     No files in this space.
                                 </div>
                             )}
@@ -179,10 +179,10 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
             <Modal isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} title="Select Destination Space">
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-zinc-700 mb-1">Upload To</label>
+                        <label className="block text-sm font-medium text-[#0D0D0D] mb-1">Upload To</label>
                         <select
                             title="Select Destination Space"
-                            className="w-full bg-white/40 border border-zinc-200 rounded-lg px-5 py-3 text-zinc-800 text-sm focus:outline-none"
+                            className="w-full rounded-[8px] border border-[#E5E5E5] bg-white px-5 py-3 text-sm text-[#0D0D0D] focus:outline-none"
                             value={selectedSpaceForUpload}
                             onChange={(e) => setSelectedSpaceForUpload(e.target.value)}
                         >

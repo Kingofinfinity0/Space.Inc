@@ -215,25 +215,25 @@ export default function StaffDashboardView({
                         <div className="space-y-2">
                             <button
                                 onClick={() => onInstantMeet?.()}
-                                className="w-full rounded-md border border-amber-100 bg-amber-50/50 p-3 text-left transition-colors hover:bg-amber-100/50"
+                                className="w-full rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-3 text-left transition-colors hover:bg-white"
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className="rounded-lg bg-amber-100 p-2 text-amber-600">
+                                    <div className="rounded-[8px] border border-[#E5E5E5] bg-white p-2 text-[#0D0D0D]">
                                         <Video size={16} />
                                     </div>
                                     <div>
-                                        <span className="block text-sm font-semibold text-amber-900">Meet Now</span>
-                                        <span className="text-[10px] font-medium text-amber-700">Start an instant video call</span>
+                                        <span className="block text-sm font-semibold text-[#0D0D0D]">Meet Now</span>
+                                        <span className="text-[10px] font-medium text-[#6E6E80]">Start an instant video call</span>
                                     </div>
                                 </div>
                             </button>
-                            <div className="flex items-center gap-3 rounded-md border border-zinc-200 p-3">
-                                <div className="rounded-lg bg-zinc-100 p-2 text-zinc-600">
+                            <div className="flex items-center gap-3 rounded-[8px] border border-[#E5E5E5] p-3">
+                                <div className="rounded-[8px] bg-[#F7F7F8] p-2 text-[#6E6E80]">
                                     <ListTodo size={16} />
                                 </div>
                                 <div>
-                                    <span className="block text-sm font-medium text-zinc-900">Tasks stay synced</span>
-                                    <span className="text-[10px] text-zinc-500">Create and update work from overview or inside a space.</span>
+                                    <span className="block text-sm font-medium text-[#0D0D0D]">Tasks stay synced</span>
+                                    <span className="text-[10px] text-[#6E6E80]">Create and update work from overview or inside a space.</span>
                                 </div>
                             </div>
                         </div>

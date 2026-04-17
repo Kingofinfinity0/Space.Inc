@@ -9,10 +9,10 @@ interface TextProps {
 
 export const Text: React.FC<TextProps> = ({ children, variant = 'primary', size = 'base', className = '' }) => {
     const colorStyles = {
-        primary: "text-black dark:text-white",
-        secondary: "text-zinc-600 dark:text-zinc-400",
-        muted: "text-zinc-400 dark:text-zinc-500",
-        accent: "text-black dark:text-white"
+        primary: "text-[#0D0D0D]",
+        secondary: "text-[#6E6E80]",
+        muted: "text-[#6E6E80]",
+        accent: "text-[#0D0D0D]"
     };
 
     const sizeStyles = {

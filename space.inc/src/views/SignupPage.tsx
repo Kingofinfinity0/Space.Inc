@@ -10,10 +10,10 @@ export default function SignupPage() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { signUp } = useAuth();
-    
+
     const inviteToken = searchParams.get('invite_token');
     const invitedEmail = searchParams.get('email');
-    
+
     const [email, setEmail] = useState(invitedEmail || '');
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
@@ -24,21 +24,19 @@ export default function SignupPage() {
 
     useEffect(() => {
         if (invitedEmail) setEmail(invitedEmail);
-        
-        // Check for pending invite token in sessionStorage
+
         const token = sessionStorage.getItem('pending_invite_token');
         if (token) {
             setPendingInviteToken(token);
-            // Fetch invite details to show org name using validateInvitationContext
             apiService.validateInvitationContext(token)
-            .then(data => {
-                if (data && data.valid && data.org_name) {
-                    setInviteOrgName(data.org_name);
-                }
-            })
-            .catch(err => {
-                console.error('Error fetching invite details:', err);
-            });
+                .then(data => {
+                    if (data && data.valid && data.org_name) {
+                        setInviteOrgName(data.org_name);
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching invite details:', err);
+                });
         }
     }, [invitedEmail]);
 
@@ -59,28 +57,27 @@ export default function SignupPage() {
             if (signUpError) throw signUpError;
 
             if (tokenToUse) {
-                // Poll for session — Supabase can take a tick to propagate
                 let session = null;
                 for (let i = 0; i < 15; i++) {
                     const { data } = await supabase.auth.getSession();
-                    if (data.session?.access_token) { session = data.session; break; }
+                    if (data.session?.access_token) {
+                        session = data.session;
+                        break;
+                    }
                     await new Promise(r => setTimeout(r, 400));
                 }
 
                 if (!session) {
-                    // Should never happen with email confirmation disabled,
-                    // but keep the token alive and redirect to login.
                     localStorage.setItem('pending_space_token', tokenToUse);
                     navigate('/login?message=check_email', { replace: true });
                     return;
                 }
 
-                // Call accept_space_link edge function for space invites
                 const res = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}` 
+                        'Authorization': `Bearer ${session.access_token}`
                     },
                     body: JSON.stringify({
                         action: 'accept_space_link',
@@ -96,7 +93,6 @@ export default function SignupPage() {
                     return;
                 }
 
-                // Handle specific error codes from accept_space_invite
                 if (result.error) {
                     switch (result.error) {
                         case 'NOT_AUTHENTICATED':
@@ -112,7 +108,7 @@ export default function SignupPage() {
                             setError('Invite limit reached');
                             return;
                         case 'EMAIL_NOT_ALLOWED':
-                            setError('Your email isn\'t on the allowlist');
+                            setError("Your email isn't on the allowlist");
                             return;
                         default:
                             setError(result.error || 'Failed to accept invitation');
@@ -120,7 +116,6 @@ export default function SignupPage() {
                     }
                 }
 
-                // Fallback for email-type invitations
                 if (inviteToken) {
                     const inviteData = await apiService.acceptInvitation(inviteToken);
                     if (inviteData?.data?.role === 'client') {
@@ -131,7 +126,6 @@ export default function SignupPage() {
                     return;
                 }
 
-                // If we still couldn't resolve — send to dashboard, AuthContext will route
                 navigate('/dashboard', { replace: true });
             } else {
                 navigate('/onboarding');
@@ -144,42 +138,41 @@ export default function SignupPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6 font-sans">
-            <div className="max-w-[450px] w-full relative">
-                <div className="absolute -top-24 -left-24 h-64 w-64 bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
-                <GlassCard className="p-10 border-white/60 shadow-2xl backdrop-blur-xl rounded-3xl">
-                    <div className="text-zinc-900 font-bold text-xl mb-10 tracking-tighter flex items-center justify-center gap-2 group cursor-default">
-                        <div className="h-8 w-8 bg-zinc-900 rounded-lg flex items-center justify-center text-white shadow-lg">
+        <div className="flex min-h-screen items-center justify-center bg-[#FFFFFF] p-6">
+            <div className="w-full max-w-[460px]">
+                <GlassCard className="p-8 md:p-10">
+                    <div className="mb-10 flex items-center justify-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-black text-white">
                             <Rocket size={18} />
                         </div>
-                        <span>Space.inc</span>
+                        <span className="text-lg font-semibold tracking-[-0.03em] text-[#0D0D0D]">Space.inc</span>
                     </div>
 
-                    <div className="text-center mb-10">
-                        <Heading level={2} className="text-2xl font-black text-zinc-900 tracking-tight mb-2">
-                            {inviteToken ? 'Finish Registration' : 'Create Account'}
+                    <div className="mb-8 text-center">
+                        <Heading level={2} className="text-3xl font-semibold">
+                            {inviteToken ? 'Finish registration' : 'Create account'}
                         </Heading>
-                        <Text className="text-zinc-500 text-sm">
-                            {inviteToken ? 'Complete your information to join the workspace' : 'Get started with the most minimalist workspace today'}
+                        <Text variant="secondary" className="mt-2">
+                            {inviteToken ? 'Complete your information to join the workspace.' : 'Get started with a cleaner client workspace.'}
                         </Text>
                     </div>
 
                     {error && (
-                        <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs font-bold uppercase tracking-widest animate-[shake_0.5s_ease-in-out]">
+                        <div className="mb-6 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4 text-sm text-[#B42318]">
                             {error}
                         </div>
                     )}
 
                     {pendingInviteToken && (
-                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 text-xs font-medium leading-relaxed">
-                            <div className="flex items-center gap-2 mb-2">
+                        <div className="mb-6 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4 text-sm text-[#0D0D0D]">
+                            <div className="mb-2 flex items-center gap-2 text-[#6E6E80]">
                                 <Mail size={16} />
-                                <span className="font-bold uppercase tracking-wider">You're joining an organization</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">Organization invite detected</span>
                             </div>
                             {inviteOrgName ? (
-                                <p>Create your account to accept your invitation to join <strong>{inviteOrgName}</strong></p>
+                                <p>Create your account to accept your invitation to join <strong>{inviteOrgName}</strong>.</p>
                             ) : (
-                                <p>Create your account to accept your organization invitation</p>
+                                <p>Create your account to accept your organization invitation.</p>
                             )}
                         </div>
                     )}
@@ -187,18 +180,17 @@ export default function SignupPage() {
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Full Name</label>
+                                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Full Name</label>
                                 <Input
                                     type="text"
                                     value={fullName}
                                     onChange={(e) => setFullName(e.target.value)}
                                     placeholder="John Doe"
                                     required
-                                    className="bg-white/50 border-zinc-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-xl py-3"
                                 />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Email Address</label>
+                                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Email Address</label>
                                 <Input
                                     type="email"
                                     value={email}
@@ -206,54 +198,48 @@ export default function SignupPage() {
                                     placeholder="name@company.com"
                                     required
                                     readOnly={!!inviteToken}
-                                    className={`bg-white/50 border-zinc-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-xl py-3 ${inviteToken ? 'bg-zinc-100 cursor-not-allowed opacity-60' : ''}`}
+                                    className={inviteToken ? 'bg-[#F7F7F8]' : ''}
                                 />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Password</label>
+                                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Password</label>
                                 <Input
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
                                     required
-                                    className="bg-white/50 border-zinc-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-xl py-3"
                                 />
                             </div>
                         </div>
 
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            className="w-full py-4 mt-4 font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-500/20 active:scale-95 transition-all text-xs"
-                            disabled={loading}
-                        >
+                        <Button type="submit" variant="primary" className="w-full" disabled={loading}>
                             {loading ? (
-                                <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto" />
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                             ) : (
                                 <div className="flex items-center justify-center gap-2">
-                                    {inviteToken ? 'Join Organization' : 'Create Account'} <ArrowRight size={14} />
+                                    {inviteToken ? 'Join organization' : 'Create account'} <ArrowRight size={14} />
                                 </div>
                             )}
                         </Button>
                     </form>
 
-                    <div className="mt-10 pt-6 border-t border-zinc-100 text-center">
-                        <Text className="text-zinc-400 text-xs">
+                    <div className="mt-8 border-t border-[#E5E5E5] pt-6 text-center">
+                        <Text variant="secondary" className="text-sm">
                             Already have an account?{' '}
-                            <button 
-                                onClick={() => navigate(`/login${window.location.search}`)} 
-                                className="text-zinc-900 font-black uppercase tracking-widest hover:underline"
+                            <button
+                                onClick={() => navigate(`/login${window.location.search}`)}
+                                className="font-medium text-[#0D0D0D] hover:text-[#6E6E80]"
                             >
-                                Sign In
+                                Sign in
                             </button>
                         </Text>
                     </div>
                 </GlassCard>
-                
-                <div className="mt-8 flex items-center justify-center gap-4 opacity-30">
-                    <Shield size={14} className="text-zinc-400" />
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Zero Trust Identity</span>
+
+                <div className="mt-8 flex items-center justify-center gap-2 text-[#6E6E80]">
+                    <Shield size={12} />
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.24em]">Zero trust identity</span>
                 </div>
             </div>
         </div>

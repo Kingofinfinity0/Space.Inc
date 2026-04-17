@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-    Loader2, Users, X,
-    Download, Copy, Cloud, Sparkles
-} from 'lucide-react';
+import { Loader2, Users, X, Download, Copy, Cloud, Sparkles } from 'lucide-react';
 import { Button, Heading, Text } from '../UI';
 
 interface MeetingNote {
@@ -32,24 +29,20 @@ export const MeetingNotepad: React.FC<MeetingNotepadProps> = ({ meetingId, isOpe
     const [isLoading, setIsLoading] = useState(true);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
     const [activeTab, setActiveTab] = useState<'mine' | 'team'>('mine');
-
     const saveTimeoutRef = useRef<any>(null);
 
-    // Sync state to local storage to prevent loss during network blips
     useEffect(() => {
         if (myNote && !isLoading) {
             localStorage.setItem(`meeting_note_draft_${meetingId}`, myNote);
         }
     }, [myNote, meetingId, isLoading]);
 
-    // 1. Initial Load & Sync
     useEffect(() => {
         if (!isOpen) return;
 
         const initSync = async () => {
             setIsLoading(true);
             try {
-                // Restore from local draft first for zero-latency feel
                 const draft = localStorage.getItem(`meeting_note_draft_${meetingId}`);
                 if (draft) setMyNote(draft);
 
@@ -61,7 +54,6 @@ export const MeetingNotepad: React.FC<MeetingNotepadProps> = ({ meetingId, isOpe
                 if (!error && data) {
                     const mine = data.find(n => n.user_id === user?.id);
                     const team = data.filter(n => n.user_id !== user?.id);
-                    // Only override local draft if DB is newer or local is empty
                     if (mine && (!draft || new Date(mine.updated_at) > new Date())) {
                         setMyNote(mine.content);
                     }
@@ -103,7 +95,6 @@ export const MeetingNotepad: React.FC<MeetingNotepadProps> = ({ meetingId, isOpe
         };
     }, [meetingId, user?.id, isOpen]);
 
-    // 2. Optimized Persistence
     const persistNote = useCallback(async (content: string) => {
         if (!content) return;
         setIsSaving(true);
@@ -125,128 +116,120 @@ export const MeetingNotepad: React.FC<MeetingNotepadProps> = ({ meetingId, isOpe
         setMyNote(val);
 
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = setTimeout(() => persistNote(val), 1000);
+        saveTimeoutRef.current = setTimeout(() => persistNote(val), 900);
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-4 md:inset-6 lg:inset-8 bg-zinc-950/95 backdrop-blur-3xl border border-white/10 rounded-[32px] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.9)] z-[600] flex flex-col overflow-hidden animate-in fade-in slide-in-from-right duration-500 ring-1 ring-white/10 md:max-w-[500px] md:left-auto md:right-6 md:top-6 md:bottom-6 md:inset-y-6 md:w-[450px]">
-            {/* Header */}
-            <div className="p-10 border-b border-white/5 bg-gradient-to-br from-zinc-900/50 to-transparent flex items-center justify-between">
-                <div className="flex items-center gap-5">
-                    <div className="h-14 w-14 rounded-[22px] bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20 shadow-[0_0_32px_rgba(16,185,129,0.1)] relative">
-                        <Sparkles size={24} className="animate-pulse" />
-                        <div className="absolute -top-1 -right-1 h-3 w-3 bg-emerald-500 rounded-full border-2 border-zinc-950" />
+        <div className="fixed inset-4 z-[600] flex flex-col overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] md:inset-y-6 md:right-6 md:left-auto md:w-[460px]">
+            <div className="flex items-center justify-between border-b border-[#E5E5E5] p-5">
+                <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]">
+                        <Sparkles size={20} />
                     </div>
                     <div>
-                        <Heading level={3} className="text-2xl font-black tracking-tighter text-white">Meeting Intel</Heading>
-                        <div className="flex items-center gap-2 mt-0.5">
-                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,1)]" />
-                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Live Synthesis</span>
+                        <Heading level={3} className="text-xl font-semibold">Meeting notes</Heading>
+                        <div className="mt-1 flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-black" />
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6E6E80]">Live sync</span>
                         </div>
                     </div>
                 </div>
                 <button
                     onClick={onClose}
-                    className="h-12 w-12 rounded-2xl hover:bg-white/5 flex items-center justify-center text-zinc-600 hover:text-white transition-all border border-transparent hover:border-white/10"
+                    className="rounded-[6px] border border-[#E5E5E5] bg-white p-2 text-[#6E6E80] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
                 >
-                    <X size={24} />
+                    <X size={18} />
                 </button>
             </div>
 
-            {/* View Toggle */}
-            <div className="flex p-2 bg-black/40 mx-10 mt-10 rounded-[24px] border border-white/5 shadow-inner">
-                <button
-                    onClick={() => setActiveTab('mine')}
-                    className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-[18px] transition-all ${activeTab === 'mine' ? 'bg-zinc-800 text-white shadow-2xl ring-1 ring-white/10' : 'text-zinc-500 hover:text-zinc-300'}`}
-                >
-                    Workspace
-                </button>
-                <button
-                    onClick={() => setActiveTab('team')}
-                    className={`flex-1 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-[18px] transition-all flex items-center justify-center gap-3 ${activeTab === 'team' ? 'bg-zinc-800 text-white shadow-2xl ring-1 ring-white/10' : 'text-zinc-500 hover:text-zinc-300'}`}
-                >
-                    Team Feed
-                    {othersNotes.length > 0 && (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-[9px] text-black font-black shadow-lg shadow-emerald-500/20">
-                            {othersNotes.length}
-                        </span>
-                    )}
-                </button>
+            <div className="p-4">
+                <div className="flex rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-1">
+                    <button
+                        onClick={() => setActiveTab('mine')}
+                        className={`flex-1 rounded-[6px] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                            activeTab === 'mine' ? 'bg-white text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)]' : 'text-[#6E6E80]'
+                        }`}
+                    >
+                        Workspace
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('team')}
+                        className={`flex-1 rounded-[6px] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                            activeTab === 'team' ? 'bg-white text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)]' : 'text-[#6E6E80]'
+                        }`}
+                    >
+                        Team feed {othersNotes.length > 0 ? `(${othersNotes.length})` : ''}
+                    </button>
+                </div>
             </div>
 
-            {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-10 scrollbar-hide">
+            <div className="flex-1 overflow-y-auto px-5 pb-5">
                 {isLoading ? (
-                    <div className="h-full flex flex-col items-center justify-center gap-8">
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-emerald-500/20 blur-[64px] rounded-full animate-pulse" />
-                            <Loader2 className="animate-spin text-emerald-500 relative" size={48} />
+                    <div className="flex h-full items-center justify-center">
+                        <div className="flex items-center gap-3 text-[#6E6E80]">
+                            <Loader2 className="animate-spin" size={18} />
+                            <span className="text-sm">Loading notes...</span>
                         </div>
-                        <Text className="text-zinc-600 font-black uppercase tracking-[0.4em] text-[10px] animate-pulse">Initializing Neural Link</Text>
                     </div>
                 ) : activeTab === 'mine' ? (
-                    <div className="h-full flex flex-col">
+                    <div className="flex h-full flex-col">
                         <textarea
                             value={myNote}
                             onChange={handleInput}
-                            placeholder="Capture strategic insights..."
-                            className="flex-1 bg-transparent text-zinc-200 text-[18px] resize-none outline-none placeholder:text-zinc-800 leading-relaxed font-medium selection:bg-emerald-500/30"
+                            placeholder="Capture decisions, next steps, and follow-ups..."
+                            className="min-h-[280px] flex-1 resize-none rounded-[8px] border border-[#E5E5E5] bg-white p-4 text-[15px] leading-7 text-[#0D0D0D] outline-none placeholder:text-[#6E6E80] focus:border-black"
                         />
-                        <div className="mt-10 pt-8 border-t border-white/5 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
+                        <div className="mt-4 flex items-center justify-between border-t border-[#E5E5E5] pt-4">
+                            <div className="flex items-center gap-3 text-[#6E6E80]">
                                 {isSaving ? (
                                     <>
-                                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                                        <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">Syncing...</span>
+                                        <div className="h-2 w-2 rounded-full bg-black animate-pulse" />
+                                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em]">Saving</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Cloud size={14} className="text-zinc-700" />
-                                        <span className="text-[10px] font-black text-zinc-700 uppercase tracking-[0.2em]">Cloud Persistent</span>
+                                        <Cloud size={14} />
+                                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em]">Synced</span>
                                     </>
                                 )}
                             </div>
                             {lastSaved && (
-                                <span className="text-[10px] text-zinc-800 font-black uppercase tracking-tighter">
-                                    Last Checkpoint: {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                <span className="text-[10px] text-[#6E6E80]">
+                                    {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                             )}
                         </div>
                     </div>
                 ) : (
-                    <div className="space-y-10">
+                    <div className="space-y-4">
                         {othersNotes.length === 0 ? (
-                            <div className="text-center py-24 flex flex-col items-center">
-                                <div className="h-24 w-24 rounded-[40px] bg-white/[0.01] border border-white/5 flex items-center justify-center text-zinc-900 mb-10 relative group">
-                                    <div className="absolute inset-0 bg-white/5 blur-[48px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
-                                    <Users size={48} className="relative" />
+                            <div className="flex flex-col items-center justify-center py-16 text-center">
+                                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] text-[#6E6E80]">
+                                    <Users size={28} />
                                 </div>
-                                <Text className="text-zinc-500 font-black text-[11px] uppercase tracking-[0.3em]">Awaiting Intel Streams</Text>
-                                <Text className="text-zinc-800 text-[10px] mt-3 font-medium tracking-tight">Team collaboration will appear here in real-time</Text>
+                                <Text variant="secondary">No team notes yet.</Text>
                             </div>
                         ) : (
                             othersNotes.map(note => (
-                                <div key={note.user_id} className="group animate-in fade-in slide-in-from-bottom-6 duration-1000">
-                                    <div className="flex items-center gap-4 mb-5">
-                                        <div className="h-10 w-10 rounded-2xl bg-zinc-900 flex items-center justify-center text-xs font-black text-zinc-400 border border-white/5 shadow-xl">
+                                <div key={note.user_id} className="rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4">
+                                    <div className="mb-3 flex items-center gap-3">
+                                        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-white text-sm font-medium text-[#0D0D0D] border border-[#E5E5E5]">
                                             {note.profiles?.full_name?.charAt(0) || 'U'}
                                         </div>
-                                        <div className="flex-1">
-                                            <div className="text-[11px] font-black text-zinc-300 uppercase tracking-[0.15em]">
-                                                {note.profiles?.full_name || 'Anonymous Intelligence'}
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-medium text-[#0D0D0D]">
+                                                {note.profiles?.full_name || 'Anonymous'}
                                             </div>
-                                            <div className="text-[9px] text-zinc-700 font-black uppercase tracking-widest mt-1">
+                                            <div className="text-[10px] uppercase tracking-[0.18em] text-[#6E6E80]">
                                                 {new Date(note.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="bg-white/[0.02] hover:bg-white/[0.04] rounded-[32px] p-8 border border-white/5 transition-all duration-700 group-hover:border-emerald-500/20 shadow-2xl group-hover:shadow-emerald-500/10">
-                                        <p className="text-zinc-400 text-[15px] whitespace-pre-wrap leading-relaxed font-medium">
-                                            {note.content || <span className="text-zinc-800 italic uppercase text-[11px] tracking-[0.2em]">Synthesizing...</span>}
-                                        </p>
-                                    </div>
+                                    <p className="whitespace-pre-wrap text-[15px] leading-7 text-[#0D0D0D]">
+                                        {note.content || <span className="text-[#6E6E80] italic">Empty note</span>}
+                                    </p>
                                 </div>
                             ))
                         )}
@@ -254,21 +237,18 @@ export const MeetingNotepad: React.FC<MeetingNotepadProps> = ({ meetingId, isOpe
                 )}
             </div>
 
-            {/* Footer Actions */}
-            <div className="p-10 bg-zinc-950/80 border-t border-white/5 flex gap-5 backdrop-blur-3xl">
+            <div className="flex gap-3 border-t border-[#E5E5E5] p-4">
                 <Button
-                    variant="outline"
-                    className="flex-1 h-14 bg-zinc-900/50 border-white/5 text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px] rounded-2xl hover:bg-zinc-800 hover:text-white transition-all group shadow-xl"
-                    onClick={() => {
-                        navigator.clipboard.writeText(myNote);
-                    }}
+                    variant="secondary"
+                    className="flex-1"
+                    onClick={() => navigator.clipboard.writeText(myNote)}
                 >
-                    <Copy size={18} className="mr-4 group-hover:scale-110 transition-transform text-emerald-500" />
-                    Copy Intel
+                    <Copy size={16} />
+                    Copy note
                 </Button>
                 <Button
-                    variant="outline"
-                    className="flex-1 h-14 bg-zinc-900/50 border-white/5 text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px] rounded-2xl hover:bg-zinc-800 hover:text-white transition-all group shadow-xl"
+                    variant="secondary"
+                    className="flex-1"
                     onClick={() => {
                         const blob = new Blob([myNote], { type: 'text/plain' });
                         const url = URL.createObjectURL(blob);
@@ -281,8 +261,8 @@ export const MeetingNotepad: React.FC<MeetingNotepadProps> = ({ meetingId, isOpe
                         URL.revokeObjectURL(url);
                     }}
                 >
-                    <Download size={18} className="mr-4 group-hover:scale-110 transition-transform text-emerald-500" />
-                    Export Notes
+                    <Download size={16} />
+                    Export
                 </Button>
             </div>
         </div>

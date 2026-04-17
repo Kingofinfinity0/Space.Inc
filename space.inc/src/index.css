@@ -3,40 +3,25 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #090b10;
-  --bg-secondary: #0f1218;
-  --bg-tertiary: #141922;
-  --panel-bg: rgba(15, 18, 24, 0.8);
-  --panel-bg-strong: rgba(18, 22, 30, 0.88);
-  --panel-bg-soft: rgba(255, 255, 255, 0.04);
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --panel-border-strong: rgba(255, 255, 255, 0.12);
-  --text-primary: #f5f7fb;
-  --text-secondary: rgba(229, 233, 242, 0.7);
-  --text-tertiary: rgba(229, 233, 242, 0.46);
-  --accent-green: #34d399;
-  --accent-blue: #60a5fa;
-  --accent-yellow: #fbbf24;
-  --accent-purple: #a78bfa;
-  --shadow-soft: 0 20px 50px rgba(0, 0, 0, 0.3);
-  --shadow-lift: 0 30px 80px rgba(0, 0, 0, 0.34);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --bg-base: #FFFFFF;
+  --bg-surface: #F7F7F8;
+  --bg-hover: #EFEFEF;
+  --border: #E5E5E5;
+  --text-primary: #0D0D0D;
+  --text-muted: #6E6E80;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.06);
+  --radius: 8px;
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(96, 165, 250, 0.16), transparent 24%),
-    radial-gradient(circle at top right, rgba(167, 139, 250, 0.12), transparent 18%),
-    radial-gradient(circle at bottom center, rgba(52, 211, 153, 0.1), transparent 20%),
-    linear-gradient(180deg, #080a0f 0%, #0b0e13 38%, #090b10 100%);
+  background: var(--bg-base);
   color: var(--text-primary);
-  font-family: "Geist", "IBM Plex Sans", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -58,12 +43,12 @@ input,
 select,
 textarea {
   transition:
-    transform 260ms var(--ease-standard),
-    background-color 220ms var(--ease-standard),
-    border-color 220ms var(--ease-standard),
-    box-shadow 260ms var(--ease-standard),
-    color 220ms var(--ease-standard),
-    opacity 220ms var(--ease-standard);
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease;
 }
 
 h1,
@@ -73,6 +58,11 @@ h4,
 h5,
 h6 {
   letter-spacing: -0.03em;
+}
+
+::selection {
+  background: #0D0D0D;
+  color: #FFFFFF;
 }
 
 ::-webkit-scrollbar {
@@ -85,12 +75,48 @@ h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: #D4D4D8;
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: #BDBDC7;
+}
+
+@keyframes surface-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes dock-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 @keyframes shimmer {
@@ -103,52 +129,6 @@ h6 {
   }
 }
 
-@keyframes surface-in {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, 18px, 0) scaleY(0.98);
-  }
-
-  65% {
-    opacity: 1;
-    transform: translate3d(0, -4px, 0) scale(1.01);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-}
-
-@keyframes dock-in {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, 20px, 0) scaleY(0.98);
-  }
-
-  70% {
-    opacity: 1;
-    transform: translate3d(0, -6px, 0) scale(1.02);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-}
-
-@keyframes tooltip-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 6px, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
 .skeleton-shimmer::after {
   content: "";
   position: absolute;
@@ -157,53 +137,50 @@ h6 {
   background-image: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0,
-    rgba(255, 255, 255, 0.05) 20%,
-    rgba(255, 255, 255, 0.12) 60%,
+    rgba(229, 229, 229, 0.55) 50%,
     rgba(255, 255, 255, 0) 100%
   );
-  animation: shimmer 2s infinite;
+  animation: shimmer 1.8s infinite;
 }
 
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  scrollbar-color: #D4D4D8 transparent;
 }
 
 .glass-effect,
 .glass-surface {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  box-shadow: var(--shadow-soft);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
 }
 
 .glass-elevated {
-  box-shadow: var(--shadow-lift);
+  box-shadow: var(--shadow-card);
 }
 
 .glass-muted {
-  background: var(--panel-bg-soft);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
 }
 
 .interactive-surface {
-  transform: translate3d(0, 0, 0) scale(1);
+  transform: translate3d(0, 0, 0);
   transition:
-    transform 280ms var(--ease-spring),
-    box-shadow 280ms var(--ease-standard),
-    background-color 220ms var(--ease-standard),
-    border-color 220ms var(--ease-standard),
-    opacity 220ms var(--ease-standard);
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    opacity 180ms ease;
 }
 
 .interactive-surface:hover {
-  transform: translate3d(0, -4px, 0) scale(1.02);
-  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.28);
+  transform: translate3d(0, -1px, 0);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 .interactive-surface:active {
-  transform: translate3d(0, -1px, 0) scale(0.98);
+  transform: translate3d(0, 0, 0);
 }
 
 .app-page-shell {
@@ -213,24 +190,24 @@ h6 {
 }
 
 .page-enter {
-  animation: surface-in 360ms var(--ease-spring) both;
+  animation: surface-in 220ms ease both;
 }
 
 .dock-enter {
-  animation: dock-in 380ms var(--ease-spring) both;
+  animation: dock-in 220ms ease both;
 }
 
 .tooltip-enter {
-  animation: tooltip-in 220ms var(--ease-standard) both;
+  animation: tooltip-in 160ms ease both;
 }
 
 .view-transition {
-  transition: opacity 220ms var(--ease-standard), transform 260ms var(--ease-spring);
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
 .progress-bar-fill {
-  background-color: var(--accent-green);
-  transition: width 700ms var(--ease-spring);
+  background-color: #0D0D0D;
+  transition: width 500ms ease;
 }
 
 .progress-bar-fill[data-step="1"] { width: 25%; }
@@ -244,7 +221,7 @@ h6 {
     opacity: 0;
   }
   20% {
-    opacity: 0.35;
+    opacity: 0.24;
   }
   100% {
     transform: translateX(360%);
@@ -253,7 +230,7 @@ h6 {
 }
 
 .upload-progress-sheen {
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 40%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.18) 60%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%);
   animation: upload-progress-sheen 1.7s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   pointer-events: none;
 }
