@@ -102,7 +102,7 @@ export const MessageItem = ({
 
                 {/* Context Menu */}
                 {showMenu && (
-                    <div ref={menuRef} className={`absolute z-10 top-0 ${alignRight ? 'right-full mr-2' : 'left-full ml-2'} bg-white border border-zinc-200 shadow-lg rounded-md overflow-hidden text-zinc-700 w-28`}>
+                    <div ref={menuRef} className={`absolute z-10 top-0 ${alignRight ? 'right-full mr-2' : 'left-full ml-2'} bg-white border border-[#E5E5E5] shadow-[0_1px_3px_rgba(0,0,0,0.06)] rounded-[8px] overflow-hidden text-[#6E6E80] w-28`}>
                         <button onClick={() => { setIsEditing(true); setShowMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2">
                             <EditIcon size={14} /> Edit
                         </button>
@@ -124,8 +124,8 @@ export const MessageItem = ({
                 )}
 
                 {msg.extension === 'file' ? (
-                    <div className={`flex items-center gap-3 p-2 rounded-lg ${alignRight ? 'bg-white/10' : 'bg-zinc-50'}`}>
-                        <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400">
+                    <div className={`flex items-center gap-3 p-2 rounded-lg ${alignRight ? 'bg-[#F7F7F8]' : 'bg-[#F7F7F8]'}`}>
+                        <div className="p-2 bg-[#F7F7F8] rounded-lg text-[#0D0D0D]">
                             <DocIconLucide size={20} />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -138,7 +138,7 @@ export const MessageItem = ({
                                 const { data } = await apiService.getSignedUrl(msg.payload.file_id, organizationId);
                                 if (data?.signedUrl) window.open(data.signedUrl, '_blank');
                             }}
-                            className="p-1.5 hover:bg-white/10 rounded-full transition-colors"
+                            className="p-1.5 hover:bg-[#F7F7F8] rounded-full transition-colors"
                         >
                             <DownloadIcon size={16} />
                         </button>
@@ -148,7 +148,7 @@ export const MessageItem = ({
                         <input 
                             title="Edit message content"
                             aria-label="Edit message content"
-                            className="w-full text-zinc-900 bg-white border border-zinc-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="w-full text-[#0D0D0D] bg-white border border-[#E5E5E5] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-black"
                             value={editContent}
                             onChange={e => setEditContent(e.target.value)}
                             onKeyDown={e => {
@@ -159,7 +159,7 @@ export const MessageItem = ({
                         />
                         <div className="flex justify-end gap-1">
                             <button title="Cancel Edit" aria-label="Cancel Edit" onClick={() => setIsEditing(false)} className="p-1 rounded hover:bg-zinc-200/50 text-zinc-500"><XIcon size={14}/></button>
-                            <button title="Save Edit" aria-label="Save Edit" onClick={handleEditSave} className="p-1 rounded hover:bg-indigo-500/20 text-indigo-500"><CheckIcon size={14}/></button>
+                            <button title="Save Edit" aria-label="Save Edit" onClick={handleEditSave} className="p-1 rounded hover:bg-[#F7F7F8] text-[#0D0D0D]"><CheckIcon size={14}/></button>
                         </div>
                     </div>
                 ) : (

@@ -223,7 +223,7 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                                     <Button 
                                         variant="outline" 
                                         size="sm" 
-                                        className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                                        className="text-[#0D0D0D] border-[#E5E5E5] hover:bg-[#F7F7F8]"
                                         onClick={() => navigate(`/spaces/${meeting.space_id}/meetings/${meeting.id}/review`)}
                                     >
                                         Review Details

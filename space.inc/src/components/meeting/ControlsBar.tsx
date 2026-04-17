@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff, NotebookPen } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff, Pencil } from 'lucide-react';
 
 interface ControlsBarProps {
     isMicMuted: boolean;
@@ -25,13 +25,13 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
     onLeave
 }) => {
     return (
-        <div className="flex items-center justify-center gap-4 px-8 py-6 bg-zinc-950/80 backdrop-blur-3xl border-t border-white/5 relative z-[120]">
+        <div className="flex items-center justify-center gap-4 border-t border-[#E5E5E5] bg-white px-8 py-6 relative z-[120]">
             {/* Microphone Toggle */}
             <button
                 onClick={onToggleMic}
                 className={`h-14 w-14 rounded-2xl flex items-center justify-center transition-all ${isMicMuted
-                        ? 'bg-rose-600/10 border border-rose-500/30 text-rose-500 shadow-lg shadow-rose-500/5'
-                        : 'bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white'
+                        ? 'bg-[#F7F7F8] border border-[#E5E5E5] text-[#0D0D0D]'
+                        : 'bg-white border border-[#E5E5E5] text-[#6E6E80] hover:text-[#0D0D0D]'
                     }`}
                 title={isMicMuted ? 'Unmute Personnel' : 'Mute Personnel'}
             >
@@ -42,8 +42,8 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
             <button
                 onClick={onToggleVideo}
                 className={`h-14 w-14 rounded-2xl flex items-center justify-center transition-all ${isVideoOff
-                        ? 'bg-rose-600/10 border border-rose-500/30 text-rose-500 shadow-lg shadow-rose-500/5'
-                        : 'bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white'
+                        ? 'bg-[#F7F7F8] border border-[#E5E5E5] text-[#0D0D0D]'
+                        : 'bg-white border border-[#E5E5E5] text-[#6E6E80] hover:text-[#0D0D0D]'
                     }`}
                 title={isVideoOff ? 'Enable Vision' : 'Disable Vision'}
             >
@@ -54,8 +54,8 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
             <button
                 onClick={onToggleScreenShare}
                 className={`h-14 w-14 rounded-2xl flex items-center justify-center transition-all ${isScreenSharing
-                        ? 'bg-emerald-600/10 border border-emerald-500/30 text-emerald-500 shadow-lg shadow-emerald-500/5'
-                        : 'bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white'
+                        ? 'bg-[#F7F7F8] border border-[#E5E5E5] text-[#0D0D0D]'
+                        : 'bg-white border border-[#E5E5E5] text-[#6E6E80] hover:text-[#0D0D0D]'
                     }`}
                 title={isScreenSharing ? 'Stop Transmission' : 'Broadcast Screen'}
             >
@@ -66,21 +66,21 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
             <button
                 onClick={onToggleNotepad}
                 className={`h-14 w-14 rounded-2xl flex items-center justify-center transition-all ${isNotepadOpen
-                        ? 'bg-emerald-600/10 border border-emerald-500/30 text-emerald-500 shadow-lg shadow-emerald-500/5'
-                        : 'bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white'
+                        ? 'bg-[#F7F7F8] border border-[#E5E5E5] text-[#0D0D0D]'
+                        : 'bg-white border border-[#E5E5E5] text-[#6E6E80] hover:text-[#0D0D0D]'
                     }`}
                 title={isNotepadOpen ? 'Secure Intel' : 'Capture Intel'}
             >
-                <NotebookPen size={22} />
+                <Pencil size={22} />
             </button>
 
             {/* Divider */}
-            <div className="h-10 w-px bg-white/5 mx-2" />
+            <div className="h-10 w-px bg-[#E5E5E5] mx-2" />
 
             {/* Leave Call */}
             <button
                 onClick={onLeave}
-                className="h-14 px-8 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-[11px] uppercase tracking-[0.2em] flex items-center gap-3 transition-all shadow-2xl shadow-rose-600/20"
+                className="h-14 px-8 rounded-2xl bg-black hover:bg-[#1A1A1A] text-white font-semibold text-[11px] uppercase tracking-[0.2em] flex items-center gap-3 transition-all"
             >
                 <PhoneOff size={18} />
                 Disconnect

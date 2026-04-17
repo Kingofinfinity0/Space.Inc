@@ -54,7 +54,7 @@ const Hero = () => (
     {/* Floating UI Element */}
     <div className="mt-20 relative w-full max-w-5xl mx-auto animate-float hidden md:block px-6">
       <div className="glass-panel rounded-2xl border border-zinc-800/50 shadow-2xl overflow-hidden aspect-[16/9] relative group">
-        <div className="absolute inset-0 bg-gradient-to-tr from-zinc-900 via-zinc-900 to-zinc-800 opacity-90"></div>
+        <div className="absolute inset-0 bg-[#0D0D0D] opacity-90"></div>
 
         {/* Abstract UI representation */}
         <div className="absolute inset-0 flex">
@@ -78,7 +78,7 @@ const Hero = () => (
         </div>
 
         {/* Glow effect on hover */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none"></div>
+        <div className="absolute inset-0 bg-white/5 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none"></div>
       </div>
     </div>
   </section>
@@ -224,7 +224,7 @@ const PricingCard = ({ title, price, description, features, highlight = false, i
     ${highlight ? 'shadow-2xl scale-105 z-10' : ''}
   `}>
     {isPopular && (
-      <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-[#0b2519] to-[#1a4731] text-[#ffefcb] text-xs font-bold uppercase tracking-wider rounded-full shadow-lg">
+      <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-[#0b2519] text-[#ffefcb] text-xs font-bold uppercase tracking-wider rounded-full shadow-lg">
         Most Popular
       </div>
     )}

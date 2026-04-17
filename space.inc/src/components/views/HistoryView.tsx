@@ -29,7 +29,7 @@ const HistoryView = ({ logs }: { logs: any[] }) => {
     const getActionIcon = (type: string) => {
         switch (type) {
             case 'SPACE_CREATED': return <Plus size={16} className="text-emerald-500" />;
-            case 'INVITATION_DISPATCHED': return <UserPlus size={16} className="text-blue-500" />;
+                case 'INVITATION_DISPATCHED': return <UserPlus size={16} className="text-[#0D0D0D]" />;
             case 'CLIENT_PORTAL_ENTRY': return <Key size={16} className="text-amber-500" />;
             case 'FILE_UPLOADED': return <FileUp size={16} className="text-indigo-500" />;
             case 'SECURITY_ALERT': return <Shield size={16} className="text-red-500" />;

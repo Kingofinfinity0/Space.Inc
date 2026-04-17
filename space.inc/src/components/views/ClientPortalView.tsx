@@ -81,33 +81,33 @@ const ClientPortalView = ({
     new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const overviewStats = [
-    { label: 'Unread updates', value: notifications.filter((item) => !item.is_read).length, accent: 'text-emerald-300' },
-    { label: 'Upcoming meetings', value: upcomingMeetings.length, accent: 'text-blue-300' },
-    { label: 'Open tasks', value: tasks.filter((task) => task.status !== 'done').length, accent: 'text-amber-300' },
+    { label: 'Unread updates', value: notifications.filter((item) => !item.is_read).length, accent: 'text-[#0D0D0D]' },
+    { label: 'Upcoming meetings', value: upcomingMeetings.length, accent: 'text-[#0D0D0D]' },
+    { label: 'Open tasks', value: tasks.filter((task) => task.status !== 'done').length, accent: 'text-[#0D0D0D]' },
   ];
 
   return (
     <div className="app-page-shell px-4 pb-28 pt-6 md:px-8 md:pb-32 md:pt-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <GlassCard className="glass-elevated relative overflow-hidden p-6 md:p-8 page-enter">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.08),_transparent_40%),radial-gradient(circle_at_right,_rgba(52,211,153,0.12),_transparent_28%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[#F7F7F8]" />
           <div className="relative flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl space-y-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.08] text-emerald-300 shadow-[0_20px_40px_rgba(0,0,0,0.24)]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-white text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                   <Rocket size={22} />
                 </div>
                 <div>
-                  <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">Client workspace</div>
-                  <div className="text-lg font-semibold tracking-[-0.02em] text-white">Space.inc Portal</div>
+                  <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#6E6E80]">Client workspace</div>
+                  <div className="text-lg font-semibold tracking-[-0.02em] text-[#0D0D0D]">Space.inc Portal</div>
                 </div>
               </div>
 
               <div className="space-y-3">
-                <Heading level={2} className="text-3xl font-semibold tracking-[-0.04em] text-white md:text-4xl">
+                <Heading level={2} className="text-3xl font-semibold tracking-[-0.04em] text-[#0D0D0D] md:text-4xl">
                   Welcome back, {profile?.full_name?.split(' ')[0] || 'Member'}
                 </Heading>
-                <p className="max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
+                <p className="max-w-2xl text-sm leading-6 text-[#6E6E80] md:text-base">
                   A quieter, sharper workspace for {client.name}. Meetings, files, updates, and action items stay in one living surface.
                 </p>
               </div>
@@ -117,9 +117,9 @@ const ClientPortalView = ({
                   <div
                     key={item.label}
                     style={{ animationDelay: `${index * 20}ms` }}
-                    className="glass-muted rounded-[22px] px-4 py-4 page-enter"
+                    className="rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] page-enter"
                   >
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{item.label}</div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">{item.label}</div>
                     <div className={`mt-2 text-2xl font-semibold tracking-[-0.04em] ${item.accent}`}>{item.value}</div>
                   </div>
                 ))}
@@ -130,13 +130,13 @@ const ClientPortalView = ({
               <Button variant="outline" size="sm" onClick={() => setIsReviewOpen(true)}>
                 Leave a review
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => showToast('Help request submitted.', 'info')}>
-                Get help
-              </Button>
+                <Button variant="secondary" size="sm" onClick={() => showToast('Help request submitted.', 'info')}>
+                  Get help
+                </Button>
               <button
                 title="Sign Out"
                 onClick={onLogout}
-                className="interactive-surface flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.08] text-slate-200 hover:text-white"
+                className="interactive-surface flex h-11 w-11 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#6E6E80] hover:text-[#0D0D0D]"
               >
                 <LogOut size={16} />
               </button>
@@ -149,11 +149,11 @@ const ClientPortalView = ({
             <GlassCard className="p-5 md:p-6">
               <div className="mb-5 flex items-center justify-between">
                 <div>
-                  <div className="flex items-center gap-2 text-sm font-medium text-white">
-                    <Bell size={16} className="text-emerald-300" />
+                  <div className="flex items-center gap-2 text-sm font-medium text-[#0D0D0D]">
+                    <Bell size={16} className="text-[#6E6E80]" />
                     Inbox
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">Quiet, high-signal updates from your workspace.</p>
+                  <p className="mt-1 text-xs text-[#6E6E80]">Quiet, high-signal updates from your workspace.</p>
                 </div>
                 {notifications.length > 0 && (
                   <Button
@@ -170,16 +170,16 @@ const ClientPortalView = ({
               </div>
 
               {loading ? (
-                <SkeletonCard className="h-24 rounded-[24px] border-white/8 bg-white/[0.04]" />
+                <SkeletonCard className="h-24 rounded-[8px] border-[#E5E5E5] bg-[#F7F7F8]" />
               ) : notifications.length > 0 ? (
                 <div className="space-y-3">
                   {notifications.map((notification, index) => (
                     <div
                       key={notification.id}
                       style={{ animationDelay: `${index * 20}ms` }}
-                      className="glass-muted interactive-surface page-enter flex items-start gap-4 rounded-[22px] px-4 py-4"
+                      className="interactive-surface page-enter flex items-start gap-4 rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.08] text-emerald-300">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]">
                         {notification.type === 'file_uploaded' ? (
                           <FileText size={18} />
                         ) : notification.type === 'message_received' ? (
@@ -189,8 +189,8 @@ const ClientPortalView = ({
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm leading-6 text-slate-100">{notification.message}</p>
-                        <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                        <p className="text-sm leading-6 text-[#0D0D0D]">{notification.message}</p>
+                        <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">
                           {formatTime(notification.created_at)}
                         </p>
                       </div>
@@ -198,9 +198,9 @@ const ClientPortalView = ({
                   ))}
                 </div>
               ) : (
-                <div className="glass-muted rounded-[22px] px-5 py-10 text-center">
-                  <CheckSquare size={30} className="mx-auto text-slate-500" />
-                  <p className="mt-3 text-sm text-slate-400">All caught up.</p>
+                <div className="rounded-[8px] border border-[#E5E5E5] bg-white px-5 py-10 text-center shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+                  <CheckSquare size={30} className="mx-auto text-[#6E6E80]" />
+                  <p className="mt-3 text-sm text-[#6E6E80]">All caught up.</p>
                 </div>
               )}
             </GlassCard>
@@ -208,13 +208,13 @@ const ClientPortalView = ({
             <GlassCard className="p-5 md:p-6">
               <div className="mb-5 flex items-center justify-between">
                 <div>
-                  <div className="flex items-center gap-2 text-sm font-medium text-white">
-                    <Activity size={16} className="text-blue-300" />
+                  <div className="flex items-center gap-2 text-sm font-medium text-[#0D0D0D]">
+                    <Activity size={16} className="text-[#6E6E80]" />
                     Recent activity
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">A dense feed of what changed, without dashboard clutter.</p>
+                  <p className="mt-1 text-xs text-[#6E6E80]">A dense feed of what changed, without dashboard clutter.</p>
                 </div>
-                <div className="rounded-full border border-white/8 bg-white/[0.05] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                <div className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#6E6E80]">
                   Live
                 </div>
               </div>

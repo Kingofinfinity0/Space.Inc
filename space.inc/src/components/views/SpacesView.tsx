@@ -190,7 +190,7 @@ const SpaceActivityIndicators = ({ spaceId }: { spaceId: string }) => {
                 </span>
             )}
             {indicators.recentFilesCount > 0 && (
-                <span className="flex-shrink-0 px-2 py-0.5 text-[9px] font-black uppercase bg-blue-50 text-blue-600 border border-blue-100 rounded">
+                    <span className="flex-shrink-0 px-2 py-0.5 text-[9px] font-black uppercase bg-[#F7F7F8] text-[#0D0D0D] border border-[#E5E5E5] rounded">
                     {indicators.recentFilesCount} New File{indicators.recentFilesCount > 1 ? 's' : ''}
                 </span>
             )}

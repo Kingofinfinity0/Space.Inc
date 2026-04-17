@@ -39,6 +39,14 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
     const failsafeTimeoutRef = useRef<any>(null);
 
     useEffect(() => {
+        const media = window.matchMedia('(min-width: 768px)');
+        const update = () => setIsNotepadOpen(media.matches);
+        update();
+        media.addEventListener('change', update);
+        return () => media.removeEventListener('change', update);
+    }, []);
+
+    useEffect(() => {
         if (!callObject || !DEBUG_EVENTS) return;
 
         const handleJoining = () => setMeetingState(prev => ({ ...prev, state: MeetingState.JOINING }));
@@ -120,17 +128,17 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
     const localVideoState = callObject?.localVideo();
 
     return (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col font-inter">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-[#FFFFFF] font-inter text-[#0D0D0D]">
             {/* Header */}
-            <div className="flex items-center justify-between px-8 py-6 bg-zinc-950/50 backdrop-blur-2xl border-b border-white/5 relative z-[110]">
+            <div className="relative z-[110] flex items-center justify-between border-b border-[#E5E5E5] bg-[#F7F7F8] px-4 py-4 md:px-8 md:py-5">
                 <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 bg-emerald-500/10 rounded-[18px] flex items-center justify-center text-emerald-500 border border-emerald-500/20 shadow-lg shadow-emerald-500/5">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-white text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                         <Video size={24} />
                     </div>
                     <div>
-                        <h2 className="text-white font-black text-lg tracking-tight uppercase">{meetingTitle}</h2>
-                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 mt-0.5">
-                            <div className={`h-1.5 w-1.5 rounded-full ${isInMeeting(meetingState.state) ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse' : 'bg-zinc-700'}`} />
+                        <h2 className="text-lg font-semibold tracking-tight text-[#0D0D0D]">{meetingTitle}</h2>
+                        <div className="mt-0.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">
+                            <div className={`h-1.5 w-1.5 rounded-full ${isInMeeting(meetingState.state) ? 'animate-pulse bg-black' : 'bg-[#E5E5E5]'}`} />
                             {isInMeeting(meetingState.state) ? `${participantIds.length} Personnel Active` : meetingState.state}
                         </div>
                     </div>
@@ -141,7 +149,7 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
                         {(userRole === 'owner' || userRole === 'admin' || userRole === 'staff') && (
                             <button
                                 onClick={() => setShowEndConfirm(true)}
-                                className="flex items-center gap-3 px-6 py-3 bg-rose-600/10 hover:bg-rose-600/20 text-rose-500 rounded-2xl border border-rose-500/20 transition-all text-[11px] font-black uppercase tracking-widest"
+                                className="flex items-center gap-3 rounded-[6px] border border-[#E5E5E5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-[#0D0D0D] transition-all hover:bg-[#F7F7F8]"
                             >
                                 <Square size={16} />
                                 Terminate Session
@@ -150,7 +158,7 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
                         <button
                             onClick={handleLeave}
                             disabled={meetingState.state === MeetingState.LEAVING}
-                            className="flex items-center gap-3 px-6 py-3 bg-zinc-900/50 hover:bg-zinc-800 text-white rounded-2xl border border-white/5 transition-all disabled:opacity-50 text-[11px] font-black uppercase tracking-widest"
+                            className="flex items-center gap-3 rounded-[6px] border border-[#E5E5E5] bg-black px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-white transition-all hover:bg-[#1A1A1A] disabled:opacity-50"
                         >
                             <LogOut size={16} />
                             Exit
@@ -160,33 +168,33 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
             </div>
 
             {/* Main Area */}
-            <div className="flex-1 relative flex overflow-hidden bg-zinc-950">
-                {/* Video Grid */}
-                <div className={`flex-1 p-8 overflow-auto transition-all duration-700 ${isNotepadOpen ? 'mr-[450px] opacity-40 grayscale-[0.5]' : 'mr-0'}`}>
+            <div className="flex-1 relative flex flex-col overflow-hidden bg-white text-[#0D0D0D]">
+                {/* Main Content */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-6">
                     {isLoading(meetingState.state) ? (
-                        <div className="h-full flex flex-col items-center justify-center gap-6">
+                        <div className="flex h-full flex-col items-center justify-center gap-6">
                             <div className="relative">
-                                <div className="absolute inset-0 bg-emerald-500/20 blur-[64px] rounded-full animate-pulse" />
-                                <Loader2 size={64} className="text-emerald-500 animate-spin relative" />
+                                <div className="absolute inset-0 rounded-full bg-black/5 blur-[64px] animate-pulse" />
+                                <Loader2 size={64} className="relative animate-spin text-[#0D0D0D]" />
                             </div>
-                            <p className="text-zinc-500 font-black uppercase tracking-[0.4em] text-[12px] animate-pulse">Synchronizing Neural Stream</p>
+                            <p className="text-[12px] font-semibold uppercase tracking-[0.35em] text-[#6E6E80] animate-pulse">Synchronizing meeting</p>
                         </div>
                     ) : meetingState.state === MeetingState.ERROR ? (
-                        <div className="h-full flex flex-col items-center justify-center">
-                            <div className="h-20 w-20 bg-rose-500/10 rounded-3xl flex items-center justify-center text-rose-500 mb-8 border border-rose-500/20">
+                        <div className="flex h-full flex-col items-center justify-center">
+                            <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]">
                                 <AlertCircle size={40} />
                             </div>
-                            <p className="text-white text-3xl font-black tracking-tighter mb-4 uppercase">Neural Link Failure</p>
-                            <p className="text-zinc-500 text-sm mb-10 max-w-md text-center font-medium leading-relaxed">{meetingState.error}</p>
+                            <p className="mb-4 text-3xl font-semibold tracking-tighter text-[#0D0D0D]">Meeting unavailable</p>
+                            <p className="mb-10 max-w-md text-center text-sm font-medium leading-relaxed text-[#6E6E80]">{meetingState.error}</p>
                             <Button
                                 onClick={onLeave}
-                                className="h-14 px-10 bg-white text-black font-black uppercase tracking-widest text-xs rounded-2xl hover:scale-105 transition-all shadow-2xl"
+                                className="h-14 rounded-[6px] px-10 font-semibold uppercase tracking-widest text-xs"
                             >
-                                Re-initiate Command
+                                Return
                             </Button>
                         </div>
                     ) : isInMeeting(meetingState.state) ? (
-                        <div className={`grid gap-6 h-full ${participantIds.length === 1 ? 'grid-cols-1' :
+                        <div className={`grid gap-6 ${participantIds.length === 1 ? 'grid-cols-1' :
                             participantIds.length === 2 ? 'grid-cols-2' :
                                 participantIds.length <= 4 ? 'grid-cols-2' :
                                     participantIds.length <= 6 ? 'grid-cols-3' :
@@ -201,14 +209,19 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
                             ))}
                         </div>
                     ) : null}
-                </div>
 
-                {/* Collaborative Notepad Overlay */}
-                <MeetingNotepad
-                    meetingId={meetingId}
-                    isOpen={isNotepadOpen}
-                    onClose={() => setIsNotepadOpen(false)}
-                />
+                    <div className="mt-6 space-y-3">
+                        <button
+                            onClick={() => setIsNotepadOpen((v) => !v)}
+                            className="inline-flex items-center gap-2 rounded-[6px] border border-[#E5E5E5] bg-white px-3 py-2 text-sm font-medium text-[#0D0D0D] hover:bg-[#F7F7F8] md:hidden"
+                        >
+                            Notes
+                        </button>
+                        {isNotepadOpen && (
+                            <MeetingNotepad meetingId={meetingId} readOnly={false} />
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Bottom Controls */}
@@ -230,10 +243,10 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
 
             {/* End Meeting Confirmation Modal */}
             {showEndConfirm && (
-                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-500">
-                    <GlassCard className="max-w-md w-full p-12 border-rose-500/20 bg-zinc-950 rounded-[48px] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.9)]">
-                        <Heading level={2} className="text-3xl font-black text-white mb-3 tracking-tighter uppercase">Terminate Session?</Heading>
-                        <Text className="text-zinc-500 mb-10 font-medium leading-relaxed">This action will disconnect all personnel and archive the neural stream metadata.</Text>
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/30 p-4">
+                    <GlassCard className="w-full max-w-md rounded-[8px] border border-[#E5E5E5] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.06)] md:p-8">
+                        <Heading level={2} className="mb-3 text-2xl font-semibold tracking-tight text-[#0D0D0D]">Terminate Session?</Heading>
+                        <Text className="mb-8 font-medium leading-relaxed text-[#6E6E80]">This action will disconnect all participants and archive the meeting.</Text>
                         
                         <div className="grid grid-cols-2 gap-3 mb-8">
                             {[
@@ -245,10 +258,10 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
                                 <button
                                     key={opt.id}
                                     onClick={() => setEndOutcome(opt.id)}
-                                    className={`px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                                    className={`px-4 py-3 rounded-[6px] border text-xs font-medium uppercase tracking-widest transition-all ${
                                         endOutcome === opt.id
-                                            ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-lg shadow-emerald-500/5'
-                                            : 'bg-zinc-900/50 border-white/5 text-zinc-600 hover:border-white/10'
+                                            ? 'bg-[#F7F7F8] border-[#0D0D0D] text-[#0D0D0D]'
+                                            : 'bg-white border-[#E5E5E5] text-[#6E6E80] hover:bg-[#F7F7F8]'
                                     }`}
                                 >
                                     {opt.label}
@@ -261,21 +274,21 @@ const MeetingRoomContent: React.FC<{ meetingId: string; roomUrl?: string | null;
                             onChange={e => setEndNotes(e.target.value)}
                             placeholder="Executive outcome summary..."
                             disabled={isEnding}
-                            className="w-full bg-zinc-900 border border-white/5 rounded-3xl px-6 py-4 text-sm text-white mb-10 outline-none focus:border-emerald-500/50 transition-all min-h-[120px] resize-none"
+                            className="mb-8 min-h-[120px] w-full resize-none rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-3 text-sm text-[#0D0D0D] outline-none transition-all placeholder:text-[#6E6E80] focus:border-[#0D0D0D]"
                         />
                         
                         <div className="flex gap-4">
                             <button
                                 onClick={() => setShowEndConfirm(false)}
                                 disabled={isEnding}
-                                className="flex-1 h-14 rounded-2xl bg-zinc-900 text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-zinc-800 transition-all"
+                                className="flex-1 rounded-[6px] border border-[#E5E5E5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0D0D0D] transition-all hover:bg-[#F7F7F8]"
                             >
                                 Abort
                             </button>
                             <button
                                 onClick={handleEndMeeting}
                                 disabled={isEnding}
-                                className="flex-1 h-14 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-2xl shadow-rose-600/20"
+                                className="flex-1 rounded-[6px] bg-black px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-white transition-all hover:bg-[#1A1A1A]"
                             >
                                 {isEnding ? 'Terminating...' : 'Confirm Exit'}
                             </button>

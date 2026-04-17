@@ -71,8 +71,8 @@ export const SignupForm = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
-            <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-2xl shadow-xl border border-gray-100">
+        <div className="min-h-screen flex items-center justify-center bg-[#FFFFFF] py-12 px-4 sm:px-6 lg:px-8 font-sans">
+            <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-[8px] border border-[#E5E5E5] shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                 <div>
                     <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 tracking-tight">
                         {inviteToken ? 'Complete Registration' : 'Create your account'}
@@ -141,7 +141,7 @@ export const SignupForm = () => {
                         <Button
                             type="submit"
                             variant="primary"
-                            className="w-full flex justify-center py-4 px-4 border border-transparent rounded-xl shadow-lg text-sm font-black uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all active:scale-95"
+                        className="w-full flex justify-center py-4 px-4 border border-transparent rounded-[6px] text-sm font-semibold uppercase tracking-widest text-white bg-black hover:bg-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black transition-all active:scale-95"
                             disabled={loading}
                         >
                             {loading ? (inviteToken ? 'Configuring Access...' : 'Creating account...') : (inviteToken ? 'Accept & Complete' : 'Create Account')}

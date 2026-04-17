@@ -53,14 +53,14 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClos
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-md bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 animate-in fade-in duration-200">
+            <div className="w-full max-w-md bg-white border border-[#E5E5E5] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.06)] overflow-hidden animate-in zoom-in-95 duration-200">
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-zinc-100 dark:border-zinc-800">
-                    <h3 className="text-lg font-bold text-black tracking-tight">Upload Document</h3>
+                <div className="flex items-center justify-between p-4 border-b border-[#E5E5E5]">
+                    <h3 className="text-lg font-semibold text-[#0D0D0D] tracking-tight">Upload Document</h3>
                     <button
                         onClick={onClose}
-                        className="p-1 bg-black text-white hover:bg-zinc-800 rounded-full transition-all shadow-md"
+                        className="p-1 bg-black text-white hover:bg-[#1A1A1A] rounded-full transition-all"
                     >
                         <X size={18} strokeWidth={2.5} />
                     </button>
@@ -75,8 +75,8 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClos
                         onDrop={handleDrop}
                         className={`
                             relative flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-xl transition-all duration-200
-                            ${dragActive ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-900' : 'border-zinc-200 dark:border-zinc-800 hover:border-black dark:hover:border-white bg-white dark:bg-black'}
-                            ${file ? 'border-emerald-500/50 bg-emerald-500/5' : ''}
+                            ${dragActive ? 'border-black bg-[#F7F7F8]' : 'border-[#E5E5E5] hover:border-black bg-white'}
+                            ${file ? 'border-[#E5E5E5] bg-[#F7F7F8]' : ''}
                         `}
                     >
                         <input
@@ -88,13 +88,13 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClos
 
                         {!file ? (
                             <>
-                                <div className="p-3 bg-black text-white rounded-2xl mb-4 shadow-lg shadow-black/20">
+                                <div className="p-3 bg-black text-white rounded-[8px] mb-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                                     <Upload size={32} strokeWidth={2.5} />
                                 </div>
                                 <p className="text-sm text-zinc-600 dark:text-zinc-400 text-center mb-1">
                                     <button
                                         onClick={() => inputRef.current?.click()}
-                                        className="text-black dark:text-white font-semibold underline hover:no-underline transition-colors"
+                                        className="text-[#0D0D0D] font-semibold underline hover:no-underline transition-colors"
                                     >
                                         Click to upload
                                     </button> or drag and drop
@@ -103,10 +103,10 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClos
                             </>
                         ) : (
                             <div className="flex flex-col items-center animate-in scale-in-90">
-                                <div className="p-4 bg-black text-white rounded-2xl mb-3 shadow-lg shadow-black/10">
+                                <div className="p-4 bg-black text-white rounded-[8px] mb-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                                     <File size={40} strokeWidth={2.5} />
                                 </div>
-                                <p className="text-sm font-medium text-black dark:text-white text-center truncate max-w-[200px]">
+                                <p className="text-sm font-medium text-[#0D0D0D] text-center truncate max-w-[200px]">
                                     {file.name}
                                 </p>
                                 <p className="text-xs text-zinc-500">
@@ -141,7 +141,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClos
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-3">
+                <div className="p-4 bg-[#F7F7F8] border-t border-[#E5E5E5] flex justify-end gap-3">
                     <button
                         onClick={onClose}
                         disabled={loading}
@@ -152,7 +152,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({ isOpen, onClos
                     <button
                         onClick={handleSubmit}
                         disabled={!file || loading}
-                        className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium rounded-lg transition-all shadow-lg flex items-center gap-2"
+                        className="px-6 py-2 bg-black text-white hover:bg-[#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium rounded-[6px] transition-all flex items-center gap-2"
                     >
                         {loading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                         {loading ? `Uploading… ${uploadProgress ?? 0}%` : 'Send File'}

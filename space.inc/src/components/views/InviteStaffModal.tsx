@@ -138,13 +138,13 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
     // ── Success state ──────────────────────────────────────────────────────
     if (sent) {
         return (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                <GlassCard className="max-w-md w-full p-10 text-center relative">
-                    <div className="h-16 w-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <Rocket className="text-emerald-500" size={32} />
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/30">
+                <GlassCard className="max-w-md w-full p-10 text-center relative border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+                    <div className="h-16 w-16 bg-[#F7F7F8] rounded-full flex items-center justify-center mx-auto mb-6 border border-[#E5E5E5]">
+                        <Rocket className="text-[#0D0D0D]" size={32} />
                     </div>
-                    <Heading level={3} className="mb-2 text-zinc-900">Invite Created!</Heading>
-                    <p className="text-zinc-500 mb-6 font-light">
+                    <Heading level={3} className="mb-2 text-[#0D0D0D]">Invite Created!</Heading>
+                    <p className="text-[#6E6E80] mb-6 font-light">
                         Staff invite generated for <strong>{sentEmail}</strong>. Share the link below manually.
                     </p>
                     
@@ -154,7 +154,7 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                                 readOnly 
                                 title="Invitation Link"
                                 value={inviteLink} 
-                                className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-2.5 text-xs font-mono text-zinc-600 focus:outline-none"
+                                className="flex-1 bg-[#F7F7F8] border border-[#E5E5E5] rounded-[6px] px-4 py-2.5 text-xs font-mono text-[#6E6E80] focus:outline-none"
                             />
                             <Button 
                                 variant={copied ? "primary" : "outline"}
@@ -165,7 +165,7 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                                 {copied ? 'Copied!' : 'Copy'}
                             </Button>
                         </div>
-                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest bg-zinc-50 py-1.5 rounded-full inline-block px-4 border border-zinc-100 italic">
+                        <p className="text-[10px] text-[#6E6E80] font-bold uppercase tracking-widest bg-[#F7F7F8] py-1.5 rounded-full inline-block px-4 border border-[#E5E5E5] italic">
                             Expires {expiryDate}
                         </p>
                     </div>
@@ -178,17 +178,17 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
 
     // ── Form state ─────────────────────────────────────────────────────────
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-            <GlassCard className="max-w-2xl w-full p-8 relative max-h-[90vh] overflow-y-auto">
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/30">
+            <GlassCard className="max-w-2xl w-full p-8 relative max-h-[90vh] overflow-y-auto border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                 <button
                     title="Close"
                     onClick={onClose}
-                    className="absolute right-4 top-4 p-2 text-zinc-400 hover:text-zinc-900 rounded-full hover:bg-zinc-100 transition-colors"
+                    className="absolute right-4 top-4 p-2 text-[#6E6E80] hover:text-[#0D0D0D] rounded-full hover:bg-[#F7F7F8] transition-colors"
                 >
                     <X size={18} />
                 </button>
 
-                <Heading level={2} className="mb-6 text-zinc-900">Invite Team Member</Heading>
+                <Heading level={2} className="mb-6 text-[#0D0D0D]">Invite Team Member</Heading>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

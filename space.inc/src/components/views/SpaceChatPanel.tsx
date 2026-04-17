@@ -88,9 +88,9 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
             {/* Messages Area */}
             <div className="flex-1 flex flex-col min-h-0">
                 <div className={`flex-1 overflow-y-auto p-6 space-y-4 bg-white ${showInternal ? 'border-b border-[#D1D5DB]' : ''}`}>
-                    <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm py-2 mb-4 border-b border-zinc-100 flex items-center gap-2">
-                        <MessageSquare size={14} className="text-[#10A37F]" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Client Chat</span>
+                    <div className="sticky top-0 z-10 bg-white py-2 mb-4 border-b border-[#E5E5E5] flex items-center gap-2">
+                        <MessageSquare size={14} className="text-[#0D0D0D]" />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">Client Chat</span>
                     </div>
                     {loading ? (
                         <div className="flex items-center justify-center py-10 text-zinc-400">
@@ -111,10 +111,10 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
                 </div>
 
                 {showInternal && (
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-amber-50/30">
-                        <div className="sticky top-0 z-10 bg-amber-50/80 backdrop-blur-sm py-2 mb-4 border-b border-amber-100 flex items-center gap-2">
-                            <Shield size={14} className="text-amber-600" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Internal (Staff Only)</span>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#F7F7F8]">
+                        <div className="sticky top-0 z-10 bg-white py-2 mb-4 border-b border-[#E5E5E5] flex items-center gap-2">
+                            <Shield size={14} className="text-[#0D0D0D]" />
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">Internal (Staff Only)</span>
                         </div>
                         {messages.filter(m => m.channel === 'internal').map(msg => (
                             <MessageItem
@@ -160,12 +160,12 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
 
                 {/* Internal Chat Input */}
                 {showInternal && (
-                    <div className="p-4 bg-amber-50/50 flex items-center gap-3">
-                        <div className="h-10 w-10 flex items-center justify-center text-amber-600">
+                    <div className="p-4 bg-[#F7F7F8] flex items-center gap-3">
+                        <div className="h-10 w-10 flex items-center justify-center text-[#0D0D0D]">
                             <Shield size={20} />
                         </div>
                         <input
-                            className="flex-1 border border-amber-200 bg-white rounded-md px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 placeholder-amber-400 text-amber-900"
+                            className="flex-1 border border-[#E5E5E5] bg-white rounded-md px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-black placeholder:text-[#6E6E80] text-[#0D0D0D]"
                             placeholder="Add an internal staff note..."
                             value={internalMessageInput}
                             onChange={(e) => setInternalMessageInput(e.target.value)}
@@ -176,7 +176,7 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
                             title="Send Internal Note"
                             onClick={() => handleSend('internal')}
                             disabled={sending || !internalMessageInput.trim()}
-                            className="h-10 w-10 rounded-md flex items-center justify-center bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
+                            className="h-10 w-10 rounded-md flex items-center justify-center bg-black hover:bg-[#1A1A1A] text-white disabled:opacity-50"
                         >
                             <ArrowRight size={18} />
                         </button>

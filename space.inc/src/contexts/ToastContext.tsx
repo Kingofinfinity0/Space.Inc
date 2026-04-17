@@ -53,13 +53,13 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: () => void }> = ({ toast, on
         switch (toast.type) {
             case 'success': return <CheckCircle className="text-emerald-500" size={18} />;
             case 'error': return <AlertCircle className="text-rose-500" size={18} />;
-            case 'loading': return <Loader2 className="text-blue-500 animate-spin" size={18} />;
-            default: return <Info className="text-blue-500" size={18} />;
+            case 'loading': return <Loader2 className="text-[#0D0D0D] animate-spin" size={18} />;
+            default: return <Info className="text-[#0D0D0D]" size={18} />;
         }
     };
 
     return (
-        <div className="toast-item pointer-events-auto flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-md border border-zinc-200 shadow-xl rounded-xl min-w-[300px] max-w-[400px] animate-slide-in">
+            <div className="toast-item pointer-events-auto flex items-center gap-3 px-4 py-3 bg-white border border-[#E5E5E5] shadow-[0_1px_3px_rgba(0,0,0,0.06)] rounded-[8px] min-w-[300px] max-w-[400px] animate-slide-in">
             <div className="flex-shrink-0">
                 {getIcon()}
             </div>

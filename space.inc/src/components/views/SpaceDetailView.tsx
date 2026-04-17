@@ -660,7 +660,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                 <Button
                     variant={isEnded ? 'outline' : 'primary'}
                     size="sm"
-                    className={`flex-1 ${isEnded ? 'text-purple-600 border-purple-200 hover:bg-purple-50' : ''}`}
+                    className={`flex-1 ${isEnded ? 'text-[#0D0D0D] border-[#E5E5E5] hover:bg-[#F7F7F8]' : ''}`}
                     onClick={() => !isEnded ? onJoin(m.id) : navigate(`/spaces/${spaceId}/meetings/${m.id}/review`)}
                 >
                     {isEnded ? '📋 Review Details' : 'Enter Lobby'}
@@ -669,7 +669,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     <Button
                         variant="outline"
                         size="sm"
-                        className="text-rose-600 border-rose-200 hover:bg-rose-50 px-3"
+                        className="text-[#0D0D0D] border-[#E5E5E5] hover:bg-[#F7F7F8] px-3"
                         onClick={() => {
                             setEndOutcome('successful');
                             setEndNotes('');
@@ -883,8 +883,8 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                     {!showTrash && file.status && file.status !== 'available' && (
                                                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
                                                             file.status === 'pending'
-                                                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                                ? 'bg-[#F7F7F8] text-[#6E6E80] border border-[#E5E5E5]'
+                                                                : 'bg-[#F7F7F8] text-[#6E6E80] border border-[#E5E5E5]'
                                                         }`}>
                                                             {file.status === 'pending' ? 'Uploading' : 'Processing'}
                                                         </span>
@@ -921,7 +921,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#6E6E80] shadow-sm transition-all hover:border-[#E5E5E5] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
                                                         onClick={() => setVersioningFile(file as any)}
                                                         title="Version History"
                                                         aria-label={`View version history for ${file.name}`}
@@ -941,7 +941,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                                  }
                                                             }
                                                         }}
-                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#6E6E80] shadow-sm transition-all hover:border-[#E5E5E5] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
                                                         title="Move to trash"
                                                         aria-label={`Move ${file.name} to trash`}
                                                     >

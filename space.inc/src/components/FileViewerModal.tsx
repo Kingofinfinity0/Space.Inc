@@ -44,7 +44,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ fileId, filena
     const isWord = mimeType === 'application/msword' || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || filename.endsWith('.doc') || filename.endsWith('.docx');
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 animate-[fadeIn_0.2s_ease-out]">
             <div className="bg-white dark:bg-zinc-900 w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-zinc-200 dark:border-zinc-800">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
@@ -92,7 +92,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({ fileId, filena
                     {!loading && !error && url && (
                         <>
                             {isImage && (
-                                <img src={url} alt={filename} className="max-w-full max-h-full object-contain p-4 shadow-lg rounded-md" />
+                        <img src={url} alt={filename} className="max-w-full max-h-full object-contain p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] rounded-[8px]" />
                             )}
                             {isPdf && (
                                 <iframe src={url} className="w-full h-full" title={filename} />

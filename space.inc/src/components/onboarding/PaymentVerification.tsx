@@ -76,7 +76,7 @@ export const PaymentVerification: React.FC = () => {
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
         <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
           <div className="flex flex-col items-center space-y-4">
-            <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+                        <Loader2 className="w-12 h-12 text-[#0D0D0D] animate-spin" />
             <h1 className="text-2xl font-bold text-gray-900">Verifying Your Payment</h1>
             <p className="text-gray-600 text-center">
               Please wait while we verify your payment details. This may take a moment...

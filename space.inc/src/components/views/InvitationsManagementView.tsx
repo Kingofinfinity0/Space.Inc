@@ -123,7 +123,7 @@ export const InvitationsManagementView: React.FC = () => {
                 <Button variant="outline" size="sm" onClick={fetchInvitations}><Clock size={16} className="mr-2" /> Refresh</Button>
             </div>
 
-            <GlassCard className="overflow-hidden border-zinc-200 shadow-xl">
+            <GlassCard className="overflow-hidden border-[#E5E5E5] shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
@@ -189,7 +189,7 @@ export const InvitationsManagementView: React.FC = () => {
                                                     <button 
                                                         title="Edit Email"
                                                         onClick={() => handleEditEmail(invite)}
-                                                        className="p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                                                    className="p-1.5 text-[#6E6E80] hover:text-[#0D0D0D] hover:bg-[#F7F7F8] rounded-lg transition-all"
                                                     >
                                                         <Edit2 size={16} />
                                                     </button>

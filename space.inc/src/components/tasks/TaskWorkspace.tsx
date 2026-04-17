@@ -62,7 +62,7 @@ const BOARD_COLUMNS: Array<{ id: Task['status']; label: string }> = [
 
 const PRIORITY_STYLES: Record<NonNullable<Task['priority']>, string> = {
     low: 'border-zinc-200 bg-zinc-100 text-zinc-600',
-    medium: 'border-blue-200 bg-blue-50 text-blue-700',
+        medium: 'border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]',
     high: 'border-orange-200 bg-orange-50 text-orange-700',
     urgent: 'border-rose-200 bg-rose-50 text-rose-700'
 };

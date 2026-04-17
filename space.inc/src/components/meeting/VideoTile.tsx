@@ -54,7 +54,7 @@ export const VideoTile: React.FC<VideoTileProps> = ({
     const displayName = isLocal ? 'You' : userName || 'Guest';
 
     return (
-        <div className="relative bg-zinc-900 rounded-2xl overflow-hidden border border-white/10 aspect-video">
+        <div className="relative overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white aspect-video">
             {/* Video Element */}
             {videoTrack ? (
                 <video
@@ -66,8 +66,8 @@ export const VideoTile: React.FC<VideoTileProps> = ({
                 />
             ) : (
                 // Show avatar if no video
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
-                    <div className="h-20 w-20 rounded-full bg-white/10 flex items-center justify-center text-white">
+                <div className="w-full h-full flex items-center justify-center bg-[#F7F7F8]">
+                    <div className="h-20 w-20 rounded-[8px] border border-[#E5E5E5] bg-white flex items-center justify-center text-[#0D0D0D]">
                         <User size={40} />
                     </div>
                 </div>
@@ -79,15 +79,15 @@ export const VideoTile: React.FC<VideoTileProps> = ({
             )}
 
             {/* Name Label */}
-            <div className="absolute bottom-3 left-3 px-3 py-1.5 bg-black/60 backdrop-blur-sm rounded-full text-white text-sm font-medium flex items-center gap-2">
-                {isAudioOff && <MicOff size={14} className="text-rose-400" />}
-                {!isAudioOff && <Mic size={14} className="text-emerald-400" />}
+            <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-sm font-medium text-[#0D0D0D]">
+                {isAudioOff && <MicOff size={14} className="text-[#6E6E80]" />}
+                {!isAudioOff && <Mic size={14} className="text-[#0D0D0D]" />}
                 {displayName}
             </div>
 
             {/* Local Indicator */}
             {isLocal && (
-                <div className="absolute top-3 right-3 px-2 py-1 bg-emerald-500/80 rounded-full text-white text-xs font-bold">
+                <div className="absolute top-3 right-3 rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-2 py-1 text-xs font-semibold text-[#0D0D0D]">
                     YOU
                 </div>
             )}
