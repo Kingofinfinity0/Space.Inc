@@ -1,0 +1,12 @@
+<<<<<<< SEARCH
+  const [activeContext, setActiveContext] = useState<UserContext | null>(null);
+=======
+  const [activeContext, _setActiveContext] = useState<UserContext | null>(null);
+
+  const setActiveContext = (context: UserContext | null) => {
+    _setActiveContext(context);
+    if (context) {
+      setUserRole(context.context_role);
+    }
+  };
+>>>>>>> REPLACE

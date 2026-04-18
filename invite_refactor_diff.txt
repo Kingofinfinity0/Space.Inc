@@ -1,0 +1,134 @@
+<<<<<<< SEARCH
+    // Store token immediately on page load (before any redirect can happen)
+    useEffect(() => {
+        if (token) {
+            localStorage.setItem('pending_space_token', token);
+        }
+    }, [token]);
+
+    // Resolve the token on mount
+    useEffect(() => {
+        if (!token) {
+            setPageStatus('invalid');
+            setErrorMsg('No invitation token in URL.');
+            return;
+        }
+
+        const resolveToken = async () => {
+            try {
+                const data = await inviteService.resolveSpaceToken(token);
+                setInviteData(data);
+
+                if (data.valid) {
+                    setPageStatus('valid');
+                } else {
+                    setPageStatus('invalid');
+                    setErrorMsg(getErrorMessage(data.error_code || 'INVALID_TOKEN'));
+                }
+            } catch (err: any) {
+                console.error('Error resolving token:', err);
+                setPageStatus('invalid');
+                setErrorMsg('Failed to verify invitation. Please try again.');
+            }
+        };
+
+        resolveToken();
+    }, [token]);
+=======
+    // Store token immediately on page load (before any redirect can happen)
+    useEffect(() => {
+        if (token) {
+            sessionStorage.setItem('pending_invite_token', token);
+        }
+    }, [token]);
+
+    // Resolve the token on mount
+    useEffect(() => {
+        if (!token) {
+            setPageStatus('invalid');
+            setErrorMsg('No invitation token in URL.');
+            return;
+        }
+
+        const resolveToken = async () => {
+            try {
+                const data = await apiService.resolveSpaceInviteToken(token);
+                setInviteData(data);
+
+                if (data.valid) {
+                    setPageStatus('valid');
+                } else {
+                    setPageStatus('invalid');
+                    setErrorMsg(getErrorMessage(data.error_code || 'INVALID_TOKEN'));
+                }
+            } catch (err: any) {
+                console.error('Error resolving token:', err);
+                setPageStatus('invalid');
+                setErrorMsg('Failed to verify invitation. Please try again.');
+            }
+        };
+
+        resolveToken();
+    }, [token]);
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+    const handleJoinClick = async () => {
+        if (!token || !session?.access_token) {
+            setErrorMsg('Authentication required to join.');
+            return;
+        }
+
+        setPageStatus('authing');
+        setErrorMsg('');
+
+        try {
+            const result = await inviteService.acceptSpaceInvite(token, session.access_token);
+
+            if (result.success && result.data) {
+                setPageStatus('done');
+                showToast('Successfully joined the space!', 'success');
+
+                // Navigate to the correct redirect path
+                setTimeout(() => {
+                    navigate(result.data!.redirect_path);
+                }, 1000);
+            } else {
+                setPageStatus('valid');
+                setErrorMsg(getErrorMessage(result.error_code || 'INVALID_TOKEN'));
+            }
+        } catch (err: any) {
+            console.error('Error accepting invite:', err);
+            setPageStatus('valid');
+            setErrorMsg('Failed to join space. Please try again.');
+        }
+    };
+=======
+    const [onboardingInfo, setOnboardingInfo] = useState({ name: '', company: '' });
+    const [showOnboarding, setShowOnboarding] = useState(false);
+
+    const handleJoinClick = () => {
+        if (!user) {
+            handleAuthClick();
+            return;
+        }
+        setShowOnboarding(true);
+    };
+
+    const handleAcceptInvite = async () => {
+        if (!token || !onboardingInfo.name) return;
+
+        setPageStatus('authing');
+        try {
+            const result = await apiService.acceptSpaceInvite(token, onboardingInfo.name, onboardingInfo.company);
+            if (result.success) {
+                setPageStatus('done');
+                showToast('Successfully joined!', 'success');
+                sessionStorage.removeItem('pending_invite_token');
+                setTimeout(() => navigate(result.redirect_path || '/'), 1000);
+            }
+        } catch (err: any) {
+            setPageStatus('valid');
+            showToast('Failed to join space.', 'error');
+        }
+    };
+>>>>>>> REPLACE

@@ -1,0 +1,49 @@
+<<<<<<< SEARCH
+      if (data) {
+        setCapabilityCache(data);
+        setUserRole(data.role);
+        setOrganizationId(data.org_id);
+=======
+      if (data) {
+        setCapabilityCache(data);
+        // Sync userRole with activeContext if available
+        if (activeContext) {
+          setUserRole(activeContext.context_role);
+        } else {
+          setUserRole(data.role);
+        }
+        setOrganizationId(data.org_id);
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+  const refreshContexts = async () => {
+    try {
+      const response = await apiService.getMyContexts();
+      setContexts(response);
+
+      // Auto-select context if applicable
+      if (response.routing === 'auto_org' && response.org_contexts.length === 1) {
+        setActiveContext(response.org_contexts[0]);
+      } else if (response.routing === 'auto_client' && response.client_contexts.length === 1) {
+        setActiveContext(response.client_contexts[0]);
+      }
+      return response;
+    } catch (err) {
+=======
+  const refreshContexts = async () => {
+    try {
+      const response = await apiService.getMyContexts();
+      setContexts(response);
+
+      // Auto-select context if applicable
+      if (response.routing === 'auto_org' && response.org_contexts.length === 1) {
+        const ctx = response.org_contexts[0];
+        setActiveContext(ctx);
+        setUserRole(ctx.context_role);
+      } else if (response.routing === 'auto_client' && response.client_contexts.length === 1) {
+        const ctx = response.client_contexts[0];
+        setActiveContext(ctx);
+        setUserRole(ctx.context_role);
+      }
+      return response;
+    } catch (err) {
+>>>>>>> REPLACE

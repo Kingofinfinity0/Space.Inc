@@ -33,7 +33,7 @@ export default function AcceptInviteView() {
     const { user, session } = useAuth();
     const { showToast } = useToast();
     
-    const token = searchParams.get('token');
+    const token = new URLSearchParams(window.location.search).get('token');
     
     const [status, setStatus] = useState<PageStatus>('loading');
     const [inviteData, setInviteData] = useState<ValidateInvitationContextResult | null>(null);
