@@ -148,16 +148,17 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     }, [spaceId, organizationId]);
 
     const handleRegenerateSpaceInvite = async () => {
-        if (!spaceId || !session?.access_token) return;
+        if (!spaceId) return;
         if (!window.confirm("Are you sure? This will immediately invalidate the existing link and all clients using it will need the new one.")) return;
         
         try {
             setInviteLoading(true);
-            const result = await inviteService.regenerateSpaceLink(spaceId, session.access_token);
+            const data = await apiService.regenerateSpaceInviteLink(spaceId);
             
-            if (result.success && result.data?.invitation_url) {
-                setSpaceInviteUrl(result.data.invitation_url);
-                showToast("Space invite link regenerated successfully.", "success");
+            // The RPC returns { success, token, invite_url } as per guide Section 7
+            if (data && data.success) {
+                setSpaceInviteUrl(data.invite_url || `${window.location.origin}/join/${data.token}`);
+                showToast("Invite link regenerated. The old link is now invalid.", "success");
             } else {
                 throw new Error('Failed to regenerate invite link');
             }

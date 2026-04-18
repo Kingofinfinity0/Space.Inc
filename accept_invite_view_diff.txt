@@ -1,0 +1,5 @@
+<<<<<<< SEARCH
+    const token = searchParams.get('token');
+=======
+    const token = new URLSearchParams(window.location.search).get('token');
+>>>>>>> REPLACE

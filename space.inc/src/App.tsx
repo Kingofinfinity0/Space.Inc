@@ -67,6 +67,7 @@ import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import JoinView from './components/views/JoinView';
 import AcceptInviteView from './components/views/AcceptInviteView';
 import ClientSpaceRoute from './components/views/ClientSpaceRoute';
+import { ContextSwitcher } from './components/auth/ContextSwitcher';
 import { supabase as _supabase } from './lib/supabase';
 
 const ErrorView = ({ message }: { message: string }) => (
@@ -744,6 +745,8 @@ const App = () => {
         },
     ].filter((item) => item.allowed);
 
+    const { contexts, activeContext } = useAuth();
+
     return (
         <Routes>
             <Route path="/join/:token" element={<JoinView />} />
@@ -752,17 +755,11 @@ const App = () => {
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/spaces/:spaceId/meetings/:meetingId/review" element={<MeetingReviewPage />} />
 
-            {/* ── Client-only route ─────────────────────────────────────────
-                Locked: ClientSpaceRoute enforces role === 'client' internally.
-                Staff/owner/admin hitting this URL are redirected back to /.
-            ─────────────────────────────────────────────────────────────── */}
-            <Route path="/spaces/:spaceId" element={<ClientSpaceRoute />} />
-            <Route path="/spaces/pending" element={<ClientSpaceRoute />} />
             <Route path="/dashboard" element={
                 (() => {
-                    if (!isAuthenticated) {
-                        return <LoginPage />;
-                    }
+                    if (!isAuthenticated) return <LoginPage />;
+                    if (contexts?.routing === 'switcher' && !activeContext) return <ContextSwitcher />;
+                    if (activeContext?.context_type === 'client_space') return <Navigate to={`/spaces/${activeContext.context_id}`} replace />;
 
                     if (userRole === 'client') {
                         // ── Client dashboard ──────────────────────────────────

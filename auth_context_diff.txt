@@ -1,0 +1,236 @@
+<<<<<<< SEARCH
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase, onAuthStateChange, EDGE_FUNCTION_BASE_URL } from '../lib/supabase';
+import { apiService } from '../services/apiService';
+import { inviteService } from '../services/inviteService';
+=======
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase, onAuthStateChange, EDGE_FUNCTION_BASE_URL } from '../lib/supabase';
+import { apiService } from '../services/apiService';
+import { inviteService } from '../services/inviteService';
+import { UserContext, ContextsResponse } from '../types/context';
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [capabilities, setCapabilities] = useState<string[]>([]);
+  const [capabilityCache, setCapabilityCache] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+=======
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [capabilities, setCapabilities] = useState<string[]>([]);
+  const [capabilityCache, setCapabilityCache] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+
+  // Multi-context state
+  const [contexts, setContexts] = useState<ContextsResponse | null>(null);
+  const [activeContext, setActiveContext] = useState<UserContext | null>(null);
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+  const fetchProfile = async (uid: string) => {
+    if (
+      profileCacheRef.current[uid] &&
+      Date.now() - (profileCacheRef.current[uid]._fetchedAt || 0) < 30000
+    ) {
+      console.log(`[AuthContext] Profile for ${uid} already cached, skipping fetch`);
+      setProfile(profileCacheRef.current[uid]);
+      return;
+    }
+
+    try {
+      console.log(`[AuthContext] Fetching profile for ${uid}...`);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', uid)
+        .single();
+
+      if (error) throw error;
+      setProfile(data);
+      profileCacheRef.current[uid] = data;
+    } catch (err) {
+      console.warn('Error syncing context:', err);
+      setProfile(null);
+    }
+  };
+=======
+  const fetchProfile = async (uid: string) => {
+    if (
+      profileCacheRef.current[uid] &&
+      Date.now() - (profileCacheRef.current[uid]._fetchedAt || 0) < 30000
+    ) {
+      console.log(`[AuthContext] Profile for ${uid} already cached, skipping fetch`);
+      setProfile(profileCacheRef.current[uid]);
+      return;
+    }
+
+    try {
+      console.log(`[AuthContext] Fetching profile for ${uid}...`);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', uid)
+        .single();
+
+      if (error) throw error;
+      setProfile(data);
+      profileCacheRef.current[uid] = data;
+    } catch (err) {
+      console.warn('Error syncing profile:', err);
+      setProfile(null);
+    }
+  };
+
+  const refreshContexts = async () => {
+    try {
+      const response = await apiService.getMyContexts();
+      setContexts(response);
+
+      // Auto-select context if applicable
+      if (response.routing === 'auto_org' && response.org_contexts.length === 1) {
+        setActiveContext(response.org_contexts[0]);
+      } else if (response.routing === 'auto_client' && response.client_contexts.length === 1) {
+        setActiveContext(response.client_contexts[0]);
+      }
+      return response;
+    } catch (err) {
+      console.error('[AuthContext] Error fetching contexts:', err);
+      return null;
+    }
+  };
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const { data: { session: supSession } } = await supabase.auth.getSession();
+        if (supSession) {
+          setUser(supSession.user);
+          setSession(supSession);
+          await Promise.all([
+            fetchProfile(supSession.user.id),
+            refreshCapabilities()
+          ]);
+        }
+      } catch (e) {
+        console.error("Auth init failed", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
+=======
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const { data: { session: supSession } } = await supabase.auth.getSession();
+        if (supSession) {
+          setUser(supSession.user);
+          setSession(supSession);
+          await Promise.all([
+            fetchProfile(supSession.user.id),
+            refreshContexts(),
+            refreshCapabilities()
+          ]);
+        }
+      } catch (e) {
+        console.error("Auth init failed", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+          try {
+            await Promise.all([
+              fetchProfile(currentSession.user.id),
+              refreshCapabilities()
+            ]);
+          } catch (e) {
+            console.error('[AuthContext] Post-auth data fetch failed:', e);
+          } finally {
+            setLoading(false);
+          }
+=======
+          try {
+            await Promise.all([
+              fetchProfile(currentSession.user.id),
+              refreshContexts(),
+              refreshCapabilities()
+            ]);
+          } catch (e) {
+            console.error('[AuthContext] Post-auth data fetch failed:', e);
+          } finally {
+            setLoading(false);
+          }
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        setUser(null);
+        setSession(null);
+        setProfile(null);
+        setCapabilities([]);
+        setCapabilityCache(null);
+        setUserRole(null);
+        setOrganizationId(null);
+=======
+        setUser(null);
+        setSession(null);
+        setProfile(null);
+        setContexts(null);
+        setActiveContext(null);
+        setCapabilities([]);
+        setCapabilityCache(null);
+        setUserRole(null);
+        setOrganizationId(null);
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+  const value = {
+    user,
+    profile,
+    session,
+    capabilities,
+    capabilityCache,
+    userRole,
+    organizationId,
+    loading,
+    signIn,
+    signInWithOAuth,
+    signUp,
+    signOut,
+    refreshCapabilities,
+    can
+  };
+=======
+  const value = {
+    user,
+    profile,
+    session,
+    contexts,
+    activeContext,
+    setActiveContext,
+    refreshContexts,
+    capabilities,
+    capabilityCache,
+    userRole,
+    organizationId,
+    loading,
+    signIn,
+    signInWithOAuth,
+    signUp,
+    signOut,
+    refreshCapabilities,
+    can
+  };
+>>>>>>> REPLACE

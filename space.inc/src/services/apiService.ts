@@ -1,3 +1,4 @@
+import { ContextsResponse } from '../types/context';
 import { Upload as TusUpload } from 'tus-js-client';
 import { supabase, EDGE_FUNCTION_BASE_URL, ANON_KEY } from '../lib/supabase';
 import { StaffMember, ClientLifecycle } from '../types';
@@ -86,6 +87,11 @@ const uploadFileResumable = async (
 
 export const apiService = {
     // --- Auth & Onboarding (Native Architecture) ---
+    async getMyContexts(): Promise<ContextsResponse> {
+        const { data, error } = await supabase.rpc("get_my_contexts");
+        if (error) throw error;
+        return data as ContextsResponse;
+    },
     async auth(data: {
         action: 'login' | 'signup';
         email: string;
@@ -375,6 +381,24 @@ export const apiService = {
         return data;
     },
 
+    async resolveSpaceInviteToken(token: string) {
+        const { data, error } = await supabase.rpc('resolve_space_invite_token', {
+            p_token: token
+        });
+        if (error) throw error;
+        return data;
+    },
+
+    async acceptSpaceInvite(token: string, clientName: string, clientCompany?: string | null) {
+        const { data, error } = await supabase.rpc('accept_space_invite', {
+            p_token: token,
+            p_client_name: clientName,
+            p_client_company: clientCompany || null
+        });
+        if (error) throw error;
+        return data;
+    },
+
     async validateInvitationContext(token: string) {
         const { data, error } = await supabase.rpc('validate_invitation_context', {
             p_token: token
@@ -386,6 +410,14 @@ export const apiService = {
     async acceptInvitation(token: string) {
         const { data, error } = await supabase.rpc('accept_invitation', {
             p_token: token
+        });
+        if (error) throw error;
+        return data;
+    },
+
+    async regenerateSpaceInviteLink(spaceId: string) {
+        const { data, error } = await supabase.rpc('regenerate_space_invite_link', {
+            p_space_id: spaceId
         });
         if (error) throw error;
         return data;

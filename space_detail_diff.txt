@@ -1,0 +1,46 @@
+<<<<<<< SEARCH
+    const handleRegenerateSpaceInvite = async () => {
+        if (!spaceId || !session?.access_token) return;
+        if (!window.confirm("Are you sure? This will immediately invalidate the existing link and all clients using it will need the new one.")) return;
+
+        try {
+            setInviteLoading(true);
+            const result = await inviteService.regenerateSpaceLink(spaceId, session.access_token);
+
+            if (result.success && result.data?.invitation_url) {
+                setSpaceInviteUrl(result.data.invitation_url);
+                showToast("Space invite link regenerated successfully.", "success");
+            } else {
+                throw new Error('Failed to regenerate invite link');
+            }
+        } catch (err: any) {
+            console.error('Failed to regenerate space invite link:', err);
+            showToast(friendlyError(err.message), "error");
+        } finally {
+            setInviteLoading(false);
+        }
+    };
+=======
+    const handleRegenerateSpaceInvite = async () => {
+        if (!spaceId) return;
+        if (!window.confirm("Are you sure? This will immediately invalidate the existing link and all clients using it will need the new one.")) return;
+
+        try {
+            setInviteLoading(true);
+            const data = await apiService.regenerateSpaceInviteLink(spaceId);
+
+            // The RPC returns { success, token, invite_url } as per guide Section 7
+            if (data && data.success) {
+                setSpaceInviteUrl(data.invite_url || `${window.location.origin}/join/${data.token}`);
+                showToast("Invite link regenerated. The old link is now invalid.", "success");
+            } else {
+                throw new Error('Failed to regenerate invite link');
+            }
+        } catch (err: any) {
+            console.error('Failed to regenerate space invite link:', err);
+            showToast(friendlyError(err.message), "error");
+        } finally {
+            setInviteLoading(false);
+        }
+    };
+>>>>>>> REPLACE

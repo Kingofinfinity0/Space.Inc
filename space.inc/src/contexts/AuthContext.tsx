@@ -1,14 +1,18 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase, onAuthStateChange, getSession, EDGE_FUNCTION_BASE_URL } from '../lib/supabase';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase, onAuthStateChange, EDGE_FUNCTION_BASE_URL } from '../lib/supabase';
 import { apiService } from '../services/apiService';
 import { inviteService } from '../services/inviteService';
-import { useNavigate } from 'react-router-dom';
+import { UserContext, ContextsResponse } from '../types/context';
 
 type AuthContextType = {
   user: User | null;
   profile: any;
-  session: any;
+  session: Session | null;
+  contexts: ContextsResponse | null;
+  activeContext: UserContext | null;
+  setActiveContext: (context: UserContext | null) => void;
+  refreshContexts: () => Promise<ContextsResponse | null>;
   capabilities: string[];
   capabilityCache: any;
   userRole: string | null;
@@ -27,16 +31,50 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any>(null);
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Multi-context state
+  const [contexts, setContexts] = useState<ContextsResponse | null>(null);
+  const [activeContext, _setActiveContext] = useState<UserContext | null>(null);
+
+  const setActiveContext = (context: UserContext | null) => {
+    _setActiveContext(context);
+    if (context) {
+      setUserRole(context.context_role);
+    }
+  };
+
   const [capabilities, setCapabilities] = useState<string[]>([]);
   const [capabilityCache, setCapabilityCache] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   
   // Refs to prevent redundant fetches
   const profileCacheRef = useRef<Record<string, any>>({});
   const capabilitiesCacheRef = useRef<boolean>(false);
+
+  const refreshContexts = async () => {
+    try {
+      const response = await apiService.getMyContexts();
+      setContexts(response);
+
+      // Auto-select context if applicable
+      if (response.routing === 'auto_org' && response.org_contexts.length === 1) {
+        const ctx = response.org_contexts[0];
+        setActiveContext(ctx);
+        setUserRole(ctx.context_role);
+      } else if (response.routing === 'auto_client' && response.client_contexts.length === 1) {
+        const ctx = response.client_contexts[0];
+        setActiveContext(ctx);
+        setUserRole(ctx.context_role);
+      }
+      return response;
+    } catch (err) {
+      console.error('[AuthContext] Error fetching contexts:', err);
+      return null;
+    }
+  };
 
   const refreshCapabilities = async () => {
     if (capabilitiesCacheRef.current) {
@@ -50,25 +88,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) throw error;
       if (data) {
         setCapabilityCache(data);
-        setUserRole(data.role);
+        // Sync userRole with activeContext if available
+        if (activeContext) {
+          setUserRole(activeContext.context_role);
+        } else {
+          setUserRole(data.role);
+        }
         setOrganizationId(data.org_id);
         capabilitiesCacheRef.current = true;
-        // Sync legacy capabilities array for backward compatibility
-        // (Collecting all unique capability keys from assigned spaces)
+
         const allCaps = new Set<string>();
         if (data.role === 'owner' || data.role === 'admin') {
-          // Add global role identifiers if needed
           allCaps.add(data.role);
-          // For owners/admins, we typically grant everything globally in the UI DSL
           ['can_view_dashboard', 'can_view_history', 'can_view_all_spaces', 'can_manage_team', 'can_view_tasks', 'can_view_meetings', 'can_view_files', 'can_view_settings'].forEach(c => allCaps.add(c));
         } else if (data.role === 'staff') {
-           // Staff caps are usually per-space, but let's aggregate for the legacy array
            data.assigned_spaces?.forEach((s: any) => {
              Object.entries(s.capabilities).forEach(([key, val]) => {
                if (val) allCaps.add(key.startsWith('can_') ? key : `can_${key}`);
              });
            });
-           allCaps.add('can_view_dashboard'); // Staff always see dashboard
+           allCaps.add('can_view_dashboard');
         } else if (data.role === 'client') {
           allCaps.add('is_client_portal');
         }
@@ -81,53 +120,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const can = (capability: string, spaceId?: string): boolean => {
     if (!capabilityCache) return false;
-    
-    // Global check
     if (!spaceId) {
-      // Identity-first override: Owners/Admins have high-level access
       if (userRole === 'owner' || userRole === 'admin') return true;
       if (userRole === 'client' && capability === 'is_client_portal') return true;
       if (userRole === 'staff' && capability === 'can_view_dashboard') return true;
-      
-      // Check legacy aggregated capabilities if needed, or fallback to cache logic
       return capabilities.includes(capability);
     }
-
-    // Space-specific check
     const space = capabilityCache.assigned_spaces?.find((s: any) => s.space_id === spaceId);
     if (!space) return false;
-
-    // Direct lookup in the space capabilities object
-    // Handle both 'can_view' and 'view' formats if needed
-    const capKey = capability.startsWith('can_') ? capability : `can_${capability}`;
-    const shortCapKey = capability.startsWith('can_') ? capability.replace('can_', '') : capability;
-    
-    return !!(space.capabilities[capKey] || space.capabilities[shortCapKey]);
+    const capKey = capability.startsWith('can_') ? capability.slice(4) : capability;
+    return !!space.capabilities[capKey];
   };
 
   const fetchProfile = async (uid: string) => {
-    if (!uid) return;
-    
-    // Check cache first
     if (profileCacheRef.current[uid]) {
-      console.log(`[AuthContext] Profile for ${uid} already cached, skipping fetch`);
       setProfile(profileCacheRef.current[uid]);
       return;
     }
-    
     try {
-      console.log(`[AuthContext] Fetching profile for ${uid}...`);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', uid)
-        .single();
-      
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', uid).single();
       if (error) throw error;
       setProfile(data);
       profileCacheRef.current[uid] = data;
     } catch (err) {
-      console.warn('Error syncing context:', err);
+      console.warn('Error fetching profile:', err);
       setProfile(null);
     }
   };
@@ -141,6 +157,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setSession(supSession);
           await Promise.all([
             fetchProfile(supSession.user.id),
+            refreshContexts(),
             refreshCapabilities()
           ]);
         }
@@ -154,137 +171,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
 
     const { data: { subscription } } = onAuthStateChange(async (event, currentSession) => {
-      console.log(`[AuthContext] Auth event: ${event}`);
-
       if (currentSession) {
         const isNewUser = user?.id !== currentSession.user.id;
         setUser(currentSession.user);
         setSession(currentSession);
 
         if (isNewUser || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-          if (event === 'SIGNED_IN' && currentSession.user.app_metadata?.invitation_id) {
-             console.log("[AuthContext] Found invitation in app_metadata, completing join...");
-             try {
-                await apiService.acceptInvitation(currentSession.user.app_metadata.invitation_id);
-             } catch (err) {
-                console.error("[AuthContext] Error accepting invitation during login:", err);
-             }
-          }
-
-          // Handle pending invite tokens
+          // Handle pending invites
           if (event === 'SIGNED_IN') {
-            // First check for sessionStorage pending_invite_token (new flow)
             const pendingSessionToken = sessionStorage.getItem('pending_invite_token');
             if (pendingSessionToken) {
-              console.log('[AuthContext] Found pending invite token in sessionStorage, accepting...');
               sessionStorage.removeItem('pending_invite_token');
               try {
                 const result = await apiService.acceptInvitation(pendingSessionToken);
                 if (result?.data?.redirect_path) {
                   window.location.href = result.data.redirect_path;
                   return;
-                } else if (result?.data?.role === 'client' && result?.data?.spaceId) {
-                  window.location.href = `/client/space/${result.data.spaceId}`;
-                  return;
-                } else {
-                  console.error("[AuthContext] Failed to accept invitation from sessionStorage");
                 }
               } catch (err) {
-                console.error('[AuthContext] Error accepting invitation from sessionStorage:', err);
-              }
-            }
-
-            // Post-auth redirect for client users only
-            if (profile?.role === 'client') {
-              if (!window.location.pathname.startsWith('/spaces/')) {
-                try {
-                  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-                  if (authError || !user) {
-                    window.location.href = '/login?error=session_expired';
-                    return;
-                  }
-
-                  const { data, error: membershipError } = await supabase
-                    .from('space_memberships')
-                    .select('space_id')
-                    .eq('profile_id', user.id)
-                    .eq('status', 'active')
-                    .single();
-
-                  if (membershipError || !data?.space_id) {
-                    window.location.href = '/spaces/pending';
-                    return;
-                  }
-
-                  window.location.href = `/spaces/${data.space_id}`;
-                  return;
-                } catch (err) {
-                  console.error('[AuthContext] Unexpected error in post-auth redirect:', err);
-                  window.location.href = '/spaces/pending';
-                  return;
-                }
-              }
-            }
-
-            // Then check for legacy pending_invite_token format
-            const pending = inviteService.getAndClearPendingToken();
-            if (pending) {
-              const { token, type } = pending;
-              console.log(`[AuthContext] Found pending ${type} invite token, accepting...`);
-              try {
-                if (type === 'space') {
-                  const result = await inviteService.acceptSpaceInvite(token, currentSession.access_token);
-                  if (result.success && result.data) {
-                    window.location.href = result.data.redirect_path;
-                    return;
-                  } else {
-                    console.error("[AuthContext] Failed to accept space invite:", (result as any).error_code);
-                  }
-                } else if (type === 'email') {
-                  const result = await inviteService.acceptEmailInvite(token, currentSession.access_token);
-                  if (result.success && result.data) {
-                    window.location.href = result.data.redirect_path;
-                    return;
-                  } else {
-                    console.error("[AuthContext] Failed to accept email invite:", (result as any).error_code);
-                  }
-                }
-              } catch (err) {
-                console.error(`[AuthContext] Error accepting ${type} invite:`, err);
-              }
-            }
-
-            // Check for pending_space_token (from /join/:token flow)
-            const pendingSpaceToken = localStorage.getItem('pending_space_token');
-            if (pendingSpaceToken) {
-              console.log('[AuthContext] Found pending_space_token, calling accept_space_link...');
-              try {
-                const res = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${currentSession.access_token}`
-                  },
-                  body: JSON.stringify({
-                    action: 'accept_space_link',
-                    token: pendingSpaceToken
-                  })
-                });
-
-                const result = await res.json();
-                localStorage.removeItem('pending_space_token');
-
-                if (result.data?.success && result.data?.data?.spaceId) {
-                  // Redirect to the space-specific path, never to /dashboard
-                  window.location.href = `/spaces/${result.data.data.spaceId}`;
-                  return;
-                } else {
-                  console.error('[AuthContext] accept_space_link failed:', result);
-                }
-              } catch (err) {
-                console.error('[AuthContext] Error calling accept_space_link:', err);
-                localStorage.removeItem('pending_space_token');
+                console.error('Error accepting invitation:', err);
               }
             }
           }
@@ -292,10 +197,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           try {
             await Promise.all([
               fetchProfile(currentSession.user.id),
+              refreshContexts(),
               refreshCapabilities()
             ]);
           } catch (e) {
-            console.error('[AuthContext] Post-auth data fetch failed:', e);
+            console.error('Post-auth data fetch failed:', e);
           } finally {
             setLoading(false);
           }
@@ -304,65 +210,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(null);
         setSession(null);
         setProfile(null);
+        setContexts(null);
+        setActiveContext(null);
         setCapabilities([]);
         setCapabilityCache(null);
         setUserRole(null);
         setOrganizationId(null);
-        // Clear caches on sign out
         profileCacheRef.current = {};
         capabilitiesCacheRef.current = false;
       }
       setLoading(false);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [user?.id]); // Added dependency to prevent stale checks during re-logins
+    return () => subscription.unsubscribe();
+  }, [user?.id]);
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      if (error) throw error;
-      return { error: null };
-    } catch (err: any) {
-      console.error('Sign in error:', err);
-      return { error: err };
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error };
   };
 
   const signInWithOAuth = async (provider: 'google' | 'github') => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-      return { error };
-    } catch (err: any) {
-      console.error('OAuth sign in error:', err);
-      return { error: err };
-    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin }
+    });
+    return { error };
   };
 
   const signUp = async (email: string, password: string, metadata: any) => {
-    try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: metadata
-        }
-      });
-      return { error };
-    } catch (err: any) {
-      console.error('Sign up error:', err);
-      return { error: err };
-    }
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: metadata }
+    });
+    return { error };
   };
 
   const signOut = async () => {
@@ -374,6 +256,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     user,
     profile,
     session,
+    contexts,
+    activeContext,
+    setActiveContext,
+    refreshContexts,
     capabilities,
     capabilityCache,
     userRole,
@@ -394,11 +280,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 };
 
-
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
