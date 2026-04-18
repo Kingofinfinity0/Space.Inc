@@ -22,6 +22,7 @@ type Props = {
     showSpaceFilter?: boolean;
     showTypeFilter?: boolean;
     title?: string;
+    onOpenSpace?: (spaceId: string) => void;
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -68,7 +69,8 @@ export function CalendarWidget({
     defaultSpaceId = null,
     showSpaceFilter = true,
     showTypeFilter = true,
-    title = 'Calendar'
+    title = 'Calendar',
+    onOpenSpace
 }: Props) {
     const now = new Date();
     const [cursorYear, setCursorYear] = useState(now.getFullYear());
@@ -316,7 +318,7 @@ export function CalendarWidget({
                                 <div key={item.id} className="p-3 bg-white border border-zinc-200 rounded-xl hover:border-zinc-300 transition-colors">
                                     <div className="flex items-start gap-3">
                                         <div className={`h-9 w-1.5 rounded-full ${color}`} />
-                                        <div className="min-w-0 flex-1">
+                                        <button type="button" onClick={() => onOpenSpace?.(item.spaceId)} className="min-w-0 flex-1 text-left">
                                             <div className="flex items-center justify-between gap-2">
                                                 <div className="text-xs font-bold text-zinc-900 truncate">{item.title}</div>
                                                 <div className="text-[10px] text-zinc-500 whitespace-nowrap">{time}</div>
@@ -326,7 +328,7 @@ export function CalendarWidget({
                                                 {item.type === 'meeting' ? <Video size={12} /> : <ListTodo size={12} />}
                                                 {item.type === 'meeting' ? 'Meeting' : 'Task deadline'}
                                             </div>
-                                        </div>
+                                        </button>
                                     </div>
                                 </div>
                             );

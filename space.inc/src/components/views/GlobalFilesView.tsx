@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
@@ -25,6 +25,8 @@ import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile,
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
 
+type FilesViewMode = 'board' | 'list';
+
 
 // 6. Files View
 const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile: any }) => {
@@ -35,15 +37,18 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
     const [viewingFile, setViewingFile] = useState<SpaceFile | null>(null);
     const [versioningFile, setVersioningFile] = useState<SpaceFile | null>(null);
     const [showTrash, setShowTrash] = useState(false);
+    const [viewMode, setViewMode] = useState<FilesViewMode>('board');
     const { organizationId } = useAuth();
     const { files: realtimeFiles, loading: filesLoading } = useRealtimeFiles('', organizationId || '', showTrash);
     const { showToast } = useToast();
 
     // Group files by client
-    const groupedFiles = clients.map(client => ({
+    const groupedFiles = useMemo(() => clients.map(client => ({
         client,
         files: realtimeFiles.filter(f => f.space_id === client.id)
-    }));
+    })), [clients, realtimeFiles]);
+
+    const flatFiles = useMemo(() => groupedFiles.flatMap(({ client, files }) => files.map(file => ({ file, client }))), [groupedFiles]);
 
     return (
         <div>
@@ -53,6 +58,10 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                     <Text variant="secondary" className="mt-1">Central repository for all documents.</Text>
                 </div>
                 <div className="flex gap-2">
+                    <div className="flex rounded-full border border-[#E5E5E5] bg-[#F7F7F8] p-1">
+                        <button onClick={() => setViewMode('board')} className={`rounded-full px-3 py-2 text-xs font-medium ${viewMode === 'board' ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}>Board</button>
+                        <button onClick={() => setViewMode('list')} className={`rounded-full px-3 py-2 text-xs font-medium ${viewMode === 'list' ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}>List</button>
+                    </div>
                     <Button variant="ghost" onClick={() => setShowTrash(!showTrash)} className={showTrash ? 'text-rose-500 bg-rose-50' : ''}>
                         <Trash2 size={18} className="mr-2" /> {showTrash ? 'Exit Trash' : 'Trash'}
                     </Button>
@@ -62,6 +71,7 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                 </div>
             </header>
 
+            {viewMode === 'board' ? (
             <div className="space-y-8">
                 {groupedFiles.map(({ client, files }) => (
                     <div key={client.id}>
@@ -175,6 +185,35 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                     </div>
                 ))}
             </div>
+            ) : (
+                <div className="space-y-3">
+                    {flatFiles.map(({ file, client }) => (
+                        <GlassCard key={file.id} className="flex items-center justify-between p-4">
+                            <div className="min-w-0 flex items-center gap-3">
+                                <div className="rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-2 text-[#6E6E80]">
+                                    <FileText size={18} />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-[#0D0D0D]">{file.name}</p>
+                                    <p className="text-xs text-[#6E6E80]">{client.name} · {file.is_global ? 'Global asset' : 'Space file'}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button variant="ghost" className="h-8 w-8 p-0 text-[#6E6E80] hover:text-[#0D0D0D]" onClick={() => setViewingFile(file as any)}><Eye size={16} /></Button>
+                                <Button variant="ghost" className="h-8 w-8 p-0 text-[#6E6E80] hover:text-[#0D0D0D]" onClick={async () => {
+                                    const { data } = await apiService.getSignedUrl(file.id, organizationId || '');
+                                    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                                }}><Download size={16} /></Button>
+                            </div>
+                        </GlassCard>
+                    ))}
+                    {flatFiles.length === 0 && (
+                        <div className="rounded-[8px] border border-dashed border-[#E5E5E5] bg-white p-10 text-center text-sm text-[#6E6E80]">
+                            No files in this space.
+                        </div>
+                    )}
+                </div>
+            )}
 
             <Modal isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} title="Select Destination Space">
                 <div className="space-y-4">

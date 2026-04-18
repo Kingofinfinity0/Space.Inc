@@ -24,7 +24,7 @@ import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
 
 
-// 11. Accountability Ledger (History) View
+// 11. Activity Log View
 const HistoryView = ({ logs }: { logs: any[] }) => {
     const getActionIcon = (type: string) => {
         switch (type) {
@@ -40,8 +40,8 @@ const HistoryView = ({ logs }: { logs: any[] }) => {
     return (
         <div className="space-y-6 animate-[fadeIn_0.5s_ease-out]">
             <header className="mb-8">
-                <Heading level={1}>Accountability Ledger</Heading>
-                <Text variant="secondary" className="mt-1">Historical audit trail of all organization activities.</Text>
+                <Heading level={1}>Activity Log</Heading>
+                <Text variant="secondary" className="mt-1">A concise audit trail of organization activity.</Text>
             </header>
 
             <GlassCard className="overflow-hidden">

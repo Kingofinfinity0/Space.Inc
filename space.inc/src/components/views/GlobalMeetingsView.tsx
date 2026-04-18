@@ -21,6 +21,7 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
     onSchedule: (m: any) => void, 
     onJoin: (id: string) => void, 
     onInstantMeet: (spaceId: string) => void,
+    onOpenSpace?: (spaceId: string) => void,
     onDeleteMeeting?: (meetingId: string) => void,
     onEndMeeting?: (id: string, outcome: string, notes: string) => void,
     tasks?: Task[]
@@ -242,6 +243,7 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
                 showSpaceFilter={true}
                 showTypeFilter={true}
                 title="All Spaces Calendar"
+                onOpenSpace={onOpenSpace}
             />
 
             {/* Schedule Modal */}

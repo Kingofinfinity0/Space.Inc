@@ -66,7 +66,6 @@ import { MeetingRoom } from './components/MeetingRoom';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import JoinView from './components/views/JoinView';
 import AcceptInviteView from './components/views/AcceptInviteView';
-import { NotificationBell } from './components/NotificationBell';
 import ClientSpaceRoute from './components/views/ClientSpaceRoute';
 import { supabase as _supabase } from './lib/supabase';
 
@@ -600,7 +599,7 @@ const App = () => {
                 }} />;
             case ViewState.MEETINGS:
                 if (!can('can_view_meetings')) return <div className="p-8">Access Denied</div>;
-                return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} onDeleteMeeting={handleDeleteMeeting} onEndMeeting={handleEndMeeting} tasks={tasks} />;
+                return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} onOpenSpace={(spaceId) => { setSelectedSpaceId(spaceId); setCurrentView(ViewState.SPACE_DETAIL); }} onDeleteMeeting={handleDeleteMeeting} onEndMeeting={handleEndMeeting} tasks={tasks} />;
             case ViewState.FILES:
                 if (!can('can_view_files')) return <div className="p-8">Access Denied</div>;
                 return <GlobalFilesView clients={clients} profile={profile} />;
@@ -774,69 +773,7 @@ const App = () => {
 
                     return (
                         <>
-                            <AppLayout
-                                sidebar={
-                                    <aside className="relative z-10 hidden w-[300px] flex-col p-6 xl:flex">
-                                        <div className="glass-surface glass-elevated flex h-full flex-col rounded-[8px] p-5 text-[#0D0D0D]">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-white text-[#6E6E80]">
-                                                    <Rocket size={22} />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <div className="text-lg font-semibold tracking-[-0.03em] text-[#0D0D0D]">Space.inc</div>
-                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">Workspace OS</div>
-                                                </div>
-                                                <div className="ml-auto">
-                                                    <NotificationBell />
-                                                </div>
-                                            </div>
-
-                                            <div className="relative mt-6">
-                                                <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#6E6E80]" />
-                                                <input
-                                                    placeholder="Search anything..."
-                                                    className="w-full rounded-[8px] border border-[#E5E5E5] bg-white py-3 pl-10 pr-4 text-sm text-[#0D0D0D] placeholder:text-[#6E6E80] focus:outline-none focus:border-black"
-                                                />
-                                            </div>
-
-                                            <div className="mt-6 space-y-3">
-                                                <div className="glass-muted rounded-[8px] px-4 py-4">
-                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">Current view</div>
-                                                    <div className="mt-2 text-xl font-semibold tracking-[-0.03em] text-[#0D0D0D]">{currentViewLabel}</div>
-                                                    <p className="mt-2 text-sm leading-6 text-[#6E6E80]">
-                                                        Minimal surfaces, denser lists, and a calmer dock frame the whole workspace.
-                                                    </p>
-                                                </div>
-                                                <div className="glass-muted rounded-[8px] px-4 py-4">
-                                                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">
-                                                        <span>Unread inbox</span>
-                                                        <span>{totalInboxItems}</span>
-                                                    </div>
-                                                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#F7F7F8]">
-                                                        <div
-                                                            className="h-full rounded-full bg-black transition-all duration-300"
-                                                            style={{ width: `${Math.min(totalInboxItems * 12, 100)}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <button
-                                                onClick={() => setCurrentView(ViewState.SETTINGS)}
-                                                className="interactive-surface mt-auto flex items-center gap-3 rounded-[8px] border border-[#E5E5E5] bg-white p-3 text-left"
-                                            >
-                                                <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-[#F7F7F8] text-xs font-semibold text-[#0D0D0D]">
-                                                    {profile?.full_name?.substring(0, 2).toUpperCase() || 'AD'}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-medium text-[#0D0D0D]">{profile?.full_name || 'User'}</p>
-                                                    <p className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">{userRole || 'Member'}</p>
-                                                </div>
-                                            </button>
-                                        </div>
-                                    </aside>
-                                }
-                            >
+                            <AppLayout sidebar={null}>
                                 <div className="flex min-h-screen flex-1 flex-col">
                                     <header className="sticky top-0 z-20 px-4 pt-4 md:px-8 md:pt-6">
                                         <div className="glass-surface flex items-center justify-between rounded-[8px] px-4 py-4 md:px-6">
@@ -855,7 +792,7 @@ const App = () => {
                                         </div>
                                     </header>
                                     <div className="flex-1 overflow-y-auto px-4 pb-36 pt-6 md:px-8 md:pb-40 md:pt-8">
-                                        <div className="mx-auto max-w-7xl">{renderContent()}</div>
+                                        <div className="w-full">{renderContent()}</div>
                                     </div>
                                     <nav className="fixed inset-x-0 bottom-8 z-30 flex justify-center px-4">
                                         <div className="dock-enter flex max-w-[calc(100vw-1.5rem)] items-center gap-1 overflow-x-auto rounded-[8px] border border-[#E5E5E5] bg-white px-2 py-2 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">

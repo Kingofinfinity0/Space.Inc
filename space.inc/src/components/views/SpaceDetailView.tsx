@@ -40,6 +40,8 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
 
     const [space, setSpace] = useState<ClientSpace | undefined>(initialSpace);
     const [spaceLoading, setSpaceLoading] = useState(!initialSpace);
+    const [isUpdatingSpaceStatus, setIsUpdatingSpaceStatus] = useState(false);
+    const [showDeleteSpaceModal, setShowDeleteSpaceModal] = useState(false);
 
     const [spaceStats, setSpaceStats] = useState<any>(null);
     const [spaceStatsLoading, setSpaceStatsLoading] = useState(false);
@@ -64,6 +66,42 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     const [tasks, setTasks] = useState<Task[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
     const canManageInvites = userRole === 'owner' || userRole === 'admin' || userRole === 'staff';
+    const canManageSpace = userRole === 'owner' || userRole === 'admin';
+
+    const allowedSpaceStatuses = ['active', 'onboarding', 'archived', 'closed'] as const;
+
+    const handleUpdateSpaceStatus = async (status: typeof allowedSpaceStatuses[number]) => {
+        if (!spaceId) return;
+        setIsUpdatingSpaceStatus(true);
+        try {
+            const { error } = await supabase.rpc('update_space_status', {
+                p_space_id: spaceId,
+                p_status: status
+            });
+            if (error) throw error;
+            setSpace((current) => current ? { ...current, status } : current);
+            showToast(`Space status updated to ${status}.`, 'success');
+        } catch (err: any) {
+            showToast(friendlyError(err?.message || 'Failed to update space status'), 'error');
+        } finally {
+            setIsUpdatingSpaceStatus(false);
+        }
+    };
+
+    const handleDeleteSpace = async () => {
+        if (!spaceId) return;
+        try {
+            const { error } = await supabase.rpc('delete_space_soft', {
+                p_space_id: spaceId
+            });
+            if (error) throw error;
+            showToast('Space removed.', 'success');
+            setShowDeleteSpaceModal(false);
+            onBack();
+        } catch (err: any) {
+            showToast(friendlyError(err?.message || 'Failed to delete space'), 'error');
+        }
+    };
 
     const loadActivityIndicators = useCallback(async () => {
         if (!spaceId || !organizationId) return;
@@ -347,16 +385,41 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     <h1 className="text-2xl font-semibold text-[#0D0D0D]">{space.name}</h1>
                     <p className="text-sm text-[#6E6E80]">Managed by You</p>
                 </div>
-                <div className="ml-auto flex rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-1">
+                <div className="ml-auto flex items-center gap-3">
+                    {canManageSpace && (
+                        <>
+                            <select
+                                title="Space status"
+                                value={space?.status || 'active'}
+                                onChange={(e) => handleUpdateSpaceStatus(e.target.value as typeof allowedSpaceStatuses[number])}
+                                disabled={isUpdatingSpaceStatus}
+                                className="rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-xs font-medium text-[#0D0D0D] outline-none"
+                            >
+                                {allowedSpaceStatuses.map((status) => (
+                                    <option key={status} value={status}>{status}</option>
+                                ))}
+                            </select>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-[#0D0D0D] border-[#E5E5E5] hover:bg-[#F7F7F8]"
+                                onClick={() => setShowDeleteSpaceModal(true)}
+                            >
+                                <Trash2 size={14} className="mr-1" /> Delete
+                            </Button>
+                        </>
+                    )}
+                    <div className="flex rounded-[999px] border border-[#E5E5E5] bg-[#F7F7F8] p-1">
                     {['Dashboard', 'Chat', 'Meetings', 'Tasks', 'Docs'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab as any)}
-                            className={`px-4 py-2 rounded-[6px] text-sm font-medium transition-all ${activeTab === tab ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${activeTab === tab ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}
                         >
                             {tab}
                         </button>
                     ))}
+                </div>
                 </div>
             </div>
 
@@ -996,6 +1059,26 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     </div>
                 )}
             </div>
+
+            <Modal
+                isOpen={showDeleteSpaceModal}
+                onClose={() => setShowDeleteSpaceModal(false)}
+                title="Delete Space?"
+            >
+                <div className="space-y-4">
+                    <Text variant="secondary">
+                        This will archive the space and remove it from the active workspace list.
+                    </Text>
+                    <div className="flex gap-3 pt-2">
+                        <Button variant="secondary" className="flex-1" onClick={() => setShowDeleteSpaceModal(false)}>
+                            Cancel
+                        </Button>
+                        <Button variant="primary" className="flex-1 bg-black hover:bg-[#1A1A1A]" onClick={handleDeleteSpace}>
+                            Delete Space
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
 
             <FileUploadModal
                 isOpen={activeTab !== 'Chat' && isUploadModalOpen}

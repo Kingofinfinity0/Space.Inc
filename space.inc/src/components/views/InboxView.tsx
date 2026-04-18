@@ -29,6 +29,7 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
     const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(clients[0]?.id || null);
     const { user, profile, organizationId } = useAuth();
     const [messageInput, setMessageInput] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
     const [sending, setSending] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const { showToast } = useToast(); // Added useToast hook
@@ -37,6 +38,15 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
     const { messages, loading, error, sendMessage, sendFile, messagesEndRef, uploadProgress } = useRealtimeMessages(selectedSpaceId || '', organizationId || '');
 
     const activeClient = clients.find(c => c.id === selectedSpaceId);
+    const filteredInbox = inboxData.filter((item) => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return true;
+        return [
+            item.space_name,
+            item.last_message_content,
+            item.last_message_at
+        ].some((value) => String(value || '').toLowerCase().includes(q));
+    });
 
     const handleSend = async () => {
         if (!messageInput.trim() || sending) return;
@@ -69,11 +79,17 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                     <Heading level={2} className="mb-4">Inbox</Heading>
                     <div className="relative">
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6E6E80]" />
-                        <input type="text" placeholder="Search chats..." className="w-full rounded-[8px] border border-[#E5E5E5] bg-white pl-10 pr-4 py-2 text-sm text-[#0D0D0D] focus:outline-none focus:border-black transition-all" />
+                        <input
+                            type="text"
+                            placeholder="Search chats..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full rounded-[8px] border border-[#E5E5E5] bg-white pl-10 pr-4 py-2 text-sm text-[#0D0D0D] focus:outline-none focus:border-black transition-all"
+                        />
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                    {inboxData.map(item => (
+                    {filteredInbox.map(item => (
                         <div
                             key={item.space_id}
                             onClick={() => setSelectedSpaceId(item.space_id)}
@@ -97,6 +113,9 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                             </div>
                         </div>
                     ))}
+                    {filteredInbox.length === 0 && (
+                        <div className="p-4 text-center text-sm text-[#6E6E80]">No chats match your search.</div>
+                    )}
                 </div>
             </GlassCard>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
@@ -29,6 +29,7 @@ import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
 const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], onSelect: (id: string) => void, onCreate: (data: any) => void }) => {
     const { showToast } = useToast();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
     const [newClientName, setNewClientName] = useState('');
     const [newClientContact, setNewClientContact] = useState('');
     const [newClientEmail, setNewClientEmail] = useState('');
@@ -38,6 +39,8 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
         upload: true,
         meetings: true
     });
+
+    const spaces = useMemo(() => clients, [clients]);
 
     const handleSubmit = () => {
         if (!newClientName) {
@@ -64,13 +67,20 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                     <h1 className="text-3xl font-extrabold text-zinc-900 tracking-tight">Spaces</h1>
                     <p className="text-zinc-500 font-light mt-1">Manage all your client environments.</p>
                 </div>
-                <Button onClick={() => setIsModalOpen(true)}>
-                    <Plus size={18} /> New Space
-                </Button>
+                <div className="flex items-center gap-2">
+                    <div className="flex rounded-full border border-[#E5E5E5] bg-[#F7F7F8] p-1">
+                        <button onClick={() => setViewMode('board')} className={`rounded-full px-3 py-2 text-xs font-medium ${viewMode === 'board' ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}>Board</button>
+                        <button onClick={() => setViewMode('list')} className={`rounded-full px-3 py-2 text-xs font-medium ${viewMode === 'list' ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}>List</button>
+                    </div>
+                    <Button onClick={() => setIsModalOpen(true)}>
+                        <Plus size={18} /> New Space
+                    </Button>
+                </div>
             </header>
 
+            {viewMode === 'board' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {clients.map(client => (
+                {spaces.map(client => (
                     <GlassCard
                         key={client.id}
                         onClick={() => onSelect(client.id)}
@@ -92,6 +102,26 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                     </GlassCard>
                 ))}
             </div>
+            ) : (
+                <div className="space-y-3">
+                    {spaces.map((client) => (
+                        <GlassCard key={client.id} onClick={() => onSelect(client.id)} className="flex items-center justify-between p-4 cursor-pointer">
+                            <div className="flex items-center gap-4 min-w-0">
+                                <div className="h-11 w-11 rounded-[8px] bg-[#F7F7F8] flex items-center justify-center text-sm font-semibold text-[#0D0D0D] border border-[#E5E5E5]">
+                                    {client.name ? client.name.substring(0, 2).toUpperCase() : 'SP'}
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-sm font-medium text-[#0D0D0D] truncate">{client.name}</div>
+                                    <div className="text-xs text-[#6E6E80] truncate">{client.description || 'Verified Portal Environment'}</div>
+                                </div>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase border ${client.status === 'active' ? 'bg-[#F7F7F8] text-[#0D0D0D] border-[#E5E5E5]' : 'bg-[#F7F7F8] text-[#6E6E80] border-[#E5E5E5]'}`}>
+                                {client.status}
+                            </span>
+                        </GlassCard>
+                    ))}
+                </div>
+            )}
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Provision New Space">
                 <div className="space-y-4">
