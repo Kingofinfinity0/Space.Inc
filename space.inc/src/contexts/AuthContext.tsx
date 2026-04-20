@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState, ReactNode, useRe
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, onAuthStateChange, EDGE_FUNCTION_BASE_URL } from '../lib/supabase';
 import { apiService } from '../services/apiService';
-import { inviteService } from '../services/inviteService';
 import { UserContext, ContextsResponse } from '../types/context';
 
 type AuthContextType = {
@@ -162,7 +161,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ]);
         }
       } catch (e) {
-        console.error("Auth init failed", e);
+        if (process.env.NODE_ENV === 'development') {
+          // eslint-disable-next-line no-console
+          console.error("Auth init failed", e);
+        }
       } finally {
         setLoading(false);
       }
@@ -170,26 +172,110 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     initAuth();
 
+    // Storage migration: check all possible token locations to prevent dropping users mid-flow
+    const getPendingToken = (): string | null => {
+      return (
+        sessionStorage.getItem('pending_invite_token') ||
+        localStorage.getItem('pending_invite_token') ||
+        localStorage.getItem('pending_space_token') // legacy key
+      );
+    };
+
+    const clearPendingToken = () => {
+      sessionStorage.removeItem('pending_invite_token');
+      localStorage.removeItem('pending_invite_token');
+      localStorage.removeItem('pending_space_token');
+    };
+
+    // Edge function helpers for invite handling
+    const resolveSpaceLink = async (token: string) => {
+      const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resolve_space_link', token })
+      });
+      if (!response.ok) throw new Error('Failed to resolve space link');
+      const result = await response.json();
+      return result.data || result;
+    };
+
+    const acceptSpaceLink = async (token: string, accessToken: string) => {
+      const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ action: 'accept_space_link', token })
+      });
+      if (!response.ok) throw new Error('Failed to accept space link');
+      const result = await response.json();
+      return result.data || result;
+    };
+
+    const acceptPersonalInvite = async (token: string, accessToken: string) => {
+      const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ action: 'accept', token })
+      });
+      if (!response.ok) throw new Error('Failed to accept invitation');
+      const result = await response.json();
+      return result.data || result;
+    };
+
     const { data: { subscription } } = onAuthStateChange(async (event, currentSession) => {
       if (currentSession) {
         const isNewUser = user?.id !== currentSession.user.id;
         setUser(currentSession.user);
         setSession(currentSession);
 
+        // Reset caches on every auth state change to ensure fresh fetches
+        // This fixes the bug where failed profile fetches were cached
+        profileCacheRef.current = {};
+        capabilitiesCacheRef.current = false;
+        setCapabilityCache(null);
+
         if (isNewUser || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-          // Handle pending invites
+          // Handle pending invites - try space link first, then personal
           if (event === 'SIGNED_IN') {
-            const pendingSessionToken = sessionStorage.getItem('pending_invite_token');
-            if (pendingSessionToken) {
-              sessionStorage.removeItem('pending_invite_token');
+            const pendingToken = getPendingToken();
+            if (pendingToken) {
+              clearPendingToken();
               try {
-                const result = await apiService.acceptInvitation(pendingSessionToken);
-                if (result?.data?.redirect_path) {
-                  window.location.href = result.data.redirect_path;
+                // Try space link first
+                let result: any;
+                try {
+                  const spaceData = await resolveSpaceLink(pendingToken);
+                  if (spaceData.valid) {
+                    result = await acceptSpaceLink(pendingToken, currentSession.access_token);
+                  }
+                } catch (spaceErr) {
+                  // Not a valid space link, try personal invite
+                  if (process.env.NODE_ENV === 'development') {
+                    // eslint-disable-next-line no-console
+                    console.log('Space link resolution failed, trying personal invite');
+                  }
+                }
+
+                // If space link didn't work, try personal invitation
+                if (!result) {
+                  result = await acceptPersonalInvite(pendingToken, currentSession.access_token);
+                }
+
+                // Standardized redirect - use redirect_path from backend
+                if (result?.redirect_path) {
+                  window.location.href = result.redirect_path;
                   return;
                 }
               } catch (err) {
-                console.error('Error accepting invitation:', err);
+                if (process.env.NODE_ENV === 'development') {
+                  // eslint-disable-next-line no-console
+                  console.error('Error accepting invitation:', err);
+                }
               }
             }
           }
@@ -201,7 +287,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               refreshCapabilities()
             ]);
           } catch (e) {
-            console.error('Post-auth data fetch failed:', e);
+            if (process.env.NODE_ENV === 'development') {
+              // eslint-disable-next-line no-console
+              console.error('Post-auth data fetch failed:', e);
+            }
           } finally {
             setLoading(false);
           }

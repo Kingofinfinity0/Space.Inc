@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { apiService } from '../../services/apiService';
-import { inviteService, SpaceInviteTokenResponse } from '../../services/inviteService';
+import { supabase, EDGE_FUNCTION_BASE_URL } from '../../lib/supabase';
+import { inviteService, SpaceInviteTokenResponse, errorCodeMessages } from '../../services/inviteService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { GlassCard } from '../UI/GlassCard';
@@ -11,6 +10,7 @@ import { Heading } from '../UI/Heading';
 import '../../styles/JoinView.css';
 
 type PageStatus = 'loading' | 'valid' | 'invalid' | 'authing' | 'done' | 'error';
+type InviteType = 'space_link' | 'personal' | null;
 
 export default function JoinView() {
     const { token } = useParams<{ token: string }>();
@@ -23,6 +23,7 @@ export default function JoinView() {
     const [errorMsg, setErrorMsg] = useState('');
     const [onboardingInfo, setOnboardingInfo] = useState({ name: '', company: '' });
     const [showOnboarding, setShowOnboarding] = useState(false);
+    const [inviteType, setInviteType] = useState<InviteType>(null);
 
     useEffect(() => {
         if (token) {
@@ -39,19 +40,47 @@ export default function JoinView() {
 
         const resolveToken = async () => {
             try {
-                const data = await apiService.resolveSpaceInviteToken(token);
-                setInviteData(data);
-                if (data.valid) {
+                // Try space link first using edge function
+                const spaceData = await inviteService.resolveSpaceToken(token);
+                if (spaceData.valid) {
+                    setInviteData(spaceData);
+                    setInviteType('space_link');
                     setPageStatus('valid');
-                } else {
-                    setPageStatus('invalid');
-                    setErrorMsg('This invite link is invalid or has expired.');
+                    return;
                 }
             } catch (err: any) {
-                console.error('Error resolving token:', err);
-                setPageStatus('invalid');
-                setErrorMsg('Failed to verify invitation.');
+                if (process.env.NODE_ENV === 'development') {
+                    // eslint-disable-next-line no-console
+                    console.log('Space link resolution failed, trying personal invite:', err);
+                }
             }
+
+            // Fall back to personal invitation using edge function
+            try {
+                const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'validate', token })
+                });
+                const result = await response.json();
+                const data = result.data || result;
+
+                if (data.valid) {
+                    setInviteData(data);
+                    setInviteType('personal');
+                    setPageStatus('valid');
+                    return;
+                }
+            } catch (err: any) {
+                if (process.env.NODE_ENV === 'development') {
+                    // eslint-disable-next-line no-console
+                    console.error('Personal invite validation failed:', err);
+                }
+            }
+
+            // Both failed - invalid token
+            setPageStatus('invalid');
+            setErrorMsg('This invite link is invalid or has expired.');
         };
 
         resolveToken();
@@ -67,23 +96,58 @@ export default function JoinView() {
     };
 
     const handleAcceptInvite = async () => {
-        if (!token || !onboardingInfo.name) return;
+        if (!token) return;
+
+        // For space links, we need a name; for personal invites, we don't
+        if (inviteType === 'space_link' && !onboardingInfo.name) return;
 
         setPageStatus('authing');
         try {
-            const result = await apiService.acceptSpaceInvite(token, onboardingInfo.name, onboardingInfo.company);
-            if (result.success) {
+            const { data: sessionData } = await supabase.auth.getSession();
+            if (!sessionData.session?.access_token) {
+                throw new Error('Not authenticated');
+            }
+
+            let result: any;
+            if (inviteType === 'space_link') {
+                // Use inviteService which calls edge function accept_space_link
+                result = await inviteService.acceptSpaceInvite(token, sessionData.session.access_token);
+            } else {
+                // Personal invite - call edge function directly
+                const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${sessionData.session.access_token}`
+                    },
+                    body: JSON.stringify({ action: 'accept', token })
+                });
+                const acceptData = await response.json();
+                result = acceptData.data || acceptData;
+            }
+
+            // Check for redirect_path in the result (edge function returns it directly)
+            const redirectPath = result?.redirect_path || result?.data?.redirect_path;
+            if (redirectPath) {
                 setPageStatus('done');
                 showToast('Successfully joined!', 'success');
                 sessionStorage.removeItem('pending_invite_token');
+                localStorage.removeItem('pending_invite_token');
+                localStorage.removeItem('pending_space_token');
                 setTimeout(() => {
-                    window.location.href = result.redirect_path || '/';
+                    window.location.href = redirectPath;
                 }, 1000);
             } else {
                 setPageStatus('valid');
-                showToast('Failed to join space.', 'error');
+                const errCode = result?.error_code;
+                const message = errCode && errorCodeMessages[errCode] ? errorCodeMessages[errCode] : 'Failed to join space.';
+                showToast(message, 'error');
             }
         } catch (err: any) {
+            if (process.env.NODE_ENV === 'development') {
+                // eslint-disable-next-line no-console
+                console.error('Error accepting invite:', err);
+            }
             setPageStatus('valid');
             showToast('Failed to join space.', 'error');
         }
@@ -104,40 +168,64 @@ export default function JoinView() {
     }
 
     if (showOnboarding) {
+        // Space link invites need name/company info
+        if (inviteType === 'space_link') {
+            return (
+                <div className="join-view-page">
+                    <GlassCard className="max-w-md w-full p-8">
+                        <Heading level={2} className="mb-2 text-center">Final Step</Heading>
+                        <p className="text-[#6E6E80] text-center mb-8">Tell us a bit about yourself</p>
+
+                        <div className="space-y-4 mb-8">
+                            <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#6E6E80] mb-2">Full Name</label>
+                                <input
+                                    value={onboardingInfo.name}
+                                    onChange={e => setOnboardingInfo({...onboardingInfo, name: e.target.value})}
+                                    className="w-full rounded-[8px] border border-[#E5E5E5] px-4 py-3 text-sm focus:outline-none focus:border-[#0D0D0D]"
+                                    placeholder="Jane Doe"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-[#6E6E80] mb-2">Company (Optional)</label>
+                                <input
+                                    value={onboardingInfo.company}
+                                    onChange={e => setOnboardingInfo({...onboardingInfo, company: e.target.value})}
+                                    className="w-full rounded-[8px] border border-[#E5E5E5] px-4 py-3 text-sm focus:outline-none focus:border-[#0D0D0D]"
+                                    placeholder="Acme Inc"
+                                />
+                            </div>
+                        </div>
+
+                        <Button
+                            variant="primary"
+                            className="w-full"
+                            disabled={!onboardingInfo.name || pageStatus === 'authing'}
+                            onClick={handleAcceptInvite}
+                        >
+                            {pageStatus === 'authing' ? 'Joining...' : 'Complete Join'}
+                        </Button>
+                    </GlassCard>
+                </div>
+            );
+        }
+
+        // Personal invites just need confirmation
         return (
             <div className="join-view-page">
-                <GlassCard className="max-w-md w-full p-8">
-                    <Heading level={2} className="mb-2 text-center">Final Step</Heading>
-                    <p className="text-[#6E6E80] text-center mb-8">Tell us a bit about yourself</p>
-
-                    <div className="space-y-4 mb-8">
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#6E6E80] mb-2">Full Name</label>
-                            <input
-                                value={onboardingInfo.name}
-                                onChange={e => setOnboardingInfo({...onboardingInfo, name: e.target.value})}
-                                className="w-full rounded-[8px] border border-[#E5E5E5] px-4 py-3 text-sm focus:outline-none focus:border-[#0D0D0D]"
-                                placeholder="Jane Doe"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-[#6E6E80] mb-2">Company (Optional)</label>
-                            <input
-                                value={onboardingInfo.company}
-                                onChange={e => setOnboardingInfo({...onboardingInfo, company: e.target.value})}
-                                className="w-full rounded-[8px] border border-[#E5E5E5] px-4 py-3 text-sm focus:outline-none focus:border-[#0D0D0D]"
-                                placeholder="Acme Inc"
-                            />
-                        </div>
-                    </div>
+                <GlassCard className="max-w-md w-full p-8 text-center">
+                    <Heading level={2} className="mb-4">Accept Invitation</Heading>
+                    <p className="text-[#6E6E80] mb-8">
+                        You have been invited to join <span className="font-bold text-[#0D0D0D]">{inviteData?.org_name || 'an organization'}</span> as a <span className="font-bold text-[#0D0D0D]">{inviteData?.role || 'member'}</span>.
+                    </p>
 
                     <Button
                         variant="primary"
                         className="w-full"
-                        disabled={!onboardingInfo.name || pageStatus === 'authing'}
+                        disabled={pageStatus === 'authing'}
                         onClick={handleAcceptInvite}
                     >
-                        {pageStatus === 'authing' ? 'Joining...' : 'Complete Join'}
+                        {pageStatus === 'authing' ? 'Accepting...' : 'Accept Invitation'}
                     </Button>
                 </GlassCard>
             </div>
@@ -152,11 +240,19 @@ export default function JoinView() {
                 </div>
                 <Heading level={1} className="mb-2">You're invited</Heading>
                 <p className="text-[#6E6E80] mb-8">
-                    to join <span className="font-bold text-[#0D0D0D]">{inviteData?.space_name}</span>
-                    {inviteData?.org_name && <> at <span className="font-bold text-[#0D0D0D]">{inviteData.org_name}</span></>}
+                    {inviteType === 'space_link' ? (
+                        <>
+                            to join <span className="font-bold text-[#0D0D0D]">{inviteData?.space_name}</span>
+                            {inviteData?.organization_name && <> at <span className="font-bold text-[#0D0D0D]">{inviteData.organization_name}</span></>}
+                        </>
+                    ) : (
+                        <>
+                            to join <span className="font-bold text-[#0D0D0D]">{inviteData?.org_name || 'an organization'}</span> as a <span className="font-bold text-[#0D0D0D]">{inviteData?.role || 'member'}</span>
+                        </>
+                    )}
                 </p>
                 <Button variant="primary" className="w-full py-4 text-xs font-bold uppercase tracking-widest" onClick={handleJoinClick}>
-                    Join Space
+                    {inviteType === 'space_link' ? 'Join Space' : 'Accept Invitation'}
                 </Button>
             </GlassCard>
         </div>

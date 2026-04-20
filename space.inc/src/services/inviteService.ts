@@ -77,20 +77,42 @@ export interface SpaceInviteLinkResponse {
   };
 }
 
+export const errorCodeMessages: Record<string, string> = {
+  LINK_EXPIRED: 'This invite link has expired.',
+  INVITE_FULL: 'This invite has reached its usage limit.',
+  EMAIL_NOT_ALLOWED: "Your email is not on the allowlist for this invite.",
+  NOT_AUTHENTICATED: 'You must be signed in to accept this invite.',
+  INVALID_TOKEN: 'This invite link is invalid.',
+  INVITATION_EXPIRED: 'This invitation has expired.',
+  INVITATION_ALREADY_USED: 'This invitation has already been used.',
+  EMAIL_MISMATCH: 'This invitation was sent to a different email address.',
+};
+
 export const inviteService = {
   /**
    * Resolve a space invite token (public - no auth required)
    * This is for the /join/:token flow
+   * Uses edge function action 'resolve_space_link'
    */
   async resolveSpaceToken(token: string): Promise<SpaceInviteTokenResponse> {
-    const { data, error } = await supabase.rpc('resolve_space_invite_token', { p_token: token });
-    if (error) throw new Error(error.message);
-    return (data as SpaceInviteTokenResponse);
+    const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'resolve_space_link', token }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to resolve space token: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result.data || result;
   },
 
   /**
    * Accept a space invite (auth required)
    * This is for the /join/:token flow
+   * Uses edge function action 'accept_space_link'
    */
   async acceptSpaceInvite(token: string, accessToken: string): Promise<AcceptSpaceInviteResponse> {
     const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
@@ -100,7 +122,7 @@ export const inviteService = {
         'Authorization': `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
-        action: 'accept_space_invite',
+        action: 'accept_space_link',
         token,
       }),
     });
@@ -110,7 +132,14 @@ export const inviteService = {
     }
 
     const result = await response.json();
-    return result.data || result;
+    const data = result.data || result;
+
+    // Map error codes to user-friendly messages
+    if (data.error_code && errorCodeMessages[data.error_code]) {
+      data.errorMessage = errorCodeMessages[data.error_code];
+    }
+
+    return data;
   },
 
   /**
@@ -287,7 +316,7 @@ export const inviteService = {
   getAndClearPendingToken(): { token: string; type: 'email' | 'space' } | null {
     const token = localStorage.getItem('pending_invite_token');
     const type = localStorage.getItem('pending_invite_type') as 'email' | 'space' | null;
-    
+
     if (token) {
       localStorage.removeItem('pending_invite_token');
       localStorage.removeItem('pending_invite_type');
