@@ -641,11 +641,11 @@ const App = () => {
                         </div>
                     </div>
                 </aside>
-                <main className="flex-1 bg-zinc-50/30 p-8 flex flex-col">
+                <main className="flex-1 bg-white p-8 flex flex-col">
                     <header className="h-16 border-b border-zinc-100 flex items-center justify-between px-8 bg-white/50 -mx-8 -mt-8 mb-8">
                         <div className="h-4 w-48 bg-zinc-100 rounded"></div>
                     </header>
-                    <div className="max-w-7xl mx-auto w-full space-y-8">
+                    <div className="w-full h-full space-y-8">
                         <div className="flex justify-between items-end">
                             <div className="space-y-2">
                                 <div className="h-10 w-64 bg-zinc-200 rounded-lg"></div>
@@ -747,8 +747,8 @@ const App = () => {
                                         <Button variant="primary" size="sm" className="font-black uppercase tracking-widest text-[10px]">Upgrade</Button>
                                     </div>
                                 </header>
-                                <div className="flex-1 overflow-y-auto bg-zinc-50/30">
-                                    <div className="max-w-7xl mx-auto px-8 py-10">{renderContent()}</div>
+                                <div className="flex-1 overflow-y-auto bg-white">
+                                    <div className="w-full h-full">{renderContent()}</div>
                                 </div>
                             </AppLayout>
 
@@ -775,7 +775,7 @@ const App = () => {
 
                             {isInstantMeetingModalOpen && (
                                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                                    <GlassCard className="max-w-md w-full p-8 relative">
+                                    <GlassCard className="w-full h-full p-8 relative">
                                         <button title="Close" onClick={() => setIsInstantMeetingModalOpen(false)} className="absolute right-4 top-4 p-2 rounded-full"><X size={18} /></button>
                                         <Heading level={2} className="mb-6 flex items-center gap-2 uppercase tracking-tighter"><Video className="text-emerald-500" /> Instant Meeting</Heading>
                                         <input placeholder="Meeting Title" value={instantMeetingTitle} onChange={(e) => setInstantMeetingTitle(e.target.value)} className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-sm mb-6" />
@@ -806,7 +806,7 @@ const App = () => {
 
                             {showInviteModal && lastInviteData && (
                                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-                                    <GlassCard className="max-w-md w-full p-10 text-center relative overflow-hidden">
+                                    <GlassCard className="w-full h-full p-10 text-center relative overflow-hidden">
                                         <div className="h-20 w-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner border border-emerald-100/50">
                                             <Rocket className="text-emerald-500" size={40} />
                                         </div>
