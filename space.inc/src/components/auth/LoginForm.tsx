@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button, Input } from '../UI';
-import { supabase } from '../../lib/supabase';
+import { apiService } from '../../services/apiService';
 
 export const LoginForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) => {
     const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -26,7 +26,7 @@ export const LoginForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) =
                 const params = new URLSearchParams(window.location.search);
                 const inviteToken = params.get('invite_token');
                 if (inviteToken) {
-                    await supabase.rpc('accept_invitation', { p_token: inviteToken });
+                    await apiService.acceptInvitation(inviteToken);
                 }
             } else {
                 const { error } = await signUp(email, password, {

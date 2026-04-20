@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, ArrowRight, Check, Briefcase, User, Building, Mail, Lock } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { apiService } from '../services/apiService';
 
 interface OnboardingProps {
     onComplete: () => void;
@@ -47,7 +47,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
                 // Accept invitation if coming from an invite link
                 if (inviteToken) {
-                    await supabase.rpc('accept_invitation', { p_token: inviteToken });
+                    await apiService.acceptInvitation(inviteToken);
                 }
 
                 onComplete();

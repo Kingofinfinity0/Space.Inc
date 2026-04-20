@@ -2,6 +2,7 @@ import { ContextsResponse } from '../types/context';
 import { Upload as TusUpload } from 'tus-js-client';
 import { supabase, EDGE_FUNCTION_BASE_URL, ANON_KEY } from '../lib/supabase';
 import { StaffMember, ClientLifecycle } from '../types';
+import { inviteService } from './inviteService';
 
 const STANDARD_UPLOAD_MAX_BYTES = 6 * 1024 * 1024;
 const RESUMABLE_CHUNK_SIZE = 6 * 1024 * 1024;
@@ -388,37 +389,24 @@ export const apiService = {
     },
 
     async resolveSpaceInviteToken(token: string) {
-        const { data, error } = await supabase.rpc('resolve_space_invite_token', {
-            p_token: token
-        });
-        if (error) throw error;
-        return data;
+        return await inviteService.resolveSpaceToken(token);
     },
 
     async acceptSpaceInvite(token: string, clientName: string, clientCompany?: string | null) {
-        const { data, error } = await supabase.rpc('accept_space_invite', {
-            p_token: token,
-            p_client_name: clientName,
-            p_client_company: clientCompany || null
-        });
-        if (error) throw error;
-        return data;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error('Not authenticated');
+        return await inviteService.acceptSpaceInvite(token, session.access_token, clientName, clientCompany);
     },
 
     async validateInvitationContext(token: string) {
-        const { data, error } = await supabase.rpc('validate_invitation_context', {
-            p_token: token
-        });
-        if (error) throw error;
-        return data;
+        return await inviteService.validateEmailInvite(token);
     },
 
     async acceptInvitation(token: string) {
-        const { data, error } = await supabase.rpc('accept_invitation', {
-            p_token: token
-        });
-        if (error) throw error;
-        return data;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error('Not authenticated');
+        const data = await inviteService.acceptEmailInvite(token, session.access_token);
+        return { data };
     },
 
     async regenerateSpaceInviteLink(spaceId: string) {

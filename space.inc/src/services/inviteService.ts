@@ -13,7 +13,8 @@ export interface SpaceInviteTokenResponse {
     use_count?: number;
     expires_at?: string;
   };
-  error_code?: 'INVALID_TOKEN' | 'LINK_EXPIRED' | 'INVITE_FULL';
+  error_code?: 'INVALID_TOKEN' | 'LINK_EXPIRED' | 'INVITE_FULL' | 'NOT_AUTHENTICATED';
+  error?: string;
 }
 
 export interface AcceptSpaceInviteResponse {
@@ -47,6 +48,8 @@ export interface EmailInviteValidationResponse {
   role?: 'staff' | 'client' | 'admin';
   expires_at?: string;
   invite_type?: 'staff' | 'client';
+  error?: string;
+  error_code?: 'INVITATION_EXPIRED' | 'INVITATION_ALREADY_USED' | 'EMAIL_MISMATCH' | 'NOT_AUTHENTICATED' | 'INVALID_TOKEN';
 }
 
 export interface AcceptEmailInviteResponse {
@@ -77,69 +80,146 @@ export interface SpaceInviteLinkResponse {
   };
 }
 
-export const errorCodeMessages: Record<string, string> = {
-  LINK_EXPIRED: 'This invite link has expired.',
-  INVITE_FULL: 'This invite has reached its usage limit.',
-  EMAIL_NOT_ALLOWED: "Your email is not on the allowlist for this invite.",
-  NOT_AUTHENTICATED: 'You must be signed in to accept this invite.',
+export type ResolvedInviteToken =
+  | {
+      token: string;
+      type: 'space_link';
+      data: SpaceInviteTokenResponse;
+    }
+  | {
+      token: string;
+      type: 'personal';
+      data: EmailInviteValidationResponse;
+    };
+
+const pendingInviteKeys = {
+  current: 'pending_invite_token',
+  legacyCurrent: 'pending_invite_token',
+  legacySpace: 'pending_space_token',
+  legacyType: 'pending_invite_type',
+} as const;
+
+const inviteErrorMessages: Record<string, string> = {
   INVALID_TOKEN: 'This invite link is invalid.',
+  LINK_EXPIRED: 'This invite link has expired.',
+  INVITE_FULL: 'This invite has reached its limit.',
+  NOT_AUTHENTICATED: 'Please sign in to continue.',
   INVITATION_EXPIRED: 'This invitation has expired.',
   INVITATION_ALREADY_USED: 'This invitation has already been used.',
   EMAIL_MISMATCH: 'This invitation was sent to a different email address.',
+};
+
+const isBrowserStorageAvailable = () => typeof window !== 'undefined';
+
+const readStorageToken = (storage: Storage | undefined, key: string) => {
+  if (!storage) return null;
+  return storage.getItem(key);
+};
+
+const clearStorageToken = (storage: Storage | undefined, key: string) => {
+  if (!storage) return;
+  storage.removeItem(key);
+};
+
+const clearPendingInviteVariants = () => {
+  if (!isBrowserStorageAvailable()) return;
+
+  [sessionStorage, localStorage].forEach((storage) => {
+    clearStorageToken(storage, pendingInviteKeys.current);
+    clearStorageToken(storage, pendingInviteKeys.legacyCurrent);
+    clearStorageToken(storage, pendingInviteKeys.legacySpace);
+    clearStorageToken(storage, pendingInviteKeys.legacyType);
+  });
+};
+
+const peekPendingInviteToken = () => {
+  if (!isBrowserStorageAvailable()) return null;
+
+  return (
+    readStorageToken(sessionStorage, pendingInviteKeys.current) ||
+    readStorageToken(localStorage, pendingInviteKeys.current) ||
+    readStorageToken(localStorage, pendingInviteKeys.legacySpace)
+  );
+};
+
+const consumePendingInviteToken = () => {
+  const token = peekPendingInviteToken();
+  if (token) {
+    clearPendingInviteVariants();
+  }
+  return token;
+};
+
+const postInvitationAction = async <T>(
+  action: string,
+  payload: Record<string, unknown>,
+  accessToken?: string
+): Promise<T> => {
+  const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ action, ...payload }),
+  });
+
+  const result = await response.json().catch(() => ({}));
+  const data = result?.data ?? result;
+
+  if (!response.ok) {
+    const errorCode =
+      result?.error_code ??
+      result?.error?.code ??
+      result?.error?.error_code ??
+      result?.code ??
+      data?.error_code ??
+      data?.code;
+    const message =
+      inviteErrorMessages[String(errorCode)] ||
+      result?.error?.message ||
+      result?.message ||
+      `Failed to ${action.replace(/_/g, ' ')}`;
+    throw new Error(message);
+  }
+
+  return data as T;
+};
+
+const getInviteStatusMessage = (invite: { error_code?: string; error?: string } | null, fallback: string) => {
+  const code = invite?.error_code || invite?.error;
+  if (code && inviteErrorMessages[code]) return inviteErrorMessages[code];
+  return fallback;
 };
 
 export const inviteService = {
   /**
    * Resolve a space invite token (public - no auth required)
    * This is for the /join/:token flow
-   * Uses edge function action 'resolve_space_link'
    */
   async resolveSpaceToken(token: string): Promise<SpaceInviteTokenResponse> {
-    const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'resolve_space_link', token }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to resolve space token: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    return result.data || result;
+    return await postInvitationAction<SpaceInviteTokenResponse>('resolve_space_link', { token });
   },
 
   /**
    * Accept a space invite (auth required)
    * This is for the /join/:token flow
-   * Uses edge function action 'accept_space_link'
    */
-  async acceptSpaceInvite(token: string, accessToken: string): Promise<AcceptSpaceInviteResponse> {
-    const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        action: 'accept_space_link',
+  async acceptSpaceInvite(
+    token: string,
+    accessToken: string,
+    clientName?: string,
+    clientCompany?: string | null
+  ): Promise<AcceptSpaceInviteResponse['data']> {
+    return await postInvitationAction<AcceptSpaceInviteResponse['data']>(
+      'accept_space_link',
+      {
         token,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to accept invite: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    const data = result.data || result;
-
-    // Map error codes to user-friendly messages
-    if (data.error_code && errorCodeMessages[data.error_code]) {
-      data.errorMessage = errorCodeMessages[data.error_code];
-    }
-
-    return data;
+        client_name: clientName,
+        client_company: clientCompany ?? null,
+      },
+      accessToken
+    );
   },
 
   /**
@@ -147,46 +227,15 @@ export const inviteService = {
    * This is for the /accept-invite?token=... flow
    */
   async validateEmailInvite(token: string): Promise<EmailInviteValidationResponse> {
-    const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'validate',
-        token,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to validate invite: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    return result.data || result;
+    return await postInvitationAction<EmailInviteValidationResponse>('validate', { token });
   },
 
   /**
    * Accept a personal email invite (auth required)
    * This is for the /accept-invite flow
    */
-  async acceptEmailInvite(token: string, accessToken: string): Promise<AcceptEmailInviteResponse> {
-    const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        action: 'accept',
-        token,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to accept invite: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    return result.data || result;
+  async acceptEmailInvite(token: string, accessToken: string): Promise<AcceptEmailInviteResponse['data']> {
+    return await postInvitationAction<AcceptEmailInviteResponse['data']>('accept', { token }, accessToken);
   },
 
   /**
@@ -299,45 +348,94 @@ export const inviteService = {
   },
 
   /**
-   * Store pending token in localStorage for post-auth retrieval
+   * Resolve a token to its invite type.
    */
-  storePendingToken(token: string, type: 'email' | 'space' = 'space'): void {
-    localStorage.setItem('pending_invite_token', token);
-    localStorage.setItem('pending_invite_type', type);
-    // Keep legacy key for backward compatibility if needed, but the new code should use the above
-    if (type === 'space') {
-      localStorage.setItem('pending_space_token', token);
+  async resolveInviteToken(token: string): Promise<ResolvedInviteToken> {
+    const spaceInvite = await this.resolveSpaceToken(token);
+
+    if (spaceInvite.valid) {
+      return {
+        token,
+        type: 'space_link',
+        data: spaceInvite,
+      };
     }
+
+    const personalInvite = await this.validateEmailInvite(token);
+    if (personalInvite.valid) {
+      return {
+        token,
+        type: 'personal',
+        data: personalInvite,
+      };
+    }
+
+    throw new Error(
+      getInviteStatusMessage(
+        spaceInvite,
+        getInviteStatusMessage(
+          personalInvite,
+          'This invitation is no longer valid.'
+        )
+      )
+    );
   },
 
   /**
-   * Retrieve and clear pending token from localStorage
+   * Accept a resolved invite using the correct edge function action.
+   */
+  async acceptResolvedInvite(
+    invite: ResolvedInviteToken,
+    accessToken: string,
+    options?: {
+      clientName?: string;
+      clientCompany?: string | null;
+    }
+  ): Promise<AcceptSpaceInviteResponse['data'] | AcceptEmailInviteResponse['data']> {
+    if (invite.type === 'space_link') {
+      return await this.acceptSpaceInvite(
+        invite.token,
+        accessToken,
+        options?.clientName,
+        options?.clientCompany
+      );
+    }
+
+    return await this.acceptEmailInvite(invite.token, accessToken);
+  },
+
+  /**
+   * Store pending token in sessionStorage for post-auth retrieval.
+   */
+  storePendingToken(token: string): void {
+    if (!isBrowserStorageAvailable()) return;
+
+    sessionStorage.setItem('pending_invite_token', token);
+    localStorage.removeItem('pending_invite_token');
+    localStorage.removeItem('pending_space_token');
+    localStorage.removeItem('pending_invite_type');
+  },
+
+  /**
+   * Peek at the current pending token without clearing it.
+   */
+  peekPendingToken(): string | null {
+    return peekPendingInviteToken();
+  },
+
+  /**
+   * Retrieve and clear pending token from sessionStorage/localStorage.
    */
   getAndClearPendingToken(): { token: string; type: 'email' | 'space' } | null {
-    const token = localStorage.getItem('pending_invite_token');
-    const type = localStorage.getItem('pending_invite_type') as 'email' | 'space' | null;
-
-    if (token) {
-      localStorage.removeItem('pending_invite_token');
-      localStorage.removeItem('pending_invite_type');
-      localStorage.removeItem('pending_space_token'); // Clean up legacy
-      return { token, type: type || 'space' };
-    }
-
-    // Fallback to legacy
-    const legacyToken = localStorage.getItem('pending_space_token');
-    if (legacyToken) {
-      localStorage.removeItem('pending_space_token');
-      return { token: legacyToken, type: 'space' };
-    }
-
-    return null;
+    const token = consumePendingInviteToken();
+    if (!token) return null;
+    return { token, type: 'space' };
   },
 
   /**
-   * Check if there's a pending token
+   * Check if there's a pending token.
    */
   hasPendingToken(): boolean {
-    return !!localStorage.getItem('pending_invite_token') || !!localStorage.getItem('pending_space_token');
+    return !!peekPendingInviteToken();
   },
 };

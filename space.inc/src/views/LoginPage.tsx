@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { inviteService } from '@/services/inviteService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Heading, Text, GlassCard } from '@/components/UI/index';
 import { Rocket, Shield, ArrowRight, UserPlus, Mail } from 'lucide-react';
-import { supabase, EDGE_FUNCTION_BASE_URL } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
     const [searchParams] = useSearchParams();
@@ -21,46 +22,29 @@ export default function LoginPage() {
     const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
     const [inviteOrgName, setInviteOrgName] = useState<string | null>(null);
 
-    // Storage migration: check all possible token locations to prevent dropping users mid-flow
-    const getPendingToken = (): string | null => {
-        return (
-            sessionStorage.getItem('pending_invite_token') ||
-            localStorage.getItem('pending_invite_token') ||
-            localStorage.getItem('pending_space_token') // legacy key
-        );
-    };
-
-    const clearPendingToken = () => {
-        sessionStorage.removeItem('pending_invite_token');
-        localStorage.removeItem('pending_invite_token');
-        localStorage.removeItem('pending_space_token');
-    };
-
     useEffect(() => {
-        const token = getPendingToken();
+        if (inviteToken) {
+            inviteService.storePendingToken(inviteToken);
+        }
+
+        const token = inviteService.peekPendingToken();
         if (token) {
             setPendingInviteToken(token);
-            // Use edge function to validate - try personal invite validation
-            fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'validate', token })
-            })
-                .then(res => res.json())
-                .then(result => {
-                    const data = result.data || result;
-                    if (data && data.valid && data.org_name) {
-                        setInviteOrgName(data.org_name);
+            inviteService.resolveInviteToken(token)
+                .then(data => {
+                    if (data.type === 'space_link') {
+                        setInviteOrgName(data.data.organization_name || data.data.space_name || null);
+                    } else {
+                        setInviteOrgName(data.data.org_name || null);
                     }
                 })
                 .catch(err => {
                     if (process.env.NODE_ENV === 'development') {
-                        // eslint-disable-next-line no-console
                         console.error('Error fetching invite details:', err);
                     }
                 });
         }
-    }, []);
+    }, [inviteToken]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -71,12 +55,9 @@ export default function LoginPage() {
             const { error: signInError } = await signIn(email, password);
             if (signInError) throw signInError;
 
-            // Check for any pending token using the migration strategy
-            const pendingToken = getPendingToken();
+            const pendingSpaceToken = inviteService.peekPendingToken();
 
-            if (inviteToken || pendingToken) {
-                const tokenToUse = inviteToken || pendingToken;
-
+            if (inviteToken || pendingSpaceToken) {
                 let session = null;
                 for (let i = 0; i < 10; i++) {
                     const { data } = await supabase.auth.getSession();
@@ -88,88 +69,20 @@ export default function LoginPage() {
                 }
                 if (!session) throw new Error('Session not ready. Please try again.');
 
-                // Clear all token storage variants to prevent reuse
-                clearPendingToken();
+                const token = inviteService.getAndClearPendingToken()?.token || inviteToken;
+                if (token) {
+                    const resolvedInvite = await inviteService.resolveInviteToken(token);
+                    const acceptedInvite = await inviteService.acceptResolvedInvite(
+                        resolvedInvite,
+                        session.access_token
+                    );
 
-                // Branching logic: try space link first, then fall back to personal invite
-                let result: any = null;
-                let isSpaceLink = false;
-
-                try {
-                    // Try to resolve as space link
-                    const resolveRes = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'resolve_space_link', token: tokenToUse })
-                    });
-                    const resolveData = await resolveRes.json();
-                    const spaceData = resolveData.data || resolveData;
-
-                    if (spaceData.valid) {
-                        // It's a valid space link - accept it
-                        isSpaceLink = true;
-                        const acceptRes = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${session.access_token}`
-                            },
-                            body: JSON.stringify({ action: 'accept_space_link', token: tokenToUse })
-                        });
-                        const acceptData = await acceptRes.json();
-                        result = acceptData.data || acceptData;
-                    }
-                } catch (spaceErr) {
-                    if (process.env.NODE_ENV === 'development') {
-                        // eslint-disable-next-line no-console
-                        console.log('Space link resolution failed, trying personal invite');
+                    if (acceptedInvite?.redirect_path) {
+                        navigate(acceptedInvite.redirect_path, { replace: true });
+                        return;
                     }
                 }
 
-                // If not a space link, try personal invitation
-                if (!isSpaceLink) {
-                    try {
-                        const acceptRes = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${session.access_token}`
-                            },
-                            body: JSON.stringify({ action: 'accept', token: tokenToUse })
-                        });
-                        const acceptData = await acceptRes.json();
-                        result = acceptData.data || acceptData;
-                    } catch (personalErr) {
-                        if (process.env.NODE_ENV === 'development') {
-                            // eslint-disable-next-line no-console
-                            console.error('Personal invite acceptance failed:', personalErr);
-                        }
-                        throw personalErr;
-                    }
-                }
-
-                // Handle result with standardized redirect
-                if (result?.redirect_path) {
-                    window.location.href = result.redirect_path;
-                    return;
-                }
-
-                if (result?.error_code) {
-                    const errorMessages: Record<string, string> = {
-                        LINK_EXPIRED: 'This invite has expired',
-                        INVITE_FULL: 'Invite limit reached',
-                        EMAIL_NOT_ALLOWED: "Your email isn't on the allowlist",
-                        NOT_AUTHENTICATED: 'Please sign in again',
-                        INVALID_TOKEN: 'Invalid invite link',
-                        INVITATION_EXPIRED: 'This invitation has expired',
-                        INVITATION_ALREADY_USED: 'This invitation has already been used',
-                        EMAIL_MISMATCH: 'This invitation was sent to a different email',
-                    };
-                    setError(errorMessages[result.error_code] || 'Failed to accept invitation');
-                    return;
-                }
-
-                // Fallback redirect
                 navigate('/dashboard', { replace: true });
             } else {
                 navigate('/dashboard');

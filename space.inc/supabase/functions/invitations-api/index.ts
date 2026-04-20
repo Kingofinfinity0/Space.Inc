@@ -118,6 +118,31 @@ serve(async (req: Request) => {
       );
     }
 
+    if (action === "resolve_space_link") {
+      const { token } = body;
+      if (!token) {
+        return errorResponse(
+          await hydrateError(null, "VAL_MISSING_FIELD", { field: "token" })
+        );
+      }
+
+      const anon = createClient(
+        SUPABASE_URL,
+        Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+      );
+
+      const { data, error } = await anon.rpc("resolve_space_invite_token", {
+        p_token: token,
+      });
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ data }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ── AUTH REQUIRED for all other actions ──────────────────────────────────
     const { userId, supabase } = await getAuthContext(req);
     supabaseClient = supabase;
@@ -220,6 +245,43 @@ serve(async (req: Request) => {
 
       const { data, error } = await supabase.rpc("accept_invitation", {
         p_token: token,
+      });
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ data }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === "accept_space_link") {
+      const { token, client_name, client_company } = body;
+      if (!token) {
+        return errorResponse(
+          await hydrateError(supabase, "VAL_MISSING_FIELD", { field: "token" })
+        );
+      }
+
+      const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_KEY);
+
+      let resolvedClientName = client_name;
+      if (!resolvedClientName) {
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("full_name, email")
+          .eq("id", userId)
+          .single();
+        resolvedClientName =
+          profile?.full_name ??
+          profile?.email?.split("@")[0] ??
+          "Team member";
+      }
+
+      const { data, error } = await supabase.rpc("accept_space_invite", {
+        p_token: token,
+        p_client_name: resolvedClientName,
+        p_client_company: client_company ?? null,
       });
 
       if (error) throw error;
