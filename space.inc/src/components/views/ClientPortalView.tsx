@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
+import { usePermissions } from "../../hooks/usePermissions";
 import { supabase } from '../../lib/supabase';
 import {
   Rocket,
@@ -34,6 +35,7 @@ const ClientPortalView = ({
   onLogout: () => void;
 }) => {
   const { user, profile } = useAuth();
+  const { permissions, isLoading: permissionsLoading } = usePermissions(client.id);
   const { showToast } = useToast();
 
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -50,70 +52,81 @@ const ClientPortalView = ({
 
     try {
       setLoading(true);
-      const [notificationsRes, activityRes, tasksRes] = await Promise.all([
-        apiService.getUnifiedNotifications(orgId, user.id),
-        apiService.getDashboardFeed(orgId, 20),
+      const [notifsRes, activityRes, tasksRes] = await Promise.all([
+        supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('activity_logs')
+          .select('*')
+          .eq('space_id', client.id)
+          .order('created_at', { ascending: false })
+          .limit(5),
         apiService.getTasks(orgId, client.id),
       ]);
 
-      setNotifications(notificationsRes.data || []);
-      setActivityFeed((activityRes.data || []).filter((log: any) => log.space_id === client.id));
-      setTasks(tasksRes.data || []);
+      if (notifsRes.data) setNotifications(notifsRes.data);
+      if (activityRes.data) setActivityFeed(activityRes.data);
+      if (tasksRes.data) setTasks(tasksRes.data);
     } catch (err) {
-      console.error('Failed to load client portal data:', err);
+      console.error('Error loading portal data:', err);
     } finally {
       setLoading(false);
     }
-  }, [user, profile?.organization_id, client.id]);
+  }, [user, profile, client.id]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const upcomingMeetings = meetings
-    .filter((meeting) => meeting.status === 'scheduled')
+    .filter((m) => m.status === 'scheduled' || m.status === 'active')
     .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
 
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-  const formatTime = (dateStr: string) =>
-    new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const overviewStats = [
-    { label: 'Unread updates', value: notifications.filter((item) => !item.is_read).length, accent: 'text-[#0D0D0D]' },
-    { label: 'Upcoming meetings', value: upcomingMeetings.length, accent: 'text-[#0D0D0D]' },
-    { label: 'Open tasks', value: tasks.filter((task) => task.status !== 'done').length, accent: 'text-[#0D0D0D]' },
+  const stats = [
+    { label: 'Messages', value: client.message_count || 0, accent: 'text-blue-500' },
+    { label: 'Documents', value: client.file_count || 0, accent: 'text-emerald-500' },
+    { label: 'Meetings', value: client.meeting_count || 0, accent: 'text-amber-500' },
+    { label: 'Tasks', value: tasks.filter((t) => t.status !== 'done').length, accent: 'text-violet-500' },
   ];
 
   return (
-    <div className="app-page-shell px-4 pb-28 pt-6 md:px-8 md:pb-32 md:pt-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <GlassCard className="glass-elevated relative overflow-hidden p-6 md:p-8 page-enter">
-          <div className="pointer-events-none absolute inset-0 bg-[#F7F7F8]" />
-          <div className="relative flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-3xl space-y-5">
+    <div className="min-h-screen bg-[#F7F7F8] p-4 md:p-8 font-sans">
+      <div className="mx-auto max-w-6xl space-y-8">
+        <GlassCard className="overflow-hidden border-none bg-white p-6 md:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-white text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-                  <Rocket size={22} />
+                <div className="flex h-12 w-12 items-center justify-center rounded-[8px] bg-black text-white shadow-lg">
+                  <Rocket size={24} />
                 </div>
                 <div>
-                  <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#6E6E80]">Client workspace</div>
-                  <div className="text-lg font-semibold tracking-[-0.02em] text-[#0D0D0D]">Space.inc Portal</div>
+                  <h1 className="text-2xl font-semibold tracking-tight text-[#0D0D0D]">
+                    Welcome back, {profile?.full_name?.split(' ')[0] || 'Client'}
+                  </h1>
+                  <p className="text-sm text-[#6E6E80]">Here is what is happening in your workspace.</p>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <Heading level={2} className="text-3xl font-semibold tracking-[-0.04em] text-[#0D0D0D] md:text-4xl">
-                  Welcome back, {profile?.full_name?.split(' ')[0] || 'Member'}
-                </Heading>
-                <p className="max-w-2xl text-sm leading-6 text-[#6E6E80] md:text-base">
-                  A quieter, sharper workspace for {client.name}. Meetings, files, updates, and action items stay in one living surface.
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                {overviewStats.map((item, index) => (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {stats.map((item, index) => (
                   <div
                     key={item.label}
                     style={{ animationDelay: `${index * 20}ms` }}
@@ -146,216 +159,224 @@ const ClientPortalView = ({
 
         <div className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
           <div className="space-y-6">
-            <GlassCard className="p-5 md:p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 text-sm font-medium text-[#0D0D0D]">
-                    <Bell size={16} className="text-[#6E6E80]" />
-                    Inbox
+            {(permissions ? permissions.message_clients : true) && (
+              <GlassCard className="p-5 md:p-6">
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-[#0D0D0D]">
+                      <Bell size={16} className="text-[#6E6E80]" />
+                      Inbox
+                    </div>
+                    <p className="mt-1 text-xs text-[#6E6E80]">Quiet, high-signal updates from your workspace.</p>
                   </div>
-                  <p className="mt-1 text-xs text-[#6E6E80]">Quiet, high-signal updates from your workspace.</p>
+                  {notifications.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
+                        loadData();
+                      }}
+                    >
+                      Mark all read
+                    </Button>
+                  )}
                 </div>
-                {notifications.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={async () => {
-                      await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
-                      loadData();
-                    }}
-                  >
-                    Mark all read
-                  </Button>
+
+                {loading ? (
+                  <SkeletonCard className="h-24 rounded-[8px] border-[#E5E5E5] bg-[#F7F7F8]" />
+                ) : notifications.length > 0 ? (
+                  <div className="space-y-3">
+                    {notifications.map((notification, index) => (
+                      <div
+                        key={notification.id}
+                        style={{ animationDelay: `${index * 20}ms` }}
+                        className="interactive-surface page-enter flex items-start gap-4 rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]">
+                          {notification.type === 'file_uploaded' ? (
+                            <FileText size={18} />
+                          ) : notification.type === 'message_received' ? (
+                            <MessageSquare size={18} />
+                          ) : (
+                            <Calendar size={18} />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm leading-6 text-[#0D0D0D]">{notification.message}</p>
+                          <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">
+                            {formatTime(notification.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-[8px] border border-[#E5E5E5] bg-white px-5 py-10 text-center shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+                    <CheckSquare size={30} className="mx-auto text-[#6E6E80]" />
+                    <p className="mt-3 text-sm text-[#6E6E80]">All caught up.</p>
+                  </div>
                 )}
-              </div>
+              </GlassCard>
+            )}
 
-              {loading ? (
-                <SkeletonCard className="h-24 rounded-[8px] border-[#E5E5E5] bg-[#F7F7F8]" />
-              ) : notifications.length > 0 ? (
-                <div className="space-y-3">
-                  {notifications.map((notification, index) => (
-                    <div
-                      key={notification.id}
-                      style={{ animationDelay: `${index * 20}ms` }}
-                      className="interactive-surface page-enter flex items-start gap-4 rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]">
-                        {notification.type === 'file_uploaded' ? (
-                          <FileText size={18} />
-                        ) : notification.type === 'message_received' ? (
-                          <MessageSquare size={18} />
-                        ) : (
-                          <Calendar size={18} />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm leading-6 text-[#0D0D0D]">{notification.message}</p>
-                        <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[#6E6E80]">
-                          {formatTime(notification.created_at)}
-                        </p>
-                      </div>
+            {(permissions ? permissions.view_history : true) && (
+              <GlassCard className="p-5 md:p-6">
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-[#0D0D0D]">
+                      <Activity size={16} className="text-[#6E6E80]" />
+                      Recent activity
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-[8px] border border-[#E5E5E5] bg-white px-5 py-10 text-center shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-                  <CheckSquare size={30} className="mx-auto text-[#6E6E80]" />
-                  <p className="mt-3 text-sm text-[#6E6E80]">All caught up.</p>
-                </div>
-              )}
-            </GlassCard>
-
-            <GlassCard className="p-5 md:p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 text-sm font-medium text-[#0D0D0D]">
-                    <Activity size={16} className="text-[#6E6E80]" />
-                    Recent activity
+                    <p className="mt-1 text-xs text-[#6E6E80]">A dense feed of what changed, without dashboard clutter.</p>
                   </div>
-                  <p className="mt-1 text-xs text-[#6E6E80]">A dense feed of what changed, without dashboard clutter.</p>
+                  <div className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#6E6E80]">
+                    Live
+                  </div>
                 </div>
-                <div className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#6E6E80]">
-                  Live
-                </div>
-              </div>
 
-              {loading ? (
-                <SkeletonCard className="h-40 rounded-[24px] border-white/8 bg-white/[0.04]" />
-              ) : activityFeed.length > 0 ? (
-                <div className="divide-y divide-white/6 overflow-hidden rounded-[22px] border border-white/6 bg-white/[0.03]">
-                  {activityFeed.map((item, index) => (
-                    <div
-                      key={item.id}
-                      style={{ animationDelay: `${index * 20}ms` }}
-                      className="page-enter flex items-center gap-4 px-4 py-4"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.08] text-slate-300">
-                        {item.action_type === 'file_uploaded' ? (
-                          <FileText size={18} />
-                        ) : item.action_type === 'message_sent' ? (
-                          <MessageSquare size={18} />
-                        ) : (
-                          <Video size={18} />
-                        )}
+                {loading ? (
+                  <SkeletonCard className="h-40 rounded-[24px] border-white/8 bg-white/[0.04]" />
+                ) : activityFeed.length > 0 ? (
+                  <div className="divide-y divide-white/6 overflow-hidden rounded-[22px] border border-white/6 bg-white/[0.03]">
+                    {activityFeed.map((item, index) => (
+                      <div
+                        key={item.id}
+                        style={{ animationDelay: `${index * 20}ms` }}
+                        className="page-enter flex items-center gap-4 px-4 py-4"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.08] text-slate-300">
+                          {item.action_type === 'file_uploaded' ? (
+                            <FileText size={18} />
+                          ) : item.action_type === 'message_sent' ? (
+                            <MessageSquare size={18} />
+                          ) : (
+                            <Video size={18} />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-slate-100">
+                            <span className="font-medium">{item.actor_name}</span>{' '}
+                            {item.action_type === 'file_uploaded'
+                              ? 'shared a file'
+                              : item.action_type === 'message_sent'
+                                ? 'sent a message'
+                                : 'updated the workspace'}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">Added {formatDate(item.created_at)}</p>
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-slate-100">
-                          <span className="font-medium">{item.actor_name}</span>{' '}
-                          {item.action_type === 'file_uploaded'
-                            ? 'shared a file'
-                            : item.action_type === 'message_sent'
-                              ? 'sent a message'
-                              : 'updated the workspace'}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">Added {formatDate(item.created_at)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="glass-muted rounded-[22px] px-5 py-10 text-center text-sm text-slate-400">
-                  Activity will appear here as your team works.
-                </div>
-              )}
-            </GlassCard>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="glass-muted rounded-[22px] px-5 py-10 text-center text-sm text-slate-400">
+                    Activity will appear here as your team works.
+                  </div>
+                )}
+              </GlassCard>
+            )}
           </div>
 
           <div className="space-y-6">
-            <GlassCard className="p-5 md:p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 text-sm font-medium text-white">
-                    <Calendar size={16} className="text-amber-300" />
-                    Upcoming meetings
-                  </div>
-                  <p className="mt-1 text-xs text-slate-400">Ready-to-join sessions with just enough context.</p>
-                </div>
-              </div>
-
-              {upcomingMeetings.length > 0 ? (
-                <div className="space-y-3">
-                  {upcomingMeetings.map((meeting, index) => (
-                    <div
-                      key={meeting.id}
-                      style={{ animationDelay: `${index * 20}ms` }}
-                      className="glass-muted interactive-surface page-enter rounded-[22px] p-4"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                            {formatDate(meeting.starts_at)}
-                          </div>
-                          <p className="text-sm font-medium leading-6 text-slate-100">{meeting.title}</p>
-                          <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <Clock size={12} />
-                            {formatTime(meeting.starts_at)}
-                          </div>
-                        </div>
-                        <Button variant="primary" size="sm" onClick={() => onJoin(meeting.id)}>
-                          Join
-                        </Button>
-                      </div>
+            {(permissions ? permissions.view_meetings : true) && (
+              <GlassCard className="p-5 md:p-6">
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-white">
+                      <Calendar size={16} className="text-amber-300" />
+                      Upcoming meetings
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="glass-muted rounded-[22px] px-5 py-10 text-center text-sm text-slate-400">
-                  No scheduled meetings yet.
-                </div>
-              )}
-            </GlassCard>
-
-            <GlassCard className="p-5 md:p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 text-sm font-medium text-white">
-                    <ListTodo size={16} className="text-violet-300" />
-                    My tasks
+                    <p className="mt-1 text-xs text-slate-400">Ready-to-join sessions with just enough context.</p>
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">A tighter checklist with status-only color accents.</p>
                 </div>
-                <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.05] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                  <Sparkles size={12} />
-                  Focused
-                </div>
-              </div>
 
-              {loading ? (
-                <SkeletonCard className="h-40 rounded-[24px] border-white/8 bg-white/[0.04]" />
-              ) : tasks.length > 0 ? (
-                <div className="divide-y divide-white/6 overflow-hidden rounded-[22px] border border-white/6 bg-white/[0.03]">
-                  {tasks.map((task, index) => (
-                    <div
-                      key={task.id}
-                      style={{ animationDelay: `${index * 20}ms` }}
-                      className={`page-enter flex items-start gap-3 px-4 py-4 ${task.status === 'done' ? 'opacity-65' : ''}`}
-                    >
+                {upcomingMeetings.length > 0 ? (
+                  <div className="space-y-3">
+                    {upcomingMeetings.map((meeting, index) => (
                       <div
-                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
-                          task.status === 'done'
-                            ? 'border-emerald-400/35 bg-emerald-400/25 text-emerald-200'
-                            : 'border-white/14 bg-white/[0.04] text-slate-500'
-                        }`}
+                        key={meeting.id}
+                        style={{ animationDelay: `${index * 20}ms` }}
+                        className="glass-muted interactive-surface page-enter rounded-[22px] p-4"
                       >
-                        {task.status === 'done' && <CheckSquare size={12} />}
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-2">
+                            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                              {formatDate(meeting.starts_at)}
+                            </div>
+                            <p className="text-sm font-medium leading-6 text-slate-100">{meeting.title}</p>
+                            <div className="flex items-center gap-2 text-xs text-slate-400">
+                              <Clock size={12} />
+                              {formatTime(meeting.starts_at)}
+                            </div>
+                          </div>
+                          <Button variant="primary" size="sm" onClick={() => onJoin(meeting.id)}>
+                            Join
+                          </Button>
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-sm ${task.status === 'done' ? 'line-through text-slate-500' : 'text-slate-100'}`}>
-                          {task.title}
-                        </p>
-                        {task.due_date && (
-                          <p className="mt-1 text-xs text-slate-500">Due {formatDate(task.due_date)}</p>
-                        )}
-                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="glass-muted rounded-[22px] px-5 py-10 text-center text-sm text-slate-400">
+                    No scheduled meetings yet.
+                  </div>
+                )}
+              </GlassCard>
+            )}
+
+            {(permissions ? permissions.view_tasks : true) && (
+              <GlassCard className="p-5 md:p-6">
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-white">
+                      <ListTodo size={16} className="text-violet-300" />
+                      My tasks
                     </div>
-                  ))}
+                    <p className="mt-1 text-xs text-slate-400">A tighter checklist with status-only color accents.</p>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.05] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                    <Sparkles size={12} />
+                    Focused
+                  </div>
                 </div>
-              ) : (
-                <div className="glass-muted rounded-[22px] px-5 py-10 text-center text-sm text-slate-400">
-                  No pending tasks right now.
-                </div>
-              )}
-            </GlassCard>
+
+                {loading ? (
+                  <SkeletonCard className="h-40 rounded-[24px] border-white/8 bg-white/[0.04]" />
+                ) : tasks.length > 0 ? (
+                  <div className="divide-y divide-white/6 overflow-hidden rounded-[22px] border border-white/6 bg-white/[0.03]">
+                    {tasks.map((task, index) => (
+                      <div
+                        key={task.id}
+                        style={{ animationDelay: `${index * 20}ms` }}
+                        className={`page-enter flex items-start gap-3 px-4 py-4 ${task.status === 'done' ? 'opacity-65' : ''}`}
+                      >
+                        <div
+                          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+                            task.status === 'done'
+                              ? 'border-emerald-400/35 bg-emerald-400/25 text-emerald-200'
+                              : 'border-white/14 bg-white/[0.04] text-slate-500'
+                          }`}
+                        >
+                          {task.status === 'done' && <CheckSquare size={12} />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm ${task.status === 'done' ? 'line-through text-slate-500' : 'text-slate-100'}`}>
+                            {task.title}
+                          </p>
+                          {task.due_date && (
+                            <p className="mt-1 text-xs text-slate-500">Due {formatDate(task.due_date)}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="glass-muted rounded-[22px] px-5 py-10 text-center text-sm text-slate-400">
+                    No pending tasks right now.
+                  </div>
+                )}
+              </GlassCard>
+            )}
           </div>
         </div>
       </div>

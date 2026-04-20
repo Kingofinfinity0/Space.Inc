@@ -15,7 +15,7 @@ import { CalendarWidget } from '../CalendarWidget';
 
 
 // 4. Meeting Hub
-const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMeet, onDeleteMeeting, onEndMeeting, tasks }: { 
+const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMeet, onOpenSpace, onDeleteMeeting, onEndMeeting, tasks }: {
     meetings: Meeting[], 
     clients: ClientSpace[], 
     onSchedule: (m: any) => void, 

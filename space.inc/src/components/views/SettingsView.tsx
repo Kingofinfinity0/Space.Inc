@@ -68,3 +68,20 @@ const SettingsView = () => {
     )
 }
 export default SettingsView;
+
+export const BillingSettingsView = () => {
+    const { userRole } = useAuth();
+
+    if (userRole !== 'owner') {
+        return <div className="p-8 text-center text-[#6E6E80]">Access Denied. Billing is only accessible by the organization owner.</div>;
+    }
+
+    return (
+        <div>
+            <Heading level={1} className="mb-8">Billing & Subscription</Heading>
+            <GlassCard className="p-6">
+                <Text>Subscription management and billing history will appear here.</Text>
+            </GlassCard>
+        </div>
+    );
+};

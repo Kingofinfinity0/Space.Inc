@@ -30,12 +30,14 @@ import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
 import SpaceChatPanel from './SpaceChatPanel';
 import { CalendarWidget } from '../CalendarWidget';
 import TaskWorkspace from '../tasks/TaskWorkspace';
+import { usePermissions } from "../../hooks/usePermissions";
 
 
 // 3. Space Detail View
 const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet, onEndMeeting, onDeleteMeeting }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void, onEndMeeting?: (id: string, outcome: string, notes: string) => void, onDeleteMeeting?: (meetingId: string) => void }) => {
     const navigate = useNavigate();
     const { user, profile, organizationId, userRole, session } = useAuth();
+    const { permissions, isLoading: permissionsLoading } = usePermissions(spaceId);
     const { showToast } = useToast();
 
     const [space, setSpace] = useState<ClientSpace | undefined>(initialSpace);
@@ -65,8 +67,8 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     
     const [tasks, setTasks] = useState<Task[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
-    const canManageInvites = userRole === 'owner' || userRole === 'admin' || userRole === 'staff';
-    const canManageSpace = userRole === 'owner' || userRole === 'admin';
+    const canManageInvites = permissions ? (!!permissions.can_invite_clients || !!permissions.can_invite_staff) : (userRole === 'owner' || userRole === 'admin' || userRole === 'staff');
+    const canManageSpace = permissions ? !!permissions.manage_spaces : (userRole === 'owner' || userRole === 'admin');
 
     const allowedSpaceStatuses = ['active', 'onboarding', 'archived', 'closed'] as const;
 
@@ -411,13 +413,19 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                         </>
                     )}
                     <div className="flex rounded-[999px] border border-[#E5E5E5] bg-[#F7F7F8] p-1">
-                    {['Dashboard', 'Chat', 'Meetings', 'Tasks', 'Docs'].map(tab => (
+                    {([
+                        { label: 'Dashboard', allowed: permissions ? !!permissions.view_dashboard : true },
+                        { label: 'Chat', allowed: permissions ? !!permissions.message_clients : true },
+                        { label: 'Meetings', allowed: permissions ? !!permissions.view_meetings : true },
+                        { label: 'Tasks', allowed: permissions ? !!permissions.view_tasks : true },
+                        { label: 'Docs', allowed: permissions ? !!permissions.view_files : true }
+                    ] as const).map(tab => tab.allowed && (
                         <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab as any)}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${activeTab === tab ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}
+                            key={tab.label}
+                            onClick={() => setActiveTab(tab.label as any)}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${activeTab === tab.label ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}
                         >
-                            {tab}
+                            {tab.label}
                         </button>
                     ))}
                 </div>
@@ -466,16 +474,24 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                 {activeTab === 'Dashboard' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <GlassCard className="p-6">
-                                <Heading level={3} className="mb-4">Space Actions</Heading>
-                                <div className="space-y-3">
-                                    <Button variant="secondary" className="w-full justify-start" onClick={() => setIsUploadModalOpen(true)}>
-                                        <Upload size={16} className="mr-2" /> Upload Document
-                                    </Button>
-                                    <Button variant="secondary" className="w-full justify-start"><MessageSquare size={16} className="mr-2" /> Create Auto-Message</Button>
-                                    <Button variant="secondary" className="w-full justify-start"><ListTodo size={16} className="mr-2" /> Create Task</Button>
-                                </div>
-                            </GlassCard>
+                            {(permissions ? (permissions.upload_files || permissions.manage_tasks || permissions.message_clients) : true) && (
+                                <GlassCard className="p-6">
+                                    <Heading level={3} className="mb-4">Space Actions</Heading>
+                                    <div className="space-y-3">
+                                        {(permissions ? permissions.upload_files : true) && (
+                                            <Button variant="secondary" className="w-full justify-start" onClick={() => setIsUploadModalOpen(true)}>
+                                                <Upload size={16} className="mr-2" /> Upload Document
+                                            </Button>
+                                        )}
+                                        {(permissions ? permissions.message_clients : true) && (
+                                            <Button variant="secondary" className="w-full justify-start"><MessageSquare size={16} className="mr-2" /> Create Auto-Message</Button>
+                                        )}
+                                        {(permissions ? permissions.manage_tasks : true) && (
+                                            <Button variant="secondary" className="w-full justify-start"><ListTodo size={16} className="mr-2" /> Create Task</Button>
+                                        )}
+                                    </div>
+                                </GlassCard>
+                            )}
                             <GlassCard className="p-6">
                                 <Heading level={3} className="mb-4">Space Members</Heading>
                                 <div className="space-y-3">
@@ -677,12 +693,16 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                 <p className="text-xs text-zinc-500">Scheduled and live calls for this workspace.</p>
                             </div>
                             <div className="flex gap-2">
-                                <Button variant="secondary" size="sm" onClick={() => onInstantMeet(space.id)}>
-                                    <Video size={14} className="mr-1" /> Meet Now
-                                </Button>
-                                <Button variant="primary" size="sm" onClick={() => setIsScheduleModalOpen(true)}>
-                                    <Plus size={14} className="mr-1" /> Schedule
-                                </Button>
+                                {(permissions ? permissions.schedule_meetings : true) && (
+                                    <>
+                                        <Button variant="secondary" size="sm" onClick={() => onInstantMeet(space.id)}>
+                                            <Video size={14} className="mr-1" /> Meet Now
+                                        </Button>
+                                        <Button variant="primary" size="sm" onClick={() => setIsScheduleModalOpen(true)}>
+                                            <Plus size={14} className="mr-1" /> Schedule
+                                        </Button>
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -871,6 +891,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                         loading={tasksLoading}
                         title={`${space.name} Tasks`}
                         subtitle="Manage action items for this workspace with the same multi-view system used in the main overview."
+                        allowCreate={permissions ? !!permissions.manage_tasks : true}
                         scopeSpaceId={space.id}
                         groupOptions={['Design', 'Engineering', 'Marketing']}
                         emptyTitle="No tasks assigned to this space"
@@ -912,12 +933,16 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                         <div className="flex justify-between items-center">
                             <Heading level={2}>{showTrash ? 'Trash' : 'Documents'}</Heading>
                             <div className="flex gap-2">
-                                <Button variant="ghost" onClick={() => setShowTrash(!showTrash)} className={showTrash ? 'text-rose-500 bg-rose-50' : ''}>
-                                    <Trash2 size={16} className="mr-1" /> {showTrash ? 'Exit Trash' : 'Trash'}
-                                </Button>
-                                <Button size="sm" onClick={() => setIsUploadModalOpen(true)}>
-                                    <Upload size={16} className="mr-1" /> Upload
-                                </Button>
+                                {(permissions ? permissions.delete_own_files : true) && (
+                                    <Button variant="ghost" onClick={() => setShowTrash(!showTrash)} className={showTrash ? 'text-rose-500 bg-rose-50' : ''}>
+                                        <Trash2 size={16} className="mr-1" /> {showTrash ? 'Exit Trash' : 'Trash'}
+                                    </Button>
+                                )}
+                                {(permissions ? permissions.upload_files : true) && (
+                                    <Button size="sm" onClick={() => setIsUploadModalOpen(true)}>
+                                        <Upload size={16} className="mr-1" /> Upload
+                                    </Button>
+                                )}
                             </div>
                         </div>
 
@@ -971,46 +996,52 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                     >
                                                         <Eye size={16} />
                                                     </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={async () => {
-                                                            const { data } = await apiService.getSignedUrl(file.id, organizationId || '');
-                                                            if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                                                        }}
-                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950"
-                                                        title="Download"
-                                                        aria-label={`Download ${file.name}`}
-                                                    >
-                                                        <Download size={16} />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#6E6E80] shadow-sm transition-all hover:border-[#E5E5E5] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
-                                                        onClick={() => setVersioningFile(file as any)}
-                                                        title="Version History"
-                                                        aria-label={`View version history for ${file.name}`}
-                                                    >
-                                                        <History size={16} />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={async () => {
-                                                            if (confirm('Are you sure you want to move this file to trash?')) {
-                                                         try {
-                                                             await apiService.deleteFile(file.id, organizationId || '');
-                                                             removeFile(file.id);
-                                                             showToast('File moved to trash.', "success");
-                                                                 } catch (err: any) {
-                                                                    showToast(friendlyError(err?.message), "error");
-                                                                 }
-                                                            }
-                                                        }}
-                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#6E6E80] shadow-sm transition-all hover:border-[#E5E5E5] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
-                                                        title="Move to trash"
-                                                        aria-label={`Move ${file.name} to trash`}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                                    {(permissions ? permissions.download_files : true) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                const { data } = await apiService.getSignedUrl(file.id, organizationId || '');
+                                                                if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                                                            }}
+                                                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950"
+                                                            title="Download"
+                                                            aria-label={`Download ${file.name}`}
+                                                        >
+                                                            <Download size={16} />
+                                                        </button>
+                                                    )}
+                                                    {(permissions ? permissions.upload_files : true) && (
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#6E6E80] shadow-sm transition-all hover:border-[#E5E5E5] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                                                            onClick={() => setVersioningFile(file as any)}
+                                                            title="Version History"
+                                                            aria-label={`View version history for ${file.name}`}
+                                                        >
+                                                            <History size={16} />
+                                                        </button>
+                                                    )}
+                                                    {(permissions ? permissions.delete_own_files : true) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                if (confirm('Are you sure you want to move this file to trash?')) {
+                                                            try {
+                                                                await apiService.deleteFile(file.id, organizationId || '');
+                                                                removeFile(file.id);
+                                                                showToast('File moved to trash.', "success");
+                                                                    } catch (err: any) {
+                                                                        showToast(friendlyError(err?.message), "error");
+                                                                    }
+                                                                }
+                                                            }}
+                                                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#6E6E80] shadow-sm transition-all hover:border-[#E5E5E5] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                                                            title="Move to trash"
+                                                            aria-label={`Move ${file.name} to trash`}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
                                                 </>
                                             ) : (
                                                 <>
@@ -1031,25 +1062,27 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                     >
                                                         <ArrowLeft size={16} />
                                                     </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={async () => {
-                                                            if (confirm('PERMANENT DELETE: Are you sure? This cannot be undone.')) {
-                                                                try {
-                                                                    await apiService.hardDeleteFile(file.id, organizationId || '');
-                                                                    removeFile(file.id);
-                                                                    showToast('File permanently deleted.', "success");
-                                                                } catch (err: any) {
-                                                                    showToast(friendlyError(err?.message), "error");
+                                                    {(permissions ? permissions.delete_own_files : true) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                if (confirm('PERMANENT DELETE: Are you sure? This cannot be undone.')) {
+                                                                    try {
+                                                                        await apiService.hardDeleteFile(file.id, organizationId || '');
+                                                                        removeFile(file.id);
+                                                                        showToast('File permanently deleted.', "success");
+                                                                    } catch (err: any) {
+                                                                        showToast(friendlyError(err?.message), "error");
+                                                                    }
                                                                 }
-                                                            }
-                                                        }}
-                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
-                                                        title="Delete Permanently"
-                                                        aria-label={`Delete ${file.name} permanently`}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                                            }}
+                                                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                                            title="Delete Permanently"
+                                                            aria-label={`Delete ${file.name} permanently`}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
                                                 </>
                                             )}
                                         </div>

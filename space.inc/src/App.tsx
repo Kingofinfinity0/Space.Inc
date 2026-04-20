@@ -55,9 +55,10 @@ import StaffView from './components/views/StaffView';
 import SpaceDetailView from './components/views/SpaceDetailView';
 import GlobalMeetingsView from './components/views/GlobalMeetingsView';
 import MeetingReviewPage from './components/views/MeetingReviewPage';
+import { usePermissions } from "./hooks/usePermissions";
 import TaskView from './components/views/TaskView';
 import GlobalFilesView from './components/views/GlobalFilesView';
-import SettingsView from './components/views/SettingsView';
+import SettingsView, { BillingSettingsView } from './components/views/SettingsView';
 import InboxView from './components/views/InboxView';
 import HistoryView from './components/views/HistoryView';
 import ClientPortalView from './components/views/ClientPortalView';
@@ -67,6 +68,7 @@ import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import JoinView from './components/views/JoinView';
 import AcceptInviteView from './components/views/AcceptInviteView';
 import ClientSpaceRoute from './components/views/ClientSpaceRoute';
+import { PermissionGuard } from "./components/auth/PermissionGuard";
 import { ContextSwitcher } from './components/auth/ContextSwitcher';
 import { supabase as _supabase } from './lib/supabase';
 
@@ -162,6 +164,7 @@ const App = () => {
     // Sidebar/View State
     const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
     const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
+    const { permissions, role: permissionRole, isLoading: permissionsLoading } = usePermissions(selectedSpaceId || undefined);
     const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
     const [activeMeetingRoomUrl, setActiveMeetingRoomUrl] = useState<string | null>(null);
     const [meetingEntrySource, setMeetingEntrySource] = useState<{ view: ViewState; spaceId?: string } | null>(null);
@@ -528,8 +531,8 @@ const App = () => {
     const renderContent = () => {
         // Sub-view rendering governed by identity first, then capabilities
         switch (currentView) {
-            case ViewState.DASHBOARD:
-                if (userRole === 'owner' || userRole === 'admin') {
+case ViewState.DASHBOARD:
+                if (permissions ? (permissions._role === 'owner' || permissions._role === 'admin') : (userRole === 'owner' || userRole === 'admin')) {
                     return (
                         <OwnerDashboardView
                             clients={clients}
@@ -548,7 +551,7 @@ const App = () => {
                         />
                     );
                 }
-                if (userRole === 'staff') {
+                if (permissions ? (permissions._role === 'staff') : (userRole === 'staff')) {
                     return (
                         <StaffDashboardView
                             clients={clients}
@@ -589,26 +592,26 @@ const App = () => {
                 // Use clientLifecycle data for now - this shows all clients across the organization
                 // In the future, this could be enhanced to show space-specific client data
                 return <ClientsCRMView clients={clientLifecycle} loading={isInitialLoading} />;
-            case ViewState.STAFF:
-                if (!can('can_manage_team')) return <div className="p-8">Access Denied</div>;
+case ViewState.STAFF:
+                if (permissions ? !permissions.manage_team : !can('can_manage_team')) return <div className="p-8">Access Denied</div>;
                 return <StaffView staff={staff} spaces={clients} onInvite={() => setShowInviteModal(true)} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />;
             case ViewState.TASKS:
-                if (!can('can_view_tasks')) return <div className="p-8">Access Denied</div>;
+                if (permissions ? !permissions.view_tasks : !can('can_view_tasks')) return <div className="p-8">Access Denied</div>;
                 return <TaskView tasks={tasks} clients={clients} onUpdateTask={handleUpdateTask} onCreateTask={handleCreateTask} onOpenSpace={(spaceId) => {
                     setSelectedSpaceId(spaceId);
                     setCurrentView(ViewState.SPACE_DETAIL);
                 }} />;
             case ViewState.MEETINGS:
-                if (!can('can_view_meetings')) return <div className="p-8">Access Denied</div>;
+                if (permissions ? !permissions.view_meetings : !can('can_view_meetings')) return <div className="p-8">Access Denied</div>;
                 return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} onOpenSpace={(spaceId) => { setSelectedSpaceId(spaceId); setCurrentView(ViewState.SPACE_DETAIL); }} onDeleteMeeting={handleDeleteMeeting} onEndMeeting={handleEndMeeting} tasks={tasks} />;
             case ViewState.FILES:
-                if (!can('can_view_files')) return <div className="p-8">Access Denied</div>;
+                if (permissions ? !permissions.view_files : !can('can_view_files')) return <div className="p-8">Access Denied</div>;
                 return <GlobalFilesView clients={clients} profile={profile} />;
             case ViewState.SETTINGS:
-                if (!can('can_view_settings')) return <div className="p-8">Access Denied</div>;
+                if (permissions ? (!permissions.manage_spaces && !permissions.manage_team) : !can('can_view_settings')) return <div className="p-8">Access Denied</div>;
                 return <SettingsView />;
             case ViewState.INVITATIONS:
-                if (!can('can_manage_team')) return <div className="p-8">Access Denied</div>;
+                if (permissions ? !permissions.manage_team : !can('can_manage_team')) return <div className="p-8">Access Denied</div>;
                 return <InvitationsManagementView />;
             default:
                 return <div className="p-8">View Not Found</div>;
@@ -675,28 +678,28 @@ const App = () => {
         {
             label: 'Dashboard',
             icon: LayoutGrid,
-            allowed: can('can_view_dashboard'),
+            allowed: permissions ? !!permissions.view_dashboard : can('can_view_dashboard'),
             isActive: currentView === ViewState.DASHBOARD,
             onClick: () => setCurrentView(ViewState.DASHBOARD),
         },
         {
             label: 'History',
             icon: Activity,
-            allowed: can('can_view_history'),
+            allowed: permissions ? !!permissions.view_history : can('can_view_history'),
             isActive: currentView === ViewState.ACTIVITY_LEDGER,
             onClick: () => setCurrentView(ViewState.ACTIVITY_LEDGER),
         },
         {
             label: 'Spaces',
             icon: Users,
-            allowed: can('can_view_all_spaces') || can('can_view_assigned_spaces'),
+            allowed: permissions ? (!!permissions.view_all_spaces || !!permissions.view_assigned_spaces) : (can('can_view_all_spaces') || can('can_view_assigned_spaces')),
             isActive: currentView === ViewState.SPACES || currentView === ViewState.SPACE_DETAIL,
             onClick: () => setCurrentView(ViewState.SPACES),
         },
         {
             label: 'Inbox',
             icon: Inbox,
-            allowed: can('can_view_dashboard'),
+            allowed: permissions ? !!permissions.view_dashboard : can('can_view_dashboard'),
             isActive: currentView === ViewState.INBOX,
             onClick: () => setCurrentView(ViewState.INBOX),
             badge: totalInboxItems,
@@ -704,42 +707,42 @@ const App = () => {
         {
             label: 'Team',
             icon: UserCheck,
-            allowed: can('can_manage_team'),
+            allowed: permissions ? !!permissions.manage_team : can('can_manage_team'),
             isActive: currentView === ViewState.STAFF,
             onClick: () => setCurrentView(ViewState.STAFF),
         },
         {
             label: 'Invites',
             icon: Key,
-            allowed: can('can_manage_team'),
+            allowed: permissions ? !!permissions.manage_team : can('can_manage_team'),
             isActive: currentView === ViewState.INVITATIONS,
             onClick: () => setCurrentView(ViewState.INVITATIONS),
         },
         {
             label: 'Clients',
             icon: Briefcase,
-            allowed: userRole === 'owner' || userRole === 'admin',
+            allowed: permissions ? !!permissions.view_all_spaces : (userRole === 'owner' || userRole === 'admin'),
             isActive: currentView === ViewState.CLIENTS,
             onClick: () => setCurrentView(ViewState.CLIENTS),
         },
         {
             label: 'Tasks',
             icon: CheckSquare,
-            allowed: can('can_view_tasks'),
+            allowed: permissions ? !!permissions.view_tasks : can('can_view_tasks'),
             isActive: currentView === ViewState.TASKS,
             onClick: () => setCurrentView(ViewState.TASKS),
         },
         {
             label: 'Calendar',
             icon: Calendar,
-            allowed: can('can_view_meetings'),
+            allowed: permissions ? !!permissions.view_meetings : can('can_view_meetings'),
             isActive: currentView === ViewState.MEETINGS,
             onClick: () => setCurrentView(ViewState.MEETINGS),
         },
         {
             label: 'Drive',
             icon: FolderClosed,
-            allowed: can('can_view_files'),
+            allowed: permissions ? !!permissions.view_files : can('can_view_files'),
             isActive: currentView === ViewState.FILES,
             onClick: () => setCurrentView(ViewState.FILES),
         },
@@ -755,6 +758,17 @@ const App = () => {
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/spaces/:spaceId/meetings/:meetingId/review" element={<MeetingReviewPage />} />
 
+<Route path="/org/settings/billing" element={<BillingSettingsView />} />
+            <Route path="/org/settings/team" element={
+                <PermissionGuard requiredPermission="manage_team">
+                    <StaffView staff={staff} spaces={clients} onInvite={() => setShowInviteModal(true)} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />
+                </PermissionGuard>
+            } />
+            <Route path="/spaces/:spaceId/settings" element={
+                <PermissionGuard requiredPermission="manage_spaces">
+                    <SettingsView />
+                </PermissionGuard>
+            } />
             <Route path="/dashboard" element={
                 (() => {
                     if (!isAuthenticated) return <LoginPage />;

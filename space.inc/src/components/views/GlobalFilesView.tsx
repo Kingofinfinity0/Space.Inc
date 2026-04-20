@@ -244,8 +244,9 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                 isOpen={isInternalUploadModalOpen}
                 onClose={() => setIsInternalUploadModalOpen(false)}
                 loading={uploading}
+                uploadProgress={null}
                 onUpload={async (file) => {
-                    if (!selectedSpaceForUpload || !organizationId) return;
+                    if (!selectedSpaceForUpload || !organizationId) return false;
                     setUploading(true);
                     try {
                         const fileData = await apiService.uploadFile(selectedSpaceForUpload, organizationId, file);
@@ -259,9 +260,11 @@ const GlobalFilesView = ({ clients, profile }: { clients: ClientSpace[], profile
                         );
                         setIsInternalUploadModalOpen(false);
                         showToast("File uploaded successfully.", "success");
+                        return true;
                     } catch (err: any) {
                         console.error("Upload error:", err);
                         showToast(friendlyError(err?.message), "error");
+                        return false;
                     } finally {
                         setUploading(false);
                     }

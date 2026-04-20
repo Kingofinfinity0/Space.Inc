@@ -272,6 +272,12 @@ export const apiService = {
         return { data, error: null };
     },
 
+    async getMyPermissions(spaceId: string) {
+        const { data, error } = await supabase.rpc("get_my_permissions", { p_space_id: spaceId });
+        if (error) return { data: null, error };
+        return { data: data as any, error: null };
+    },
+
     // --- Spaces (Hardened Access) ---
     async getSpaces(organizationId: string) {
         if (!organizationId) return { data: [], error: { message: 'organization_id is required' } };
