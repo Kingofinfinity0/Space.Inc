@@ -205,3 +205,26 @@ export interface ChartData {
   value: number;
 }
 
+
+export type PermissionMap = {
+  view_files?: boolean;
+  upload_files?: boolean;
+  manage_tasks?: boolean;
+  message_clients?: boolean;
+  schedule_meetings?: boolean;
+  delete_own_files?: boolean;
+  download_files?: boolean;
+  view_dashboard?: boolean;
+  view_history?: boolean;
+  view_meetings?: boolean;
+  view_tasks?: boolean;
+  view_assigned_spaces?: boolean;
+  view_all_spaces?: boolean;
+  manage_spaces?: boolean;
+  manage_team?: boolean;
+  can_invite_clients?: boolean;
+  can_invite_staff?: boolean;
+  _role?: string;
+  _space_id?: string;
+  _org_id?: string;
+}
