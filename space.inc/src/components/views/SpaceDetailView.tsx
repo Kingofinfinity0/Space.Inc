@@ -121,17 +121,11 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         }
     }, [spaceId, organizationId]);
 
-    const loadSpaceInviteUrl = useCallback(async () => {
-        if (!spaceId || !session?.access_token) return;
-        try {
-            const result = await inviteService.getSpaceInviteLink(spaceId, session.access_token);
-            if (result.success && result.data?.invitation_url) {
-                setSpaceInviteUrl(result.data.invitation_url);
-            }
-        } catch (err) {
-            console.error('[SpaceDetailView] Failed to load space invite link:', err);
+    useEffect(() => {
+        if (space?.invitation_token) {
+            setSpaceInviteUrl(`${window.location.origin}/join/${space.invitation_token}`);
         }
-    }, [spaceId, session?.access_token]);
+    }, [space?.invitation_token]);
 
     const loadInvites = useCallback(async () => {
         if (!spaceId || !organizationId) return;
@@ -159,7 +153,16 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             
             // The RPC returns { success, token, invite_url } as per guide Section 7
             if (data && data.success) {
-                setSpaceInviteUrl(data.invite_url || `${window.location.origin}/join/${data.token}`);
+                let token = data.token;
+                if (!token && organizationId) {
+                    const { data: refreshedSpace } = await apiService.getSpaceById(spaceId, organizationId);
+                    token = refreshedSpace?.invitation_token;
+                    if (token) {
+                        setSpace((current) => current ? { ...current, invitation_token: token } : current);
+                    }
+                }
+
+                setSpaceInviteUrl(data.invite_url || (token ? `${window.location.origin}/join/${token}` : ''));
                 showToast("Invite link regenerated. The old link is now invalid.", "success");
             } else {
                 throw new Error('Failed to regenerate invite link');
@@ -269,8 +272,6 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         loadActivities();
         loadInvites();
         loadActivityIndicators();
-        loadSpaceInviteUrl();
-
         // Set up real-time subscription for space_memberships changes
         const channel = supabase
             .channel('space-members-' + spaceId)
@@ -286,7 +287,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             cancelled = true;
             supabase.removeChannel(channel);
         };
-    }, [spaceId, initialSpace, loadInvites, loadActivityIndicators, loadSpaceInviteUrl]);
+    }, [spaceId, initialSpace, loadInvites, loadActivityIndicators]);
 
     useEffect(() => {
         if (activeTab === 'Chat' && spaceId) {

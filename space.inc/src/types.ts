@@ -30,6 +30,7 @@ export interface ClientSpace {
   id: string;
   name: string;
   description?: string;
+  invitation_token?: string;
   status: 'active' | 'onboarding' | 'archived' | 'closed';
   visibility: 'organization' | 'private';
   role: 'owner' | 'staff' | 'client';

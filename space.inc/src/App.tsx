@@ -377,10 +377,25 @@ const App = () => {
             if (newSpace) {
                 // Handle both direct response and nested response structures
                 const spaceData = newSpace.space || newSpace;
-                const invitationToken = spaceData.invitation_token;
+                const createdSpaceId = spaceData.id || newSpace.id || newSpace;
+                let invitationToken = spaceData.invitation_token;
+
+                if (!invitationToken && createdSpaceId && organizationId) {
+                    const { data: hydratedSpace } = await apiService.getSpaceById(createdSpaceId, organizationId);
+                    invitationToken = hydratedSpace?.invitation_token;
+                    if (invitationToken) {
+                        setClients(prev =>
+                            prev.map(space =>
+                                space.id === createdSpaceId
+                                    ? { ...space, invitation_token: invitationToken }
+                                    : space
+                            )
+                        );
+                    }
+                }
                 
                 const optimisticSpace: any = {
-                    id: spaceData.id || newSpace.id || newSpace,
+                    id: createdSpaceId,
                     name: data.name || 'New Client',
                     description: `Workspace for ${data.name || 'New Client'}`,
                     status: 'active',
@@ -404,7 +419,7 @@ const App = () => {
                 
                 // Show invite URL immediately after creation
                 if (invitationToken) {
-                    const inviteUrl = `https://app.space.inc/join/${invitationToken}`;
+                    const inviteUrl = `${window.location.origin}/join/${invitationToken}`;
                     setTimeout(() => {
                         navigator.clipboard.writeText(inviteUrl);
                         showToast("Invite link copied to clipboard!", "success");
