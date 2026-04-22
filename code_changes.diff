@@ -1,0 +1,351 @@
+diff --git a/space.inc/supabase/migrations/20260422000000_fix_invite_profile_creation.sql b/space.inc/supabase/migrations/20260422000000_fix_invite_profile_creation.sql
+new file mode 100644
+index 0000000..a5392e6
+--- /dev/null
++++ b/space.inc/supabase/migrations/20260422000000_fix_invite_profile_creation.sql
+@@ -0,0 +1,345 @@
++-- Fix accept_invitation to include mandatory 'role' and 'session_version'
++CREATE OR REPLACE FUNCTION public.accept_invitation(p_token text)
++ RETURNS jsonb
++ LANGUAGE plpgsql
++ SECURITY DEFINER
++ SET search_path TO 'public'
++AS $function$
++DECLARE
++  v_user_id    uuid;
++  v_user_email text;
++  v_staff_inv  staff_invitations%ROWTYPE;
++  v_client_inv invitations%ROWTYPE;
++  v_is_staff   boolean := false;
++  v_assignment jsonb;
++BEGIN
++  v_user_id := auth.uid();
++  IF v_user_id IS NULL THEN
++    RAISE EXCEPTION 'NOT_AUTHENTICATED';
++  END IF;
++
++  SELECT email INTO v_user_email FROM auth.users WHERE id = v_user_id;
++  IF v_user_email IS NULL THEN
++    RAISE EXCEPTION 'USER_NOT_FOUND';
++  END IF;
++
++  -- Try staff invitation first
++  SELECT * INTO v_staff_inv
++  FROM staff_invitations
++  WHERE token = p_token AND status = 'pending';
++
++  IF FOUND THEN
++    IF v_staff_inv.expires_at <= now() THEN
++      UPDATE staff_invitations SET status = 'expired' WHERE id = v_staff_inv.id;
++      RAISE EXCEPTION 'INVITATION_EXPIRED';
++    END IF;
++    IF lower(v_user_email) != lower(v_staff_inv.email) THEN
++      RAISE EXCEPTION 'EMAIL_MISMATCH';
++    END IF;
++    v_is_staff := true;
++  ELSE
++    SELECT * INTO v_client_inv
++    FROM invitations
++    WHERE token = p_token AND status = 'pending';
++
++    IF NOT FOUND THEN
++      IF EXISTS (SELECT 1 FROM staff_invitations WHERE token = p_token)
++         OR EXISTS (SELECT 1 FROM invitations WHERE token = p_token) THEN
++        RAISE EXCEPTION 'INVITATION_ALREADY_USED';
++      END IF;
++      RAISE EXCEPTION 'INVITATION_NOT_FOUND';
++    END IF;
++
++    IF v_client_inv.expires_at <= now() THEN
++      UPDATE invitations SET status = 'expired' WHERE id = v_client_inv.id;
++      RAISE EXCEPTION 'INVITATION_EXPIRED';
++    END IF;
++
++    IF lower(v_user_email) != lower(v_client_inv.email) THEN
++      RAISE EXCEPTION 'EMAIL_MISMATCH';
++    END IF;
++  END IF;
++
++  -- ── STAFF PATH ──────────────────────────────────────────────
++  IF v_is_staff THEN
++    -- Profile: identity only
++    INSERT INTO profiles (id, email, role, full_name, session_version)
++    VALUES (v_user_id, v_user_email, v_staff_inv.role::text, split_part(v_user_email, '@', 1), 0)
++    ON CONFLICT (id) DO UPDATE SET
++      role       = COALESCE(profiles.role, EXCLUDED.role),
++      full_name  = COALESCE(profiles.full_name, EXCLUDED.full_name),
++      updated_at = now();
++
++    -- Org membership: write BOTH role and base_role
++    INSERT INTO public.org_memberships (
++      user_id, organization_id, role, base_role, status, invited_by, joined_at
++    )
++    VALUES (
++      v_user_id, v_staff_inv.organization_id,
++      v_staff_inv.role::text, v_staff_inv.role::text,
++      'active', v_staff_inv.invited_by, now()
++    )
++    ON CONFLICT (user_id, organization_id) DO UPDATE SET
++      role       = EXCLUDED.role,
++      base_role  = EXCLUDED.base_role,
++      status     = 'active',
++      updated_at = now();
++
++    -- Space assignments
++    FOR v_assignment IN SELECT * FROM jsonb_array_elements(v_staff_inv.space_assignments)
++    LOOP
++      INSERT INTO space_memberships (
++        space_id, profile_id, role, org_id, context_role,
++        capabilities, status, is_active, assigned_by
++      )
++      VALUES (
++        (v_assignment->>'space_id')::uuid,
++        v_user_id,
++        'staff'::public.space_member_role,
++        v_staff_inv.organization_id,
++        'staff',
++        COALESCE(
++          v_assignment->'capabilities',
++          '{"can_view":true,"can_edit":false,"can_delete":false,"can_delegate":false,"can_manage_tasks":false,"can_upload_files":false,"can_message_client":false}'::jsonb
++        ),
++        'active',
++        true,
++        v_staff_inv.invited_by
++      )
++      ON CONFLICT (space_id, profile_id) DO UPDATE SET
++        status     = 'active',
++        is_active  = true,
++        updated_at = now();
++    END LOOP;
++
++    UPDATE staff_invitations
++       SET status = 'accepted', accepted_at = now()
++     WHERE id = v_staff_inv.id;
++
++    RETURN jsonb_build_object(
++      'success',       true,
++      'role',          v_staff_inv.role::text,
++      'redirect_path', '/dashboard'
++    );
++
++  -- ── CLIENT PATH ─────────────────────────────────────────────
++  ELSE
++    -- Profile: identity only
++    INSERT INTO profiles (id, email, role, full_name, session_version)
++    VALUES (v_user_id, v_user_email, 'client', split_part(v_user_email, '@', 1), 0)
++    ON CONFLICT (id) DO UPDATE SET
++      role       = COALESCE(profiles.role, EXCLUDED.role),
++      full_name  = COALESCE(profiles.full_name, EXCLUDED.full_name),
++      updated_at = now();
++
++    -- Space membership: this is the client's source of truth
++    IF v_client_inv.space_id IS NOT NULL THEN
++      INSERT INTO space_memberships (
++        space_id, profile_id, role, org_id, context_role,
++        status, is_active, invited_by,
++        capabilities, onboarding_data
++      )
++      VALUES (
++        v_client_inv.space_id,
++        v_user_id,
++        'client'::public.space_member_role,
++        v_client_inv.organization_id,
++        'client',
++        'active',
++        true,
++        v_client_inv.invited_by,
++        '{"can_view":true,"can_upload":false,"can_message":true,"can_edit":false,"can_delete":false,"can_create_tasks":false,"can_manage_tasks":false}'::jsonb,
++        jsonb_build_object('invited_at', now(), 'invite_email', v_user_email)
++      )
++      ON CONFLICT (space_id, profile_id) DO UPDATE SET
++        status     = 'active',
++        is_active  = true,
++        updated_at = now();
++    END IF;
++
++    UPDATE invitations
++       SET status = 'accepted', accepted_at = now()
++     WHERE id = v_client_inv.id;
++
++    RETURN jsonb_build_object(
++      'success',        true,
++      'role',           'client',
++      'space_id',       v_client_inv.space_id,
++      'organization_id',v_client_inv.organization_id,
++      'redirect_path',  CASE
++        WHEN v_client_inv.space_id IS NOT NULL
++        THEN '/spaces/' || v_client_inv.space_id::text
++        ELSE '/spaces'
++      END
++    );
++  END IF;
++
++EXCEPTION WHEN OTHERS THEN
++  RAISE;
++END;
++$function$;
++
++-- Fix accept_space_invite to include mandatory 'role' and 'session_version'
++CREATE OR REPLACE FUNCTION public.accept_space_invite(p_token text, p_client_name text DEFAULT NULL::text, p_client_company text DEFAULT NULL::text)
++ RETURNS jsonb
++ LANGUAGE plpgsql
++ SECURITY DEFINER
++ SET search_path TO 'public', 'extensions'
++AS $function$
++DECLARE
++  v_user_id    uuid := auth.uid();
++  v_user_email text;
++  v_space      spaces%ROWTYPE;
++  v_config     space_invite_configs%ROWTYPE;
++  v_existing   space_memberships%ROWTYPE;
++BEGIN
++  IF v_user_id IS NULL THEN
++    RETURN jsonb_build_object('success', false, 'error_code', 'NOT_AUTHENTICATED');
++  END IF;
++
++  SELECT email INTO v_user_email FROM auth.users WHERE id = v_user_id;
++
++  -- Resolve the space
++  SELECT * INTO v_space FROM spaces
++  WHERE invitation_token = p_token AND deleted_at IS NULL;
++
++  IF v_space.id IS NULL THEN
++    RETURN jsonb_build_object('success', false, 'error_code', 'INVALID_TOKEN');
++  END IF;
++
++  -- Load invite config
++  SELECT * INTO v_config FROM space_invite_configs WHERE space_id = v_space.id;
++
++  -- Validate expiry
++  IF v_config.expires_at IS NOT NULL AND v_config.expires_at < now() THEN
++    RETURN jsonb_build_object('success', false, 'error_code', 'LINK_EXPIRED');
++  END IF;
++
++  -- Validate capacity
++  IF v_config.max_uses IS NOT NULL AND v_config.use_count >= v_config.max_uses THEN
++    RETURN jsonb_build_object('success', false, 'error_code', 'INVITE_FULL');
++  END IF;
++
++  -- Validate allowed emails list
++  IF v_config.allowed_emails IS NOT NULL THEN
++    IF NOT (lower(v_user_email) = ANY(
++      SELECT lower(e) FROM unnest(v_config.allowed_emails) e
++    )) THEN
++      RETURN jsonb_build_object('success', false, 'error_code', 'EMAIL_NOT_ALLOWED');
++    END IF;
++  END IF;
++
++  -- Check for existing membership (idempotent)
++  SELECT * INTO v_existing FROM space_memberships
++  WHERE space_id = v_space.id AND profile_id = v_user_id;
++
++  IF v_existing.id IS NOT NULL THEN
++    RETURN jsonb_build_object(
++      'success',         true,
++      'already_member',  true,
++      'spaceId',         v_space.id,
++      'space_id',        v_space.id,
++      'space_name',      v_space.name,
++      'org_id',          v_space.organization_id,
++      'context_role',    v_existing.context_role,
++      'redirect_path',   '/spaces/' || v_space.id
++    );
++  END IF;
++
++  -- Ensure profile exists (identity only — NO role, NO org_id written here)
++  -- Actually, role and session_version are NOT NULL, so we must write them.
++  INSERT INTO public.profiles (id, email, role, full_name, session_version)
++  VALUES (
++    v_user_id,
++    v_user_email,
++    'client',
++    COALESCE(p_client_name, split_part(v_user_email, '@', 1)),
++    0
++  )
++  ON CONFLICT (id) DO UPDATE SET
++    role = COALESCE(profiles.role, EXCLUDED.role),
++    full_name  = CASE
++      WHEN profiles.full_name IS NULL OR profiles.full_name = split_part(profiles.email,'@',1)
++      THEN COALESCE(EXCLUDED.full_name, profiles.full_name)
++      ELSE profiles.full_name
++    END,
++    updated_at = now();
++
++  -- Create the client membership — this is the only source of truth for their role
++  INSERT INTO public.space_memberships (
++    space_id,
++    profile_id,
++    org_id,
++    role,
++    context_role,
++    status,
++    is_active,
++    invited_by,
++    client_name,
++    client_company,
++    capabilities,
++    onboarding_data
++  )
++  VALUES (
++    v_space.id,
++    v_user_id,
++    v_space.organization_id,
++    'client'::public.space_member_role,
++    'client',
++    'active',
++    true,
++    v_space.created_by,
++    COALESCE(p_client_name, split_part(v_user_email, '@', 1)),
++    p_client_company,
++    '{
++      "can_view":           true,
++      "can_upload":         false,
++      "can_message":        true,
++      "can_edit":           false,
++      "can_delete":         false,
++      "can_create_tasks":   false,
++      "can_manage_tasks":   false,
++      "can_delegate":       false
++    }'::jsonb,
++    jsonb_build_object(
++      'invited_at', now(),
++      'invite_email', v_user_email
++    )
++  );
++
++  -- Increment usage count
++  IF v_config.space_id IS NOT NULL THEN
++    UPDATE space_invite_configs
++    SET use_count = use_count + 1, updated_at = now()
++    WHERE space_id = v_space.id;
++  END IF;
++
++  -- Log the event
++  INSERT INTO activity_logs (organization_id, space_id, user_id, action_type, metadata)
++  VALUES (
++    v_space.organization_id,
++    v_space.id,
++    v_user_id,
++    'space_invite_accepted',
++    jsonb_build_object(
++      'email',          v_user_email,
++      'context_role',   'client',
++      'client_name',    COALESCE(p_client_name, split_part(v_user_email, '@', 1)),
++      'client_company', p_client_company
++    )
++  );
++
++  RETURN jsonb_build_object(
++    'success',        true,
++    'spaceId',        v_space.id,
++    'space_id',       v_space.id,
++    'space_name',     v_space.name,
++    'org_id',         v_space.organization_id,
++    'context_role',   'client',
++    'redirect_path',  '/spaces/' || v_space.id
++  );
++
++EXCEPTION WHEN OTHERS THEN
++  RETURN jsonb_build_object('success', false, 'error_code', SQLERRM);
++END;
++$function$;
