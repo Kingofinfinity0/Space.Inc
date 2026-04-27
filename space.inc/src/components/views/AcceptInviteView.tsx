@@ -34,7 +34,7 @@ export default function AcceptInviteView() {
     const { user, session } = useAuth();
     const { showToast } = useToast();
     
-    const token = new URLSearchParams(window.location.search).get('token');
+    const token = searchParams.get('token');
     
     const [status, setStatus] = useState<PageStatus>('loading');
     const [inviteData, setInviteData] = useState<ValidateInvitationContextResult | null>(null);
@@ -117,18 +117,14 @@ export default function AcceptInviteView() {
         setStatus('accepting');
         try {
             const res = await apiService.acceptInvitation(token);
-            if (res) {
+            if (res?.data) {
                 showToast('Invitation accepted successfully!', 'success');
-                
-                // Role-based redirect logic
-                const redirectPath = normalizeInviteRedirectPath(res.data.redirect_path) || (
-                    res.data.role === 'client' ? `/spaces/${res.data.spaceId}` : null
-                );
+                const redirectPath = normalizeInviteRedirectPath(res.data.redirect_path);
 
                 if (redirectPath) {
-                    window.location.href = redirectPath;
+                    navigate(redirectPath, { replace: true });
                 } else {
-                    window.location.href = '/dashboard';
+                    navigate('/dashboard', { replace: true });
                 }
             } else {
                 setStatus('invalid');

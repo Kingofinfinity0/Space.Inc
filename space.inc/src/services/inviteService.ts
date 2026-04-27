@@ -203,9 +203,9 @@ export const normalizeInviteRedirectPath = (path?: string | null) => {
   return path;
 };
 
-async function callInvitationsApi(action: string, payload: Record<string, unknown>) {
+async function callInvitationsApi(action: string, payload: Record<string, unknown>, accessToken?: string) {
   const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token ?? ANON_KEY;
+  const token = accessToken ?? session?.access_token ?? ANON_KEY;
 
   const response = await fetch(`${EDGE_FUNCTION_BASE_URL}/invitations-api`, {
     method: 'POST',
@@ -246,7 +246,7 @@ export const inviteService = {
       token,
       client_name: clientName,
       client_company: clientCompany ?? null,
-    });
+    }, accessToken);
     if (result?.error) {
       throw new Error(result.error?.message || result.message || 'Failed to accept space link');
     }
@@ -270,7 +270,7 @@ export const inviteService = {
    * This is for the /accept-invite flow
    */
   async acceptEmailInvite(token: string, accessToken: string): Promise<AcceptEmailInviteResponse['data']> {
-    const result = await callInvitationsApi('accept', { token });
+    const result = await callInvitationsApi('accept', { token }, accessToken);
     if (result?.error) {
       throw new Error(result.error?.message || result.message || 'Failed to accept invite');
     }
@@ -285,7 +285,7 @@ export const inviteService = {
       email,
       space_id: spaceId,
       expires_at: expiresAt,
-    });
+    }, accessToken);
     if (result?.error) {
       throw new Error(result.error?.message || result.message || 'Failed to send client invite');
     }
@@ -307,7 +307,7 @@ export const inviteService = {
       role,
       space_assignments: spaceAssignments,
       expires_at: expiresAt,
-    });
+    }, accessToken);
     if (result?.error) {
       throw new Error(result.error?.message || result.message || 'Failed to send staff invite');
     }
@@ -320,7 +320,7 @@ export const inviteService = {
   async getSpaceInviteLink(spaceId: string, accessToken: string): Promise<SpaceInviteLinkResponse> {
     const result = await callInvitationsApi('get_space_invite_link', {
       space_id: spaceId,
-    });
+    }, accessToken);
     if (result?.error) {
       throw new Error(result.error?.message || result.message || 'Failed to get space invite link');
     }

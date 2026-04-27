@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -24,6 +24,7 @@ import {
 import { FileViewerModal } from '../FileViewerModal';
 import { FileUploadModal } from '../FileUploadModal';
 import { FileVersionsModal } from '../FileVersionsModal';
+import { SurfaceDock } from '../SurfaceDock';
 import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle } from '../../types';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
@@ -83,6 +84,11 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     const [endOutcome, setEndOutcome] = useState('successful');
     const [endNotes, setEndNotes] = useState('');
     const [isEnding, setIsEnding] = useState(false);
+    const isClient = userRole === 'client';
+    const switchTab = useCallback((tab: SpaceDetailTab) => {
+        setActiveTab(tab);
+        onTabChange?.(tab);
+    }, [onTabChange]);
     const canManageInvites = permissions ? (!!permissions.can_invite_clients || !!permissions.can_invite_staff) : (userRole === 'owner' || userRole === 'admin' || userRole === 'staff');
     const canManageSpace = permissions ? !!permissions.manage_spaces : (userRole === 'owner' || userRole === 'admin');
 
@@ -142,6 +148,10 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             setSpaceInviteUrl(`${window.location.origin}/join/${space.invitation_token}`);
         }
     }, [space?.invitation_token]);
+
+    useEffect(() => {
+        setActiveTab(activeTabProp || 'Dashboard');
+    }, [activeTabProp]);
 
     const loadInvites = useCallback(async () => {
         if (!spaceId || !organizationId) return;
@@ -268,7 +278,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             if (!spaceId) return;
             try {
                 const { data } = await supabase.rpc('get_space_members', { p_space_id: spaceId });
-                setMembers(data || []);
+                setMembers(Array.isArray(data) ? data : []);
             } catch (err) {
                 console.error('Failed to refetch members:', err);
             }
@@ -284,7 +294,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     apiService.getTasks(organizationId, spaceId)
                 ]);
                 if (!cancelled) {
-                    setMembers(memRes.data || []);
+                    setMembers(Array.isArray(memRes.data) ? memRes.data : []);
                     setTasks(taskRes.data || []);
                 }
             } catch (err: any) {
@@ -384,21 +394,60 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         if (result.success) {
             showToast(`${file.name} uploaded successfully`, 'success');
         } else {
-            showToast('Upload failed — please try again', 'error');
+            showToast('Upload failed â€” please try again', 'error');
         }
 
         return result.success;
     };
 
+    const dockItems = [
+        { label: 'Overview', icon: LayoutGrid, isActive: activeTab === 'Dashboard', onClick: () => switchTab('Dashboard') },
+        { label: 'Chat', icon: Inbox, isActive: activeTab === 'Chat', onClick: () => switchTab('Chat') },
+        { label: 'Meetings', icon: Calendar, isActive: activeTab === 'Meetings', onClick: () => switchTab('Meetings') },
+        { label: 'Tasks', icon: CheckSquare, isActive: activeTab === 'Tasks', onClick: () => switchTab('Tasks') },
+        { label: 'Docs', icon: FolderClosed, isActive: activeTab === 'Docs', onClick: () => switchTab('Docs') },
+    ];
+
+    const overviewMetrics = [
+        {
+            label: 'Messages',
+            value: spaceStats?.message_count ?? 0,
+            hint: activityIndicators.unreadCount > 0 ? `${activityIndicators.unreadCount} unread` : 'All caught up',
+            icon: MessageSquare,
+        },
+        {
+            label: 'Files',
+            value: spaceStats?.file_count ?? activityIndicators.recentFilesCount ?? 0,
+            hint: 'Shared across this space',
+            icon: FolderClosed,
+        },
+        {
+            label: 'Meetings',
+            value: spaceStats?.meeting_count ?? activityIndicators.upcomingMeetings.length ?? 0,
+            hint: activityIndicators.upcomingMeetings.length > 0 ? 'Upcoming sessions' : 'No meetings queued',
+            icon: Calendar,
+        },
+    ];
+
+    const activityChartData = [
+        { name: 'Chat', value: Math.max(spaceStats?.message_count ?? 0, 1) },
+        { name: 'Files', value: Math.max(spaceStats?.file_count ?? 0, 1) },
+        { name: 'Meetings', value: Math.max(spaceStats?.meeting_count ?? 0, 1) },
+        { name: 'Unread', value: Math.max(activityIndicators.unreadCount ?? 0, 1) },
+    ];
+
+    const memberList = Array.isArray(members) ? members : [];
+    const memberPreview = memberList.slice(0, 5);
+
     return (
-        <div className="animate-[fadeIn_0.5s_ease-out] flex flex-col gap-6 pb-8">
+        <div className="animate-[fadeIn_0.5s_ease-out] mx-auto flex w-full max-w-[1320px] flex-col gap-5 px-2 pb-20 md:px-0">
             {/* Navigation Header */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center">
                 <button title="Go Back" onClick={onBack} className="p-2 rounded-[6px] border border-[#E5E5E5] bg-white hover:bg-[#F7F7F8] transition-colors">
                     <ArrowLeft size={20} className="text-[#6E6E80]" />
                 </button>
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#0D0D0D]">{space.name}</h1>
+                    <h1 className="text-[24px] font-semibold tracking-[-0.04em] text-[#0D0D0D] md:text-[26px]">{space.name}</h1>
                     <p className="text-sm text-[#6E6E80]">Managed by You</p>
                 </div>
                 <div className="ml-0 flex flex-col gap-3 md:ml-auto md:flex-row md:items-center">
@@ -425,26 +474,6 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             </Button>
                         </>
                     )}
-                    <div className="flex flex-wrap rounded-[999px] border border-[#E5E5E5] bg-[#F7F7F8] p-1 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                    {([
-                        { label: 'Dashboard', allowed: permissions ? !!permissions.view_dashboard : true },
-                        { label: 'Chat', allowed: permissions ? !!permissions.message_clients : true },
-                        { label: 'Meetings', allowed: permissions ? !!permissions.view_meetings : true },
-                        { label: 'Tasks', allowed: permissions ? !!permissions.view_tasks : true },
-                        { label: 'Docs', allowed: permissions ? !!permissions.view_files : true }
-                    ] as const).map(tab => tab.allowed && (
-                        <button
-                            key={tab.label}
-                            onClick={() => {
-                                setActiveTab(tab.label as SpaceDetailTab);
-                                onTabChange?.(tab.label as SpaceDetailTab);
-                            }}
-                            className={`surface-chip px-4 py-2 text-sm font-medium transition-all ${activeTab === tab.label ? 'surface-chip-active' : ''}`}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
                 </div>
             </div>
 
@@ -479,7 +508,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             <span className="px-3 py-1 text-[10px] rounded-full bg-white border border-[#E5E5E5] text-[#6E6E80]">No new activity</span>
                         )}
                         <span className="px-3 py-1 text-[10px] rounded-full bg-white border border-[#E5E5E5] text-[#0D0D0D] ml-auto">
-                            Last active: {spaceStats?.last_activity_at ? new Date(spaceStats.last_activity_at).toLocaleString() : '—'}
+                            Last active: {spaceStats?.last_activity_at ? new Date(spaceStats.last_activity_at).toLocaleString() : 'â€”'}
                         </span>
                     </>
                 )}
@@ -489,92 +518,204 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             <div className="space-y-6">
                 {activeTab === 'Dashboard' && (
                     <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {(permissions ? (permissions.upload_files || permissions.manage_tasks || permissions.message_clients) : true) && (
-                                <GlassCard className="p-6">
-                                    <Heading level={3} className="mb-4">Space Actions</Heading>
-                                    <div className="space-y-3">
-                                        {(permissions ? permissions.upload_files : true) && (
-                                            <Button variant="secondary" className="w-full justify-start" onClick={() => setIsUploadModalOpen(true)}>
+                        <GlassCard className="overflow-hidden border border-[#E5E5E5] bg-[linear-gradient(135deg,rgba(255,255,255,0.94)_0%,rgba(247,247,248,0.9)_45%,rgba(241,244,248,0.98)_100%)] p-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                            <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
+                                <div className="p-5 sm:p-6">
+                                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">
+                                        <span className="rounded-full border border-[#E5E5E5] bg-white px-3 py-1">Overview</span>
+                                        <span className="rounded-full border border-[#E5E5E5] bg-white px-3 py-1">{space.status || 'active'}</span>
+                                        <span className="rounded-full border border-[#E5E5E5] bg-white px-3 py-1">
+                                            {activityIndicators.upcomingMeetings.length > 0 ? `${activityIndicators.upcomingMeetings.length} live planning items` : 'Quiet workspace'}
+                                        </span>
+                                    </div>
+                                    <div className="mt-4 space-y-3">
+                                        <Heading level={2} className="text-[28px] leading-[1.02] tracking-[-0.05em] md:text-[34px]">
+                                            {space.name}
+                                        </Heading>
+                                        <Text variant="secondary" className="max-w-2xl text-[14px] leading-relaxed">
+                                            Keep the workspace moving with one clear overview for messages, files, meetings, and task flow.
+                                            The board below surfaces the most useful signals first, with the rest tucked into focused cards.
+                                        </Text>
+                                    </div>
+                                    <div className="mt-6 flex flex-wrap gap-2">
+                                        {(isClient || (permissions ? permissions.upload_files : true)) && (
+                                            <Button variant="secondary" className="justify-start rounded-[18px] px-4 py-3" onClick={() => {
+                                                setIsUploadModalOpen(true);
+                                                switchTab('Docs');
+                                            }}>
                                                 <Upload size={16} className="mr-2" /> Upload Document
                                             </Button>
                                         )}
-                                        {(permissions ? permissions.message_clients : true) && (
-                                            <Button variant="secondary" className="w-full justify-start"><MessageSquare size={16} className="mr-2" /> Create Auto-Message</Button>
+                                        {(isClient || (permissions ? permissions.message_clients : true)) && (
+                                            <Button variant="secondary" className="justify-start rounded-[18px] px-4 py-3" onClick={() => switchTab('Chat')}>
+                                                <MessageSquare size={16} className="mr-2" /> Open Chat
+                                            </Button>
                                         )}
-                                        {(permissions ? permissions.manage_tasks : true) && (
-                                            <Button variant="secondary" className="w-full justify-start"><ListTodo size={16} className="mr-2" /> Create Task</Button>
+                                        {(isClient || (permissions ? permissions.manage_tasks : true)) && (
+                                            <Button variant="secondary" className="justify-start rounded-[18px] px-4 py-3" onClick={() => switchTab('Tasks')}>
+                                                <ListTodo size={16} className="mr-2" /> Open Tasks
+                                            </Button>
                                         )}
                                     </div>
-                                </GlassCard>
-                            )}
-                            <GlassCard className="p-6">
-                                <Heading level={3} className="mb-4">Space Members</Heading>
-                                <div className="space-y-3">
+                                </div>
+                                <div className="border-t border-[#E5E5E5] bg-white/70 p-5 sm:p-6 lg:border-l lg:border-t-0">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">Activity mix</p>
+                                            <Heading level={3} className="mt-1 text-[20px] tracking-[-0.04em]">Live signal snapshot</Heading>
+                                        </div>
+                                        <span className="rounded-full border border-[#E5E5E5] bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">
+                                            Last active {spaceStats?.last_activity_at ? new Date(spaceStats.last_activity_at).toLocaleDateString() : '—'}
+                                        </span>
+                                    </div>
+                                    <div className="mt-5 h-[180px] rounded-[24px] border border-[#E5E5E5] bg-white p-3">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={activityChartData} margin={{ top: 10, right: 10, left: -18, bottom: 0 }}>
+                                                <defs>
+                                                    <linearGradient id="spaceActivityFill" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="0%" stopColor="#111111" stopOpacity={0.24} />
+                                                        <stop offset="100%" stopColor="#111111" stopOpacity={0.02} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#ECECEC" vertical={false} />
+                                                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fill: '#6E6E80', fontSize: 11 }} />
+                                                <YAxis hide />
+                                                <Tooltip
+                                                    contentStyle={{
+                                                        borderRadius: 16,
+                                                        border: '1px solid #E5E5E5',
+                                                        background: '#FFFFFF',
+                                                        boxShadow: '0 12px 30px rgba(0,0,0,0.08)'
+                                                    }}
+                                                    labelStyle={{ color: '#0D0D0D', fontWeight: 600 }}
+                                                />
+                                                <Area type="monotone" dataKey="value" stroke="#111111" fill="url(#spaceActivityFill)" strokeWidth={2.5} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="mt-4 grid grid-cols-3 gap-3">
+                                        {overviewMetrics.map((metric) => {
+                                            const Icon = metric.icon;
+                                            return (
+                                                <div key={metric.label} className="rounded-[22px] border border-[#E5E5E5] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+                                                    <div className="flex items-center justify-between">
+                                                        <Icon size={16} className="text-[#6E6E80]" />
+                                                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#6E6E80]">{metric.label}</span>
+                                                    </div>
+                                                    <div className="mt-3 text-[30px] font-semibold tracking-[-0.05em] text-[#0D0D0D]">{metric.value}</div>
+                                                    <p className="mt-1 text-[11px] text-[#6E6E80]">{metric.hint}</p>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </GlassCard>
+
+                        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+                            <GlassCard className="border border-[#E5E5E5] bg-white/95 p-5 sm:p-6">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div>
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">People & control</p>
+                                            <Heading level={3} className="mt-1 text-[22px] tracking-[-0.04em]">Space Members</Heading>
+                                        </div>
+                                        <span className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">
+                                        {memberList.length} total
+                                        </span>
+                                    </div>
+                                <div className="mt-4 grid gap-3">
                                     {membersLoading ? (
-                                        <SkeletonText lines={2} />
-                                    ) : members.length > 0 ? (
-                                        members.map(member => (
-                                            <div key={member.profile_id} className="flex items-center gap-3 p-2 hover:bg-[#F7F7F8] rounded-[8px] transition-colors border border-transparent">
-                                                {/* Avatar */}
-                                                <div className="h-8 w-8 rounded-[8px] bg-black flex items-center justify-center text-white font-semibold text-xs uppercase">
+                                        <SkeletonText lines={3} />
+                                    ) : memberPreview.length > 0 ? (
+                                        memberPreview.map(member => (
+                                            <button
+                                                key={member.profile_id}
+                                                type="button"
+                                                onClick={() => switchTab('Chat')}
+                                                className="flex items-center gap-3 rounded-[20px] border border-[#E5E5E5] bg-[#F7F7F8]/70 p-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#D4D4D8] hover:bg-white"
+                                            >
+                                                <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-[14px] bg-black text-xs font-semibold uppercase text-white">
                                                     {member.avatar_url ? (
-                                                        <img src={member.avatar_url} alt={member.full_name} className="h-8 w-8 rounded-full object-cover" />
+                                                        <img src={member.avatar_url} alt={member.full_name} className="h-full w-full object-cover" />
                                                     ) : (
                                                         member.full_name?.charAt(0) || <User size={14} />
                                                     )}
                                                 </div>
-                                                <div className="flex-1 min-w-0">
+                                                <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-2">
-                                                        <p className="text-sm font-medium text-[#0D0D0D] truncate">
+                                                        <p className="truncate text-sm font-medium text-[#0D0D0D]">
                                                             {member.full_name || 'Pending User'}
                                                         </p>
-                                                        {/* Online indicator */}
                                                         <div className={`h-2 w-2 rounded-full ${member.is_online ? 'bg-black' : 'bg-[#D4D4D8]'}`} title={member.is_online ? 'Online' : 'Offline'} />
                                                     </div>
-                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                        {/* Role badge */}
-                                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-medium border ${
-                                                            member.membership_role === 'client' ? 'bg-[#F7F7F8] text-[#0D0D0D] border-[#E5E5E5]' :
-                                                            member.membership_role === 'staff' ? 'bg-[#F7F7F8] text-[#0D0D0D] border-[#E5E5E5]' :
-                                                            member.membership_role === 'admin' ? 'bg-[#F7F7F8] text-[#0D0D0D] border-[#E5E5E5]' :
-                                                            'bg-[#F7F7F8] text-[#6E6E80] border-[#E5E5E5]'
-                                                        }`}>
+                                                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                                                        <span className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#0D0D0D]">
                                                             {member.membership_role}
                                                         </span>
-                                                        {/* Joined date */}
-                                                        <span className="text-[9px] text-[#6E6E80]">
-                                                            Joined {member.joined_at ? new Date(member.joined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                                                        <span className="text-[10px] text-[#6E6E80]">
+                                                            Joined {member.joined_at ? new Date(member.joined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                                         </span>
                                                     </div>
                                                 </div>
-                                            </div>
+                                                <ChevronRight size={16} className="text-[#D4D4D8]" />
+                                            </button>
                                         ))
                                     ) : (
-                                        <p className="text-xs text-[#6E6E80] italic">No members yet. Share the invite link to get started.</p>
+                                        <div className="rounded-[20px] border border-dashed border-[#D4D4D8] bg-[#F7F7F8]/60 p-5 text-center">
+                                            <p className="text-sm text-[#6E6E80]">No members yet. Share the invite link to get the first people into the space.</p>
+                                        </div>
                                     )}
                                 </div>
                             </GlassCard>
 
-                            {canManageInvites && (
-                                <GlassCard className="p-6">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <div>
-                                            <Heading level={3}>Shareable Space Link</Heading>
-                                            <p className="text-[10px] text-[#6E6E80] uppercase tracking-wider font-semibold">Public/Ghost Access</p>
-                                        </div>
-                                        <Button 
-                                            variant="outline" 
-                                            size="sm" 
-                                            onClick={handleRegenerateSpaceInvite}
-                                            disabled={inviteLoading}
-                                        >
-                                            <History size={14} className="mr-2" /> {inviteLoading ? 'Wait...' : 'Regenerate'}
-                                        </Button>
+                            <GlassCard className="border border-[#E5E5E5] bg-white/95 p-5 sm:p-6">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">Control surface</p>
+                                        <Heading level={3} className="mt-1 text-[22px] tracking-[-0.04em]">Space Actions</Heading>
                                     </div>
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-2">
-                                            <div className="flex-1 bg-white border border-[#E5E5E5] rounded-[8px] px-4 py-2 text-sm font-mono text-[#6E6E80] truncate">
+                                    <span className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">
+                                        Quick access
+                                    </span>
+                                </div>
+                                <div className="mt-4 grid gap-3">
+                                    {(isClient || (permissions ? permissions.upload_files : true)) && (
+                                        <Button variant="secondary" className="w-full justify-start rounded-[18px] py-3" onClick={() => {
+                                            setIsUploadModalOpen(true);
+                                            switchTab('Docs');
+                                        }}>
+                                            <Upload size={16} className="mr-2" /> Upload Document
+                                        </Button>
+                                    )}
+                                    {(isClient || (permissions ? permissions.message_clients : true)) && (
+                                        <Button variant="secondary" className="w-full justify-start rounded-[18px] py-3" onClick={() => switchTab('Chat')}>
+                                            <MessageSquare size={16} className="mr-2" /> Open Chat
+                                        </Button>
+                                    )}
+                                    {(isClient || (permissions ? permissions.manage_tasks : true)) && (
+                                        <Button variant="secondary" className="w-full justify-start rounded-[18px] py-3" onClick={() => switchTab('Tasks')}>
+                                            <ListTodo size={16} className="mr-2" /> Open Tasks
+                                        </Button>
+                                    )}
+                                </div>
+                                {canManageInvites && (
+                                    <div className="mt-5 rounded-[22px] border border-[#E5E5E5] bg-[#F7F7F8]/70 p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">Shareable space link</p>
+                                                <p className="mt-1 text-sm text-[#0D0D0D]">Public onboarding link for this space</p>
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleRegenerateSpaceInvite}
+                                                disabled={inviteLoading}
+                                            >
+                                                <History size={14} className="mr-2" /> {inviteLoading ? 'Wait...' : 'Regenerate'}
+                                            </Button>
+                                        </div>
+                                        <div className="mt-4 flex items-center gap-2">
+                                            <div className="flex-1 truncate rounded-[16px] border border-[#E5E5E5] bg-white px-4 py-3 font-mono text-xs text-[#6E6E80]">
                                                 {spaceInviteUrl || 'No active link'}
                                             </div>
                                             <Button
@@ -591,28 +732,30 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                 <Copy size={14} />
                                             </Button>
                                         </div>
-                                        <div className="bg-[#F7F7F8] border border-[#E5E5E5] rounded-[8px] p-3 flex gap-3">
-                                            <LinkIcon size={16} className="text-[#6E6E80] shrink-0 mt-0.5" />
-                                            <Text variant="secondary" className="text-xs leading-relaxed">
-                                                Clients using this link will be added to this space immediately. Recommended for generic onboarding.
-                                            </Text>
-                                        </div>
+                                        <p className="mt-3 text-xs leading-relaxed text-[#6E6E80]">
+                                            Clients using this link will land directly in this space once accepted.
+                                        </p>
                                     </div>
-                                </GlassCard>
-                            )}
+                                )}
+                            </GlassCard>
+                        </div>
 
-                            {canManageInvites && (
-                                <GlassCard className="p-6">
-                                    <div className="flex justify-between items-center mb-4">
+                        {canManageInvites && (
+                            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1fr]">
+                                <GlassCard className="border border-[#E5E5E5] bg-white/95 p-5 sm:p-6">
+                                    <div className="flex items-center justify-between gap-4">
                                         <div>
-                                            <Heading level={3}>Personal Client Invite</Heading>
-                                            <p className="text-[10px] text-emerald-600 uppercase tracking-wider font-bold">Secure/One-Time</p>
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">Private access</p>
+                                            <Heading level={3} className="mt-1 text-[22px] tracking-[-0.04em]">Personal Client Invite</Heading>
                                         </div>
+                                        <span className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">
+                                            One-time
+                                        </span>
                                     </div>
-                                    
-                                    <form onSubmit={handleSendPersonalInvite} className="space-y-4 mb-6">
+
+                                    <form onSubmit={handleSendPersonalInvite} className="mt-4 space-y-3">
                                         <div className="flex gap-2">
-                                            <Input 
+                                            <Input
                                                 className="flex-1"
                                                 type="email"
                                                 placeholder="client@email.com"
@@ -624,22 +767,24 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                 {isSendingPersonal ? '...' : <ArrowRight size={16} />}
                                             </Button>
                                         </div>
-                                        <p className="text-[11px] text-zinc-500 italic">This will generate a unique link tied to their email.</p>
+                                        <p className="text-xs text-[#6E6E80]">This generates a unique link tied to the client email.</p>
                                     </form>
 
                                     {lastPersonalInvite && (
-                                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl animate-[fadeIn_0.3s_ease-out]">
-                                            <label className="block text-[10px] font-bold text-emerald-700 uppercase tracking-tight mb-2">New Invite Link for {lastPersonalInvite.email}</label>
+                                        <div className="mt-5 rounded-[22px] border border-emerald-100 bg-emerald-50/70 p-4">
+                                            <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                                                New invite link for {lastPersonalInvite.email}
+                                            </label>
                                             <div className="flex gap-2">
-                                                <input 
-                                                    readOnly 
+                                                <input
+                                                    readOnly
                                                     title="Invite link"
-                                                    value={lastPersonalInvite.url} 
-                                                    className="flex-1 bg-white border border-emerald-200 rounded-lg px-3 py-1.5 text-xs font-mono text-emerald-800"
+                                                    value={lastPersonalInvite.url}
+                                                    className="flex-1 rounded-[16px] border border-emerald-200 bg-white px-3 py-2 font-mono text-xs text-emerald-800 outline-none"
                                                 />
-                                                <Button 
-                                                    size="sm" 
-                                                    className="bg-emerald-600 hover:bg-emerald-700 h-8"
+                                                <Button
+                                                    size="sm"
+                                                    className="h-9 bg-emerald-600 hover:bg-emerald-700"
                                                     onClick={() => {
                                                         navigator.clipboard.writeText(lastPersonalInvite.url);
                                                         showToast("Personal link copied!", "success");
@@ -650,25 +795,38 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                             </div>
                                         </div>
                                     )}
+                                </GlassCard>
 
-                                    <div className="space-y-3 pt-4 border-t border-zinc-100">
-                                        <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Recent Pending Invites</label>
+                                <GlassCard className="border border-[#E5E5E5] bg-white/95 p-5 sm:p-6">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div>
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">Recent invites</p>
+                                            <Heading level={3} className="mt-1 text-[22px] tracking-[-0.04em]">Pending queue</Heading>
+                                        </div>
+                                        <span className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">
+                                            {invites.length}
+                                        </span>
+                                    </div>
+
+                                    <div className="mt-4 space-y-3">
                                         {invitesLoading ? (
                                             <SkeletonText lines={2} />
                                         ) : invites.length > 0 ? (
-                                            invites.slice(0, 3).map(invite => (
-                                                <div key={invite.id} className="flex items-center justify-between p-2.5 bg-zinc-50 rounded-lg border border-zinc-100 group">
-                                                    <div className="min-w-0 flex-1 mr-3">
+                                            invites.slice(0, 4).map(invite => (
+                                                <div key={invite.id} className="flex items-center justify-between gap-3 rounded-[18px] border border-[#E5E5E5] bg-[#F7F7F8]/70 p-3">
+                                                    <div className="min-w-0 flex-1">
                                                         <div className="flex items-center gap-2">
-                                                            <Mail size={12} className="text-zinc-400" />
-                                                            <span className="text-[12px] font-medium text-zinc-700 truncate">{invite.email || 'Unspecified'}</span>
+                                                            <Mail size={12} className="text-[#6E6E80]" />
+                                                            <span className="truncate text-sm font-medium text-[#0D0D0D]">{invite.email || 'Unspecified'}</span>
                                                         </div>
-                                                        <span className="text-[9px] text-zinc-400 font-mono ml-5">Expires {new Date(invite.expires_at).toLocaleDateString()}</span>
+                                                        <span className="ml-5 text-[10px] text-[#6E6E80]">
+                                                            Expires {new Date(invite.expires_at).toLocaleDateString()}
+                                                        </span>
                                                     </div>
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        className="h-9 w-9 p-0"
                                                         onClick={() => {
                                                             const url = `${window.location.origin}/accept-invite?token=${invite.token}`;
                                                             navigator.clipboard.writeText(url);
@@ -681,21 +839,37 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                 </div>
                                             ))
                                         ) : (
-                                            <p className="text-center py-2 text-zinc-400 text-[11px] italic">No active personal invites.</p>
+                                            <div className="rounded-[20px] border border-dashed border-[#D4D4D8] bg-[#F7F7F8]/60 p-5 text-center">
+                                                <p className="text-sm text-[#6E6E80]">No active personal invites.</p>
+                                            </div>
                                         )}
                                     </div>
                                 </GlassCard>
-                            )}
-                            <CalendarWidget
-                                meetings={localMeetings}
-                                tasks={tasks}
-                                spaces={[space].filter(Boolean)}
-                                defaultSpaceId={space.id}
-                                showSpaceFilter={false}
-                                showTypeFilter={true}
-                                title={`${space.name} Calendar`}
-                            />
-                        </div>
+                            </div>
+                        )}
+
+                        <GlassCard className="overflow-hidden border border-[#E5E5E5] bg-white/95 p-0">
+                            <div className="flex items-center justify-between gap-4 border-b border-[#E5E5E5] px-5 py-4 sm:px-6">
+                                <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">Scheduling</p>
+                                    <Heading level={3} className="mt-1 text-[22px] tracking-[-0.04em]">{space.name} Calendar</Heading>
+                                </div>
+                                <span className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6E6E80]">
+                                    {localMeetings.length} meetings
+                                </span>
+                            </div>
+                            <div className="p-4 sm:p-6">
+                                <CalendarWidget
+                                    meetings={localMeetings}
+                                    tasks={tasks}
+                                    spaces={[space].filter(Boolean)}
+                                    defaultSpaceId={space.id}
+                                    showSpaceFilter={false}
+                                    showTypeFilter={true}
+                                    title=""
+                                />
+                            </div>
+                        </GlassCard>
                     </div>
                 )}
                 {activeTab === 'Chat' && (
@@ -763,7 +937,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     className={`flex-1 ${isEnded ? 'text-[#0D0D0D] border-[#E5E5E5] hover:bg-[#F7F7F8]' : ''}`}
                     onClick={() => !isEnded ? onJoin(m.id) : navigate(`/spaces/${spaceId}/meetings/${m.id}/review`)}
                 >
-                    {isEnded ? '📋 Review Details' : 'Enter Lobby'}
+                    {isEnded ? 'ðŸ“‹ Review Details' : 'Enter Lobby'}
                 </Button>
                 {!isEnded && ['owner', 'admin', 'staff'].includes(userRole || '') && (
                     <Button
@@ -854,10 +1028,10 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                     <label className="block text-sm font-medium text-zinc-700 mb-2">Outcome</label>
                                     <div className="grid grid-cols-2 gap-2 mb-4">
                                         {[
-                                            { id: 'successful', label: '✅ Successful' },
-                                            { id: 'follow_up_needed', label: '🔄 Follow-up' },
-                                            { id: 'no_show', label: '👻 No Show' },
-                                            { id: 'inconclusive', label: '❓ Inconclusive' },
+                                            { id: 'successful', label: 'âœ… Successful' },
+                                            { id: 'follow_up_needed', label: 'ðŸ”„ Follow-up' },
+                                            { id: 'no_show', label: 'ðŸ‘» No Show' },
+                                            { id: 'inconclusive', label: 'â“ Inconclusive' },
                                         ].map(opt => (
                                             <button
                                                 key={opt.id}
@@ -996,7 +1170,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                                     )}
                                                 </div>
                                                 <p className="text-xs text-zinc-500">
-                                                    {file.file_size ? `${(file.file_size / (1024 * 1024)).toFixed(2)} MB` : 'Size unknown'} • {new Date(file.created_at).toLocaleDateString()}
+                                                    {file.file_size ? `${(file.file_size / (1024 * 1024)).toFixed(2)} MB` : 'Size unknown'} â€¢ {new Date(file.created_at).toLocaleDateString()}
                                                 </p>
                                             </div>
                                         </div>
@@ -1153,7 +1327,9 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                 file={versioningFile}
             />
 
+            <SurfaceDock items={dockItems} />
         </div>
     );
 };
 export default SpaceDetailView;
+

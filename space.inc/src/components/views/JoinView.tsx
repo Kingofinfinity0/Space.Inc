@@ -110,7 +110,8 @@ export default function JoinView() {
                 setPageStatus('done');
                 showToast('Successfully joined!', 'success');
                 setTimeout(() => {
-                    window.location.href = normalizeInviteRedirectPath(result.redirect_path) || '/';
+                    const redirectPath = normalizeInviteRedirectPath(result.redirect_path) || '/dashboard';
+                    navigate(redirectPath, { replace: true });
                 }, 1000);
             } else {
                 setPageStatus('valid');

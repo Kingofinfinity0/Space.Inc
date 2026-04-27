@@ -7,9 +7,6 @@ import SpaceDetailView from './SpaceDetailView';
 import { ClientSpace, Meeting } from '../../types';
 import { Rocket } from 'lucide-react';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Holding screen — shown when there's no active membership
-// ─────────────────────────────────────────────────────────────────────────────
 const HoldingScreen = () => (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 font-sans">
         <div className="max-w-md w-full text-center space-y-6">
@@ -35,9 +32,6 @@ const HoldingScreen = () => (
     </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Loading skeleton — shown while fetching space data
-// ─────────────────────────────────────────────────────────────────────────────
 const LoadingScreen = () => (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 animate-pulse">
         <div className="max-w-md w-full space-y-4">
@@ -48,15 +42,9 @@ const LoadingScreen = () => (
     </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SpaceRoute
-// Reads :spaceId from URL → looks up membership role → renders accordingly:
-//   client  → ClientPortalView (messages, files, meetings only)
-//   staff/admin/owner → SpaceDetailView (full staff view)
-// ─────────────────────────────────────────────────────────────────────────────
 const SpaceRoute: React.FC = () => {
     const { spaceId } = useParams<{ spaceId: string }>();
-    const { user, userRole, loading: authLoading, signOut, session } = useAuth();
+    const { user, loading: authLoading, signOut } = useAuth();
     const navigate = useNavigate();
 
     const [space, setSpace] = useState<ClientSpace | null>(null);
@@ -77,7 +65,6 @@ const SpaceRoute: React.FC = () => {
         const load = async () => {
             setFetchLoading(true);
             try {
-                // 1. Look up membership role for this user + space
                 const { data: membership, error: memError } = await supabase
                     .from('space_memberships')
                     .select('role, space_id')
@@ -92,9 +79,8 @@ const SpaceRoute: React.FC = () => {
                     return;
                 }
 
-                setMembershipRole(membership.role);
+                setMembershipRole(membership.role || null);
 
-                // 2. Fetch the space record
                 const { data: spaceData, error: spaceError } = await supabase
                     .from('spaces')
                     .select('*')
@@ -107,7 +93,6 @@ const SpaceRoute: React.FC = () => {
                     return;
                 }
 
-                // 3. Fetch scheduled/live meetings for this space
                 const { data: meetingsData } = await supabase
                     .from('meetings')
                     .select('*')
@@ -128,15 +113,11 @@ const SpaceRoute: React.FC = () => {
         load();
     }, [authLoading, user, spaceId]);
 
-    // ── Auth guard ──────────────────────────────────────────────────────────
     if (authLoading) return <LoadingScreen />;
     if (!user) return <Navigate to="/login" replace />;
-
-    // ── Data loading ────────────────────────────────────────────────────────
     if (fetchLoading) return <LoadingScreen />;
     if (notFound || !space) return <HoldingScreen />;
 
-    // ── Role-based rendering ────────────────────────────────────────────────
     if (membershipRole === 'client') {
         return (
             <ClientPortalView
@@ -150,7 +131,6 @@ const SpaceRoute: React.FC = () => {
         );
     }
 
-    // staff / admin / owner → full staff view
     return (
         <SpaceDetailView
             spaceId={spaceId!}
@@ -158,7 +138,7 @@ const SpaceRoute: React.FC = () => {
             meetings={meetings}
             onBack={() => navigate('/dashboard')}
             onJoin={(meetingId) => {
-                console.log('[SpaceRoute] Staff joining meeting:', meetingId);
+                console.log('[SpaceRoute] Joining meeting:', meetingId);
             }}
             onSchedule={() => {}}
             onInstantMeet={() => {}}

@@ -119,6 +119,10 @@ const LegacyClientSpaceRedirect = () => {
     return <Navigate to={spaceId ? `/spaces/${spaceId}` : '/dashboard'} replace />;
 };
 
+const resolveClientRoute = (route?: string | null, contextId?: string | null) => {
+    return normalizeInviteRedirectPath(route) || (contextId ? `/spaces/${contextId}` : null);
+};
+
 // ── Client Space Picker ─────────────────────────────────────────────────
 // Shown on /dashboard when a client has multiple space memberships.
 const ClientSpacePicker: React.FC = () => {
@@ -189,7 +193,7 @@ const ClientSpacePicker: React.FC = () => {
 };
 
 const App = () => {
-    const { user, profile, loading, userRole, organizationId, can, signOut } = useAuth();
+    const { user, profile, loading, userRole, organizationId, can, signOut, contexts, activeContext } = useAuth();
     const { showToast, removeToast } = useToast();
     const navigate = useNavigate();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -238,9 +242,8 @@ const App = () => {
     }, [user, loading]);
 
     // ── Client role redirect ─────────────────────────────────────────────────
-    // After auth resolves: if the user is a client on /dashboard or /,
-    // look up their active space memberships and redirect accordingly.
-    // Single membership → /spaces/:id; Multiple → space picker; None → holding.
+    // If the backend has already selected a client-space context, send the user
+    // there immediately. Otherwise keep the dashboard/picker/pending flow intact.
     useEffect(() => {
         if (loading || !user || !userRole) return;
         if (userRole !== 'client') return;
@@ -251,28 +254,20 @@ const App = () => {
         // Don't redirect if already on a space route
         if (pathname.startsWith('/spaces/')) return;
 
-        const redirectClient = async () => {
-            try {
-                const { data: memberships } = await _supabase
-                    .from('space_memberships')
-                    .select('space_id')
-                    .eq('profile_id', user.id)
-                    .eq('status', 'active');
+        const clientRoute =
+            activeContext?.context_type === 'client_space'
+                ? resolveClientRoute(activeContext.route, activeContext.context_id)
+                : null;
 
-                if (memberships && memberships.length === 1) {
-                    navigate(`/spaces/${memberships[0].space_id}`, { replace: true });
-                } else if (memberships && memberships.length > 1) {
-                    // Multiple memberships — stay on /dashboard, picker will show
-                } else {
-                    navigate('/spaces/pending', { replace: true });
-                }
-            } catch {
-                navigate('/spaces/pending', { replace: true });
-            }
-        };
+        if (clientRoute) {
+            navigate(clientRoute, { replace: true });
+            return;
+        }
 
-        redirectClient();
-    }, [loading, user, userRole]);
+        if (contexts?.routing === 'onboarding') {
+            navigate('/spaces/pending', { replace: true });
+        }
+    }, [loading, user, userRole, activeContext, contexts, navigate]);
 
     useEffect(() => {
         // Clients use route-level data loading and should not be blocked by
@@ -844,8 +839,6 @@ case ViewState.STAFF:
         },
     ].filter((item) => item.allowed);
 
-    const { contexts, activeContext } = useAuth();
-
     return (
         <Routes>
             <Route path="/join/:token" element={<JoinView />} />
@@ -873,7 +866,7 @@ case ViewState.STAFF:
                     if (!isAuthenticated) return <LoginPage />;
                     if (contexts?.routing === 'switcher' && !activeContext) return <ContextSwitcher />;
                     if (activeContext?.context_type === 'client_space') {
-                        return <Navigate to={normalizeInviteRedirectPath(activeContext.route) || `/spaces/${activeContext.context_id}`} replace />;
+                        return <Navigate to={resolveClientRoute(activeContext.route, activeContext.context_id) || '/spaces/pending'} replace />;
                     }
 
                     if (userRole === 'client') {
@@ -904,7 +897,7 @@ case ViewState.STAFF:
                                             </div>
                                         </div>
                                     </header>
-                                    <div className="flex-1 overflow-y-auto px-4 pb-24 pt-5 md:px-6 md:pb-32 md:pt-6">
+                                    <div className="flex-1 overflow-y-auto px-4 pb-20 pt-5 md:px-6 md:pb-24 md:pt-6">
                                         <div className="mx-auto w-full max-w-[1240px]">{renderContent()}</div>
                                     </div>
                                     <nav className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4 md:bottom-8">
