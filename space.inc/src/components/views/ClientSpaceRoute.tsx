@@ -81,9 +81,10 @@ const SpaceRoute: React.FC = () => {
                 const { data: membership, error: memError } = await supabase
                     .from('space_memberships')
                     .select('role, space_id')
+                    .eq('profile_id', user.id)
                     .eq('space_id', spaceId)
                     .eq('status', 'active')
-                    .single();
+                    .maybeSingle();
 
                 if (memError || !membership) {
                     console.warn('[SpaceRoute] No active membership for spaceId:', spaceId);

@@ -23,7 +23,8 @@ import {
     X,
     Search,
     Copy,
-    Key
+    Key,
+    ArrowLeft
 } from 'lucide-react';
 import {
     Button,

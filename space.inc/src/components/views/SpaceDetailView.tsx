@@ -219,14 +219,28 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         let cancelled = false;
 
         const loadSpaceFull = async () => {
-            if (!spaceId || !organizationId) return;
+            if (!spaceId) {
+                if (!cancelled) setSpaceLoading(false);
+                return;
+            }
+
+            if (!organizationId) {
+                if (!cancelled) {
+                    setSpaceLoading(false);
+                    setSpace(initialSpace);
+                }
+                return;
+            }
+
             if (!initialSpace) {
                 setSpaceLoading(true);
                 try {
                     const { data, error } = await apiService.getSpaceById(spaceId, organizationId);
                     if (!error && !cancelled) setSpace(data as ClientSpace);
+                    if ((error || !data) && !cancelled) setSpace(null);
                 } catch (err) {
                     console.error('Error fetching space directly:', err);
+                    if (!cancelled) setSpace(null);
                 } finally {
                     if (!cancelled) setSpaceLoading(false);
                 }
