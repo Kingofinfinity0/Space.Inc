@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Message } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
-import { File as DocIconLucide, Download as DownloadIcon, Check as CheckIcon, X as XIcon, Edit2 as EditIcon, Trash2 as TrashIcon, MoreVertical as MoreVerticalIcon } from 'lucide-react';
+import { File as DocIconLucide, Download as DownloadIcon, Check as CheckIcon, X as XIcon, Edit2 as EditIcon, Trash2 as TrashIcon, MoreVertical as MoreVerticalIcon, Shield, Sparkles } from 'lucide-react';
 import { apiService } from '../../services/apiService';
 
 export const MessageItem = ({ 
@@ -65,28 +65,27 @@ export const MessageItem = ({
     };
 
     // Style variations
-    const isSenderStaff = msg.senderType === 'staff';
-    const alignRight = msg.senderType === 'staff'; // Matches InboxView and SpaceChatPanel.
+    const alignRight = msg.senderType === 'staff';
+    const isInternal = msg.channel === 'internal';
 
-    let bubbleClass = '';
-    if (msg.channel === 'internal') {
-        bubbleClass = 'bg-amber-50 border border-amber-200 text-amber-900 group';
-    } else if (theme === 'inbox') {
-        bubbleClass = alignRight
-            ? 'bg-[#1D1D1D] text-white rounded-br-none group'
-            : 'bg-white shadow-sm border border-zinc-100 rounded-bl-none text-[#1D1D1D] group';
-    } else {
-        // panel theme
-        bubbleClass = alignRight
-            ? 'bg-[#10A37F] text-white group'
-            : 'bg-[#F7F7F8] text-[#1D1D1D] border border-[#D1D5DB]/30 group';
-    }
+    const bubbleClass = isInternal
+        ? 'bg-[#F7F7F8] border border-[#E5E5E5] text-[#0D0D0D] group'
+        : theme === 'inbox'
+            ? alignRight
+                ? 'bg-[#0D0D0D] text-white border border-[#0D0D0D] group'
+                : 'bg-white border border-[#E5E5E5] text-[#0D0D0D] group'
+            : alignRight
+                ? 'bg-[#0D0D0D] text-white border border-[#0D0D0D] group'
+                : 'bg-[#F7F7F8] border border-[#E5E5E5] text-[#0D0D0D] group';
+
+    const shellTone = isInternal ? 'bg-[#F7F7F8]' : alignRight ? 'bg-[#0D0D0D] text-white' : 'bg-white';
+    const senderTone = alignRight ? 'text-white/70' : 'text-[#6E6E80]';
 
     return (
-        <div className={`flex ${alignRight ? 'justify-end' : 'justify-start'} relative mb-4`}>
+        <div className={`relative mb-4 flex ${alignRight ? 'justify-end' : 'justify-start'}`}>
             <div 
                 onContextMenu={handleContextMenu}
-                className={`max-w-[80%] md:max-w-[70%] p-3 md:p-4 rounded-lg text-sm relative ${bubbleClass}`}
+                className={`max-w-[86%] rounded-[8px] px-4 py-3 text-sm shadow-[0_1px_3px_rgba(0,0,0,0.06)] md:max-w-[70%] ${bubbleClass}`}
             >
                 {/* Context Menu Button for touch/mobile (visible on hover) */}
                 {isOwner && msg.content !== '[Message deleted]' && !isEditing && (
@@ -94,7 +93,7 @@ export const MessageItem = ({
                         onClick={() => setShowMenu(!showMenu)}
                         title="More options"
                         aria-label="More options"
-                        className={`absolute top-2 ${alignRight ? '-left-8' : '-right-8'} p-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-zinc-500 rounded-full shadow-sm border border-zinc-200`}
+                        className={`absolute top-2 ${alignRight ? '-left-9' : '-right-9'} flex h-7 w-7 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#6E6E80] opacity-0 shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-opacity group-hover:opacity-100`}
                     >
                         <MoreVerticalIcon size={14} />
                     </button>
@@ -102,35 +101,36 @@ export const MessageItem = ({
 
                 {/* Context Menu */}
                 {showMenu && (
-                    <div ref={menuRef} className={`absolute z-10 top-0 ${alignRight ? 'right-full mr-2' : 'left-full ml-2'} bg-white border border-[#E5E5E5] shadow-[0_1px_3px_rgba(0,0,0,0.06)] rounded-[8px] overflow-hidden text-[#6E6E80] w-28`}>
-                        <button onClick={() => { setIsEditing(true); setShowMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2">
+                    <div ref={menuRef} className={`absolute top-0 z-10 w-32 overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white text-[#6E6E80] shadow-[0_12px_24px_rgba(0,0,0,0.08)] ${alignRight ? 'right-full mr-2' : 'left-full ml-2'}`}>
+                        <button onClick={() => { setIsEditing(true); setShowMenu(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[#F7F7F8]">
                             <EditIcon size={14} /> Edit
                         </button>
-                        <button onClick={handleDelete} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        <button onClick={handleDelete} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#B42318] hover:bg-[#FEF2F2]">
                             <TrashIcon size={14} /> Delete
                         </button>
                     </div>
                 )}
 
                 {msg.channel === 'internal' && (
-                    <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">
-                        Internal Note
+                    <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">
+                        <Shield size={12} />
+                        Internal note
                     </div>
                 )}
                 {msg.senderName && (
-                    <p className={`text-[10px] mb-1 font-medium ${alignRight ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    <p className={`mb-1 text-[10px] font-medium ${senderTone}`}>
                         {msg.senderName}
                     </p>
                 )}
 
                 {msg.extension === 'file' ? (
-                    <div className={`flex items-center gap-3 p-2 rounded-lg ${alignRight ? 'bg-[#F7F7F8]' : 'bg-[#F7F7F8]'}`}>
-                        <div className="p-2 bg-[#F7F7F8] rounded-lg text-[#0D0D0D]">
+                    <div className={`flex items-center gap-3 rounded-[8px] border border-[#E5E5E5] px-3 py-2 ${shellTone}`}>
+                        <div className="rounded-[8px] border border-[#E5E5E5] bg-[#FFFFFF] p-2 text-[#0D0D0D]">
                             <DocIconLucide size={20} />
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="font-medium truncate text-xs">{msg.payload?.file_name}</p>
-                            <p className="text-[10px] opacity-60">Document Shared</p>
+                            <p className="text-[10px] text-[#6E6E80]">Document shared</p>
                         </div>
                         <button
                             title="Download File"
@@ -138,7 +138,7 @@ export const MessageItem = ({
                                 const { data } = await apiService.getSignedUrl(msg.payload.file_id, organizationId);
                                 if (data?.signedUrl) window.open(data.signedUrl, '_blank');
                             }}
-                            className="p-1.5 hover:bg-[#F7F7F8] rounded-full transition-colors"
+                            className="rounded-full p-1.5 text-[#6E6E80] transition-colors hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
                         >
                             <DownloadIcon size={16} />
                         </button>
@@ -148,7 +148,7 @@ export const MessageItem = ({
                         <input 
                             title="Edit message content"
                             aria-label="Edit message content"
-                            className="w-full text-[#0D0D0D] bg-white border border-[#E5E5E5] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-black"
+                            className="w-full rounded-[8px] border border-[#DADADA] bg-white px-3 py-2 text-sm text-[#0D0D0D] focus:border-black focus:outline-none"
                             value={editContent}
                             onChange={e => setEditContent(e.target.value)}
                             onKeyDown={e => {
@@ -158,26 +158,29 @@ export const MessageItem = ({
                             autoFocus
                         />
                         <div className="flex justify-end gap-1">
-                            <button title="Cancel Edit" aria-label="Cancel Edit" onClick={() => setIsEditing(false)} className="p-1 rounded hover:bg-zinc-200/50 text-zinc-500"><XIcon size={14}/></button>
-                            <button title="Save Edit" aria-label="Save Edit" onClick={handleEditSave} className="p-1 rounded hover:bg-[#F7F7F8] text-[#0D0D0D]"><CheckIcon size={14}/></button>
+                            <button title="Cancel Edit" aria-label="Cancel Edit" onClick={() => setIsEditing(false)} className="rounded-[8px] p-1.5 text-[#6E6E80] hover:bg-[#EFEFEF]"><XIcon size={14}/></button>
+                            <button title="Save Edit" aria-label="Save Edit" onClick={handleEditSave} className="rounded-[8px] p-1.5 text-[#0D0D0D] hover:bg-[#F7F7F8]"><CheckIcon size={14}/></button>
                         </div>
                     </div>
                 ) : (
                     <div>
                         {msg.content === '[Message deleted]' ? (
-                            <p className="text-sm italic opacity-60">[Message deleted]</p>
+                            <p className="text-sm italic text-[#6E6E80]">[Message deleted]</p>
                         ) : (
-                            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed">
                                 {msg.content}
                                 {msg.updatedAt && msg.updatedAt !== msg.createdAt && (
-                                    <span className="text-[10px] opacity-60 ml-2 inline-block">(edited)</span>
+                                    <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-[#6E6E80]">
+                                        <Sparkles size={10} />
+                                        edited
+                                    </span>
                                 )}
                             </p>
                         )}
                     </div>
                 )}
 
-                <p className={`text-[10px] mt-1 text-right ${alignRight ? 'text-zinc-400' : 'text-zinc-400'}`}>
+                <p className="mt-2 text-right text-[10px] text-[#6E6E80]">
                     {formatTime(msg.createdAt)}
                 </p>
             </div>

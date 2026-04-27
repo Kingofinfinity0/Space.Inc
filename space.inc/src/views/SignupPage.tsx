@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Heading, Text, GlassCard } from '@/components/UI/index';
 import { Rocket, Shield, ArrowRight, Mail } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { normalizeInviteRedirectPath } from '@/services/inviteService';
 
 export default function SignupPage() {
     const [searchParams] = useSearchParams();
@@ -89,7 +90,7 @@ export default function SignupPage() {
                 );
 
                 if (acceptedInvite?.redirect_path) {
-                    navigate(acceptedInvite.redirect_path, { replace: true });
+                    navigate(normalizeInviteRedirectPath(acceptedInvite.redirect_path) || '/dashboard', { replace: true });
                     return;
                 }
 

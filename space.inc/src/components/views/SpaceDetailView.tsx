@@ -32,9 +32,11 @@ import { CalendarWidget } from '../CalendarWidget';
 import TaskWorkspace from '../tasks/TaskWorkspace';
 import { usePermissions } from "../../hooks/usePermissions";
 
+type SpaceDetailTab = 'Dashboard' | 'Chat' | 'Meetings' | 'Tasks' | 'Docs';
+
 
 // 3. Space Detail View
-const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet, onEndMeeting, onDeleteMeeting }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void, onEndMeeting?: (id: string, outcome: string, notes: string) => void, onDeleteMeeting?: (meetingId: string) => void }) => {
+const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoin, onSchedule, onInstantMeet, onEndMeeting, onDeleteMeeting, activeTab: activeTabProp, onTabChange }: { spaceId: string, space?: ClientSpace, meetings: Meeting[], onBack: () => void, onJoin: (id: string) => void, onSchedule: (data: any) => void, onInstantMeet: (spaceId: string) => void, onEndMeeting?: (id: string, outcome: string, notes: string) => void, onDeleteMeeting?: (meetingId: string) => void, activeTab?: SpaceDetailTab, onTabChange?: (tab: SpaceDetailTab) => void }) => {
     const navigate = useNavigate();
     const { user, profile, organizationId, userRole, session } = useAuth();
     const { permissions, isLoading: permissionsLoading } = usePermissions(spaceId);
@@ -53,7 +55,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         recentFilesCount: number;
     }>({ unreadCount: 0, upcomingMeetings: [], recentFilesCount: 0 });
 
-    const [activeTab, setActiveTab] = useState<'Dashboard' | 'Chat' | 'Meetings' | 'Tasks' | 'Docs'>('Dashboard');
+    const [activeTab, setActiveTab] = useState<SpaceDetailTab>(activeTabProp || 'Dashboard');
     const [invites, setInvites] = useState<any[]>([]);
     const [invitesLoading, setInvitesLoading] = useState(false);
     const [spaceInviteUrl, setSpaceInviteUrl] = useState<string>('');
@@ -67,6 +69,20 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     
     const [tasks, setTasks] = useState<Task[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+    const [showTrash, setShowTrash] = useState(false);
+    const [viewingFile, setViewingFile] = useState<SpaceFile | null>(null);
+    const [versioningFile, setVersioningFile] = useState<SpaceFile | null>(null);
+    const [newMeetingDate, setNewMeetingDate] = useState('');
+    const [newMeetingTime, setNewMeetingTime] = useState('');
+    const [newMeetingTitle, setNewMeetingTitle] = useState(`${initialSpace?.name || 'Space'} Sync`);
+    const [notifyClient, setNotifyClient] = useState(true);
+    const [newMeetingCategory, setNewMeetingCategory] = useState<string>('general');
+    const [meetingToEnd, setMeetingToEnd] = useState<Meeting | null>(null);
+    const [endOutcome, setEndOutcome] = useState('successful');
+    const [endNotes, setEndNotes] = useState('');
+    const [isEnding, setIsEnding] = useState(false);
     const canManageInvites = permissions ? (!!permissions.can_invite_clients || !!permissions.can_invite_staff) : (userRole === 'owner' || userRole === 'admin' || userRole === 'staff');
     const canManageSpace = permissions ? !!permissions.manage_spaces : (userRole === 'owner' || userRole === 'admin');
 
@@ -321,26 +337,8 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         );
     }
 
-    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-    const [showTrash, setShowTrash] = useState(false);
-    const [viewingFile, setViewingFile] = useState<SpaceFile | null>(null);
-    const [versioningFile, setVersioningFile] = useState<SpaceFile | null>(null);
-
     // Filter meetings for this space
     const localMeetings = meetings.filter(m => m.space_id === space.id && !m.deleted_at);
-
-    // Schedule state
-    const [newMeetingDate, setNewMeetingDate] = useState('');
-    const [newMeetingTime, setNewMeetingTime] = useState('');
-    const [newMeetingTitle, setNewMeetingTitle] = useState(`${space.name} Sync`);
-    const [notifyClient, setNotifyClient] = useState(true);
-    const [newMeetingCategory, setNewMeetingCategory] = useState<string>('general');
-
-    const [meetingToEnd, setMeetingToEnd] = useState<Meeting | null>(null);
-    const [endOutcome, setEndOutcome] = useState('successful');
-    const [endNotes, setEndNotes] = useState('');
-    const [isEnding, setIsEnding] = useState(false);
 
     const handleLocalSchedule = () => {
         onSchedule({
@@ -379,9 +377,9 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     };
 
     return (
-        <div className="animate-[fadeIn_0.5s_ease-out] flex flex-col h-[calc(100vh-64px)]">
+        <div className="animate-[fadeIn_0.5s_ease-out] flex flex-col gap-6 pb-8">
             {/* Navigation Header */}
-            <div className="flex items-center gap-4 mb-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center">
                 <button title="Go Back" onClick={onBack} className="p-2 rounded-[6px] border border-[#E5E5E5] bg-white hover:bg-[#F7F7F8] transition-colors">
                     <ArrowLeft size={20} className="text-[#6E6E80]" />
                 </button>
@@ -389,7 +387,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     <h1 className="text-2xl font-semibold text-[#0D0D0D]">{space.name}</h1>
                     <p className="text-sm text-[#6E6E80]">Managed by You</p>
                 </div>
-                <div className="ml-auto flex items-center gap-3">
+                <div className="ml-0 flex flex-col gap-3 md:ml-auto md:flex-row md:items-center">
                     {canManageSpace && (
                         <>
                             <select
@@ -413,7 +411,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             </Button>
                         </>
                     )}
-                    <div className="flex rounded-[999px] border border-[#E5E5E5] bg-[#F7F7F8] p-1">
+                    <div className="flex flex-wrap rounded-[999px] border border-[#E5E5E5] bg-[#F7F7F8] p-1 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
                     {([
                         { label: 'Dashboard', allowed: permissions ? !!permissions.view_dashboard : true },
                         { label: 'Chat', allowed: permissions ? !!permissions.message_clients : true },
@@ -423,8 +421,11 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     ] as const).map(tab => tab.allowed && (
                         <button
                             key={tab.label}
-                            onClick={() => setActiveTab(tab.label as any)}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${activeTab === tab.label ? 'bg-black text-white' : 'text-[#6E6E80] hover:text-[#0D0D0D]'}`}
+                            onClick={() => {
+                                setActiveTab(tab.label as SpaceDetailTab);
+                                onTabChange?.(tab.label as SpaceDetailTab);
+                            }}
+                            className={`surface-chip px-4 py-2 text-sm font-medium transition-all ${activeTab === tab.label ? 'surface-chip-active' : ''}`}
                         >
                             {tab.label}
                         </button>
@@ -471,7 +472,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto pr-2">
+            <div className="space-y-6">
                 {activeTab === 'Dashboard' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

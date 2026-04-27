@@ -5,6 +5,7 @@ import { apiService } from '../../services/apiService';
 import { inviteService } from '../../services/inviteService';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { WORKSPACE_ROLES, type WorkspaceRole } from '../../lib/workspaceRoles';
 
 interface InviteStaffModalProps {
     isOpen: boolean;
@@ -189,6 +190,9 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                 </button>
 
                 <Heading level={2} className="mb-6 text-[#0D0D0D]">Invite Team Member</Heading>
+                <p className="mb-6 text-sm leading-6 text-[#6E6E80]">
+                    Keep invitations aligned with the workflow: owner for the business, admin for operations, staff for assigned execution, and client for the portal.
+                </p>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -222,14 +226,14 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                                                     : 'bg-white border-zinc-200 text-zinc-600 hover:border-emerald-300'
                                                 }`}
                                         >
-                                            {r.charAt(0).toUpperCase() + r.slice(1)}
+                                            {WORKSPACE_ROLES[r as WorkspaceRole].label}
                                         </button>
                                     ))}
                                 </div>
                                 <p className="text-[11px] text-zinc-400 mt-1.5 leading-relaxed">
                                     {role === 'admin'
-                                        ? 'Admin can invite others, manage spaces, and view all data.'
-                                        : 'Staff can work within assigned spaces only.'}
+                                        ? `${WORKSPACE_ROLES.admin.summary} ${WORKSPACE_ROLES.admin.scope}`
+                                        : `${WORKSPACE_ROLES.staff.summary} ${WORKSPACE_ROLES.staff.scope}`}
                                 </p>
                             </div>
 
@@ -332,6 +336,9 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                                                                 {label}
                                                             </label>
                                                         ))}
+                                                        <p className="col-span-2 pt-1 text-[11px] leading-5 text-zinc-400">
+                                                            Staff gets scoped workspace access. Admin keeps operational control. Clients should be invited from the space view when they only need portal access.
+                                                        </p>
                                                     </div>
                                                 )}
                                             </div>

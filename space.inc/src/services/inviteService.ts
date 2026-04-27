@@ -192,6 +192,17 @@ const getInviteStatusMessage = (invite: { error_code?: string; error?: string } 
   return fallback;
 };
 
+export const normalizeInviteRedirectPath = (path?: string | null) => {
+  if (!path) return null;
+
+  const clientSpaceMatch = path.match(/^\/client\/space\/([^/?#]+)(.*)?$/);
+  if (clientSpaceMatch) {
+    return `/spaces/${clientSpaceMatch[1]}${clientSpaceMatch[2] || ''}`;
+  }
+
+  return path;
+};
+
 async function callInvitationsApi(action: string, payload: Record<string, unknown>) {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token ?? ANON_KEY;

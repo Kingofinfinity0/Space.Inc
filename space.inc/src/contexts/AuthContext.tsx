@@ -4,6 +4,8 @@ import { supabase, onAuthStateChange } from '../lib/supabase';
 import { apiService } from '../services/apiService';
 import { inviteService } from '../services/inviteService';
 import { UserContext, ContextsResponse } from '../types/context';
+import { isOrganizationRole, normalizeWorkspaceRole } from '../lib/workspaceRoles';
+import { normalizeInviteRedirectPath } from '../services/inviteService';
 
 type AuthContextType = {
   user: User | null;
@@ -41,7 +43,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const setActiveContext = (context: UserContext | null) => {
     _setActiveContext(context);
     if (context) {
-      setUserRole(context.context_role);
+      setUserRole(normalizeWorkspaceRole(context.context_role));
     }
   };
 
@@ -63,11 +65,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (response.routing === 'auto_org' && response.org_contexts.length === 1) {
         const ctx = response.org_contexts[0];
         setActiveContext(ctx);
-        setUserRole(ctx.context_role);
+        setUserRole(normalizeWorkspaceRole(ctx.context_role));
       } else if (response.routing === 'auto_client' && response.client_contexts.length === 1) {
         const ctx = response.client_contexts[0];
         setActiveContext(ctx);
-        setUserRole(ctx.context_role);
+        setUserRole(normalizeWorkspaceRole(ctx.context_role));
       }
       return response;
     } catch (err) {
@@ -90,14 +92,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       const { data, error } = await apiService.getCapabilityLens();
       if (error) throw error;
-      if (data) {
-        setCapabilityCache(data);
-        // Sync userRole with activeContext if available
-        if (activeContext) {
-          setUserRole(activeContext.context_role);
-        } else {
-          setUserRole(data.role);
-        }
+        if (data) {
+          setCapabilityCache(data);
+          // Sync userRole with activeContext if available
+          if (activeContext) {
+          setUserRole(normalizeWorkspaceRole(activeContext.context_role));
+          } else {
+          setUserRole(normalizeWorkspaceRole(data.role));
+          }
         setOrganizationId(data.org_id);
         capabilitiesCacheRef.current = true;
 
@@ -125,7 +127,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const can = (capability: string, spaceId?: string): boolean => {
     if (!capabilityCache) return false;
     if (!spaceId) {
-      if (userRole === 'owner' || userRole === 'admin') return true;
+      if (isOrganizationRole(userRole)) return true;
       if (userRole === 'client' && capability === 'is_client_portal') return true;
       if (userRole === 'staff' && capability === 'can_view_dashboard') return true;
       return capabilities.includes(capability);
@@ -206,7 +208,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 );
 
                 if (acceptedInvite?.redirect_path) {
-                  window.location.href = acceptedInvite.redirect_path;
+                  window.location.href = normalizeInviteRedirectPath(acceptedInvite.redirect_path) || '/dashboard';
                   return;
                 }
               } catch (err) {

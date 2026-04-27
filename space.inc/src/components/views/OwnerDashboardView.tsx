@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
 import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
-import { Calendar, Activity, FileText, MessageSquare } from 'lucide-react';
+import { Calendar, Activity, FileText, MessageSquare, Sparkles } from 'lucide-react';
 import { ClientSpace, Meeting, Message, Task } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/apiService';
 import TaskWorkspace from '../tasks/TaskWorkspace';
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
 type OwnerDashboardProps = {
     clients: ClientSpace[];
@@ -55,7 +56,6 @@ export default function OwnerDashboardView({
     const [analytics, setAnalytics] = useState({
         activeSpaces: 0,
         activeClients: 0,
-        totalMessagesWeek: 0,
         meetingsMonth: 0,
         filesMonth: 0
     });
@@ -64,6 +64,41 @@ export default function OwnerDashboardView({
         if (onGoToSpace) return onGoToSpace(spaceId);
         navigate(`/spaces/${spaceId}`);
     };
+
+    const executiveSnapshot = useMemo(() => ([
+        {
+            label: 'Active Spaces',
+            value: analytics.activeSpaces,
+            tone: 'blue'
+        },
+        {
+            label: 'Active Clients',
+            value: analytics.activeClients,
+            tone: 'green'
+        },
+        {
+            label: 'Meetings This Month',
+            value: analytics.meetingsMonth,
+            tone: 'purple'
+        },
+        {
+            label: 'Files Shared',
+            value: analytics.filesMonth,
+            tone: 'yellow'
+        },
+        {
+            label: 'Open Tasks',
+            value: tasks.filter((task) => task.status !== 'done').length,
+            tone: 'rose'
+        }
+    ]), [analytics.activeClients, analytics.activeSpaces, analytics.filesMonth, analytics.meetingsMonth, tasks]);
+
+    const statusSeries = useMemo(() => ([
+        { stage: 'To Do', value: tasks.filter((task) => task.status === 'todo' || task.status === 'pending').length },
+        { stage: 'In Progress', value: tasks.filter((task) => task.status === 'in_progress').length },
+        { stage: 'Review', value: tasks.filter((task) => task.status === 'review').length },
+        { stage: 'Done', value: tasks.filter((task) => task.status === 'done').length }
+    ]), [tasks]);
 
     useEffect(() => {
         const load = async () => {
@@ -82,7 +117,6 @@ export default function OwnerDashboardView({
                 setAnalytics(analyticsRes.data || {
                     activeSpaces: 0,
                     activeClients: 0,
-                    totalMessagesWeek: 0,
                     meetingsMonth: 0,
                     filesMonth: 0
                 });
@@ -98,48 +132,116 @@ export default function OwnerDashboardView({
     }, [organizationId, showToast, user]);
 
     return (
-        <div className="space-y-6">
-            <header className="flex justify-between items-end mb-8">
-                <div>
+        <div className="space-y-5 page-enter">
+            <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div className="max-w-2xl space-y-2">
+                    <div className="surface-chip px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em]">
+                        <Sparkles size={12} />
+                        Executive overview
+                    </div>
                     <Heading level={1}>Overview</Heading>
-                    <Text variant="secondary" className="mt-1">
-                        Your task system now lives directly inside the executive overview.
+                    <Text variant="secondary" size="sm" className="max-w-2xl">
+                        Your operational surface, task system, and client intelligence live here in one calm, high-density command center.
                     </Text>
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Spaces</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
-                </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Active Clients (7d)</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeClients}</div>
-                </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Messages (7d)</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.totalMessagesWeek}</div>
-                </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Meetings (Month)</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.meetingsMonth}</div>
-                </GlassCard>
-                <GlassCard className="p-4">
-                    <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Files Shared (Month)</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.filesMonth}</div>
-                </GlassCard>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                {executiveSnapshot.map((metric) => (
+                    <GlassCard key={metric.label} className="p-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <Text variant="secondary" className="text-[9px] font-semibold uppercase tracking-[0.18em]">{metric.label}</Text>
+                            <span className="indicator-dot" data-tone={metric.tone} />
+                        </div>
+                        <div className="mt-2 text-[28px] font-semibold leading-none text-[#0D0D0D]">
+                            {loading ? <SkeletonLoader width="40px" height="24px" /> : metric.value}
+                        </div>
+                    </GlassCard>
+                ))}
             </div>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <div className="space-y-6 lg:col-span-2">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)]">
+                        <GlassCard className="p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                                <div>
+                                    <Heading level={3} className="text-lg">Task Shape Analysis</Heading>
+                                    <Text variant="secondary" size="xs">Weekly view of where the work is moving.</Text>
+                                </div>
+                                <span className="surface-chip px-2.5 py-1 text-[10px] font-medium">
+                                    <Activity size={11} />
+                                    Weekly View
+                                </span>
+                            </div>
+                            <div className="h-[180px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={statusSeries} margin={{ top: 6, right: 0, left: 0, bottom: 0 }}>
+                                        <defs>
+                                            <linearGradient id="taskFill" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor="#0D0D0D" stopOpacity={0.2} />
+                                                <stop offset="100%" stopColor="#0D0D0D" stopOpacity={0.02} />
+                                            </linearGradient>
+                                        </defs>
+                                        <XAxis dataKey="stage" tickLine={false} axisLine={false} tick={{ fill: '#6E6E80', fontSize: 10 }} />
+                                        <YAxis tickLine={false} axisLine={false} allowDecimals={false} tick={{ fill: '#6E6E80', fontSize: 10 }} />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '8px', border: '1px solid #E5E5E5', backgroundColor: '#fff' }}
+                                            labelStyle={{ color: '#0D0D0D', fontWeight: 600, fontSize: '12px' }}
+                                        />
+                                        <Area type="monotone" dataKey="value" stroke="#0D0D0D" strokeWidth={2} fill="url(#taskFill)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </GlassCard>
+
+                        <GlassCard className="p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                                <Heading level={3} className="text-lg">Upcoming Schedule</Heading>
+                                <span className="surface-chip px-2.5 py-1 text-[10px] font-medium">
+                                    <Calendar size={11} />
+                                    Live view
+                                </span>
+                            </div>
+                            {loading ? (
+                                <div className="space-y-2"><SkeletonLoader height="52px" borderRadius="10px" /></div>
+                            ) : upcomingMeetings.length === 0 ? (
+                                <div className="py-4 text-sm italic text-[#6E6E80]">No upcoming meetings scheduled.</div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {upcomingMeetings.slice(0, 3).map((meeting) => {
+                                        const startTime = new Date(meeting.starts_at);
+                                        const canJoin = (startTime.getTime() - Date.now()) < 30 * 60 * 1000;
+                                        return (
+                                            <div key={meeting.id} className="database-row flex items-center justify-between p-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="min-w-[44px] text-center">
+                                                        <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">{startTime.toLocaleString('en-US', { month: 'short' })}</p>
+                                                        <p className="text-lg font-semibold text-[#0D0D0D]">{startTime.getDate()}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-[#0D0D0D]">{meeting.title}</p>
+                                                        <p className="text-xs text-[#6E6E80]">{meeting.space_name} · {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                    </div>
+                                                </div>
+                                                {canJoin && <Button variant="primary" size="sm" className="h-8 px-3 text-xs" onClick={() => onJoin(meeting.id)}>Join</Button>}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </GlassCard>
+                    </div>
+
                     <TaskWorkspace
                         tasks={tasks}
                         clients={clients}
                         loading={loading}
                         compact
+                        showToolbar={false}
+                        showSummary={false}
                         title="Task Management"
-                        subtitle="Switch between board, list, timeline, calendar, and space views without leaving the overview."
+                        subtitle="Weekly command view for active work."
                         groupOptions={['Design', 'Engineering', 'Marketing']}
                         onCreateTask={onCreateTask}
                         onUpdateTask={onUpdateTask}
@@ -147,44 +249,13 @@ export default function OwnerDashboardView({
                         emptyTitle="No tasks in motion"
                         emptyDescription="Create the first task from the overview and it will show up across every connected space."
                     />
-
-                    <GlassCard className="p-6">
-                        <Heading level={3} className="mb-6">Upcoming Schedule</Heading>
-                        {loading ? (
-                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
-                        ) : upcomingMeetings.length === 0 ? (
-                            <div className="py-4 text-sm italic text-zinc-400">No upcoming meetings scheduled.</div>
-                        ) : (
-                            <div className="space-y-4">
-                                {upcomingMeetings.map((meeting) => {
-                                    const startTime = new Date(meeting.starts_at);
-                                    const canJoin = (startTime.getTime() - Date.now()) < 30 * 60 * 1000;
-                                    return (
-                                        <div key={meeting.id} className="flex items-center justify-between rounded-xl border border-zinc-100 p-4">
-                                            <div className="flex items-center gap-4">
-                                                <div className="min-w-[50px] text-center">
-                                                    <p className="text-[10px] font-black uppercase text-zinc-400">{startTime.toLocaleString('en-US', { month: 'short' })}</p>
-                                                    <p className="text-xl font-bold text-zinc-900">{startTime.getDate()}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-zinc-900">{meeting.title}</p>
-                                                    <p className="text-xs text-zinc-500">{meeting.space_name} · {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                                </div>
-                                            </div>
-                                            {canJoin && <Button variant="primary" size="sm" onClick={() => onJoin(meeting.id)}>Join Now</Button>}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </GlassCard>
                 </div>
 
-                <div className="space-y-6">
-                    <GlassCard className="p-6">
-                        <div className="mb-6 flex items-center justify-between">
-                            <Heading level={3}>Inbox</Heading>
-                            <Button variant="ghost" size="sm" onClick={async () => {
+                <div className="space-y-4">
+                    <GlassCard className="p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                            <Heading level={3} className="text-lg">Inbox</Heading>
+                            <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={async () => {
                                 await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
                                 setNotifications([]);
                             }}>
@@ -192,28 +263,28 @@ export default function OwnerDashboardView({
                             </Button>
                         </div>
                         {loading ? (
-                            <div className="space-y-3"><SkeletonLoader height="50px" borderRadius="10px" /></div>
+                            <div className="space-y-2"><SkeletonLoader height="48px" borderRadius="10px" /></div>
                         ) : notifications.length === 0 ? (
-                            <div className="py-10 text-center">
-                                <Activity className="mx-auto mb-2 text-[#D4D4D8]" size={32} />
+                            <div className="py-8 text-center">
+                                <Activity className="mx-auto mb-2 text-[#D4D4D8]" size={24} />
                                 <p className="text-xs italic text-[#6E6E80]">Inbox is clear.</p>
                             </div>
                         ) : (
-                            <div className="space-y-3">
-                                {notifications.map((notification) => (
-                                    <div key={notification.id} className="cursor-pointer rounded-[8px] border border-[#E5E5E5] bg-white p-3 transition-colors hover:bg-[#F7F7F8]" onClick={() => notification.space_id && goToSpace(notification.space_id)}>
+                            <div className="space-y-2">
+                                {notifications.slice(0, 3).map((notification) => (
+                                    <button key={notification.id} className="database-row w-full cursor-pointer p-3 text-left transition-colors hover:bg-[#F7F7F8]" onClick={() => notification.space_id && goToSpace(notification.space_id)}>
                                         <div className="flex items-center gap-3">
                                             <div className="text-[#6E6E80]">
                                                 {notification.type === 'file_uploaded'
-                                                    ? <FileText size={16} />
+                                                    ? <FileText size={14} />
                                                     : notification.type === 'message_received'
-                                                        ? <MessageSquare size={16} />
-                                                        : <Calendar size={16} />}
+                                                        ? <MessageSquare size={14} />
+                                                        : <Calendar size={14} />}
                                             </div>
                                             <p className="line-clamp-2 text-xs text-[#0D0D0D]">{notification.message}</p>
                                         </div>
                                         <p className="mt-2 text-[10px] text-[#6E6E80]">{timeAgo(notification.created_at)}</p>
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         )}

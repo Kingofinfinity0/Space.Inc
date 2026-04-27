@@ -64,13 +64,17 @@ import HistoryView from './components/views/HistoryView';
 import ClientPortalView from './components/views/ClientPortalView';
 import { InviteStaffModal } from './components/views/InviteStaffModal';
 import { MeetingRoom } from './components/MeetingRoom';
-import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, Navigate, useParams } from 'react-router-dom';
 import JoinView from './components/views/JoinView';
 import AcceptInviteView from './components/views/AcceptInviteView';
 import ClientSpaceRoute from './components/views/ClientSpaceRoute';
 import { PermissionGuard } from "./components/auth/PermissionGuard";
 import { ContextSwitcher } from './components/auth/ContextSwitcher';
 import { supabase as _supabase } from './lib/supabase';
+import { getWorkspaceRoleLabel } from './lib/workspaceRoles';
+import { normalizeInviteRedirectPath } from './services/inviteService';
+
+type SpaceDetailTab = 'Dashboard' | 'Chat' | 'Meetings' | 'Tasks' | 'Docs';
 
 const ErrorView = ({ message }: { message: string }) => (
     <div className="h-screen w-full flex items-center justify-center bg-[#FFFFFF] p-4">
@@ -84,6 +88,35 @@ const ErrorView = ({ message }: { message: string }) => (
         </GlassCard>
     </div>
 );
+
+const PendingSpaceView = () => (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 font-sans">
+        <div className="max-w-md w-full text-center space-y-6">
+            <div className="h-20 w-20 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto">
+                <Rocket size={36} className="text-zinc-400" />
+            </div>
+            <div className="space-y-2">
+                <h1 className="text-2xl font-black tracking-tight text-zinc-900">
+                    Your space isn't ready yet
+                </h1>
+                <p className="text-zinc-500 text-sm leading-relaxed">
+                    Your workspace is being set up. You'll receive access as soon as the invitation is activated.
+                </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-2">
+                <div className="h-2 w-2 bg-amber-400 rounded-full animate-pulse" />
+                <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                    Pending activation
+                </span>
+            </div>
+        </div>
+    </div>
+);
+
+const LegacyClientSpaceRedirect = () => {
+    const { spaceId } = useParams<{ spaceId: string }>();
+    return <Navigate to={spaceId ? `/spaces/${spaceId}` : '/dashboard'} replace />;
+};
 
 // ── Client Space Picker ─────────────────────────────────────────────────
 // Shown on /dashboard when a client has multiple space memberships.
@@ -164,6 +197,7 @@ const App = () => {
     // Sidebar/View State
     const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
     const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
+    const [selectedSpaceTab, setSelectedSpaceTab] = useState<SpaceDetailTab>('Dashboard');
     const { permissions, role: permissionRole, isLoading: permissionsLoading } = usePermissions(selectedSpaceId || undefined);
     const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
     const [activeMeetingRoomUrl, setActiveMeetingRoomUrl] = useState<string | null>(null);
@@ -187,6 +221,12 @@ const App = () => {
     const [instantMeetingTargetSpace, setInstantMeetingTargetSpace] = useState<string | null>(null);
     const [instantMeetingTitle, setInstantMeetingTitle] = useState('Instant Meeting');
     const [instantMeetingCategory, setInstantMeetingCategory] = useState<string>('general');
+
+    const openSpace = (spaceId: string, tab: SpaceDetailTab = 'Dashboard') => {
+        setSelectedSpaceId(spaceId);
+        setSelectedSpaceTab(tab);
+        setCurrentView(ViewState.SPACE_DETAIL);
+    };
 
     useEffect(() => {
         if (user && !loading) {
@@ -412,8 +452,7 @@ const App = () => {
                     updated_at: new Date().toISOString()
                 };
                 setClients(prev => [optimisticSpace as ClientSpace, ...prev]);
-                setSelectedSpaceId(optimisticSpace.id);
-                setCurrentView(ViewState.SPACE_DETAIL);
+                openSpace(optimisticSpace.id, 'Dashboard');
                 fetchData();
                 showToast("Space Created Successfully!", "success");
                 
@@ -560,8 +599,7 @@ case ViewState.DASHBOARD:
                             onCreateTask={handleCreateTask}
                             onUpdateTask={handleUpdateTask}
                             onGoToSpace={(spaceId) => {
-                                setSelectedSpaceId(spaceId);
-                                setCurrentView(ViewState.SPACE_DETAIL);
+                                openSpace(spaceId, 'Dashboard');
                             }}
                         />
                     );
@@ -579,8 +617,7 @@ case ViewState.DASHBOARD:
                             onCreateTask={handleCreateTask}
                             onUpdateTask={handleUpdateTask}
                             onGoToSpace={(spaceId) => {
-                                setSelectedSpaceId(spaceId);
-                                setCurrentView(ViewState.SPACE_DETAIL);
+                                openSpace(spaceId, 'Dashboard');
                             }}
                         />
                     );
@@ -596,9 +633,9 @@ case ViewState.DASHBOARD:
                 return <HistoryView logs={logs} />;
             case ViewState.SPACES:
                 if (!can('can_view_all_spaces')) return <div className="p-8">Access Denied</div>;
-                return <SpacesView clients={clients} onSelect={(id) => { setSelectedSpaceId(id); setCurrentView(ViewState.SPACE_DETAIL); }} onCreate={handleCreateSpace} />;
+                return <SpacesView clients={clients} onSelect={(id) => openSpace(id, 'Dashboard')} onCreate={handleCreateSpace} />;
             case ViewState.SPACE_DETAIL:
-                return <SpaceDetailView spaceId={selectedSpaceId!} space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setCurrentView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} onEndMeeting={handleEndMeeting} />;
+                return <SpaceDetailView spaceId={selectedSpaceId!} space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setCurrentView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} onEndMeeting={handleEndMeeting} activeTab={selectedSpaceTab} onTabChange={setSelectedSpaceTab} />;
             case ViewState.INBOX:
                 if (!can('can_view_dashboard')) return <div className="p-8">Access Denied</div>;
                 return <InboxView clients={clients} inboxData={inboxData} />;
@@ -613,12 +650,11 @@ case ViewState.STAFF:
             case ViewState.TASKS:
                 if (permissions ? !permissions.view_tasks : !can('can_view_tasks')) return <div className="p-8">Access Denied</div>;
                 return <TaskView tasks={tasks} clients={clients} onUpdateTask={handleUpdateTask} onCreateTask={handleCreateTask} onOpenSpace={(spaceId) => {
-                    setSelectedSpaceId(spaceId);
-                    setCurrentView(ViewState.SPACE_DETAIL);
+                    openSpace(spaceId, 'Dashboard');
                 }} />;
             case ViewState.MEETINGS:
                 if (permissions ? !permissions.view_meetings : !can('can_view_meetings')) return <div className="p-8">Access Denied</div>;
-                return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} onOpenSpace={(spaceId) => { setSelectedSpaceId(spaceId); setCurrentView(ViewState.SPACE_DETAIL); }} onDeleteMeeting={handleDeleteMeeting} onEndMeeting={handleEndMeeting} tasks={tasks} />;
+                return <GlobalMeetingsView meetings={meetings} clients={clients} onSchedule={handleScheduleMeeting} onJoin={handleJoinMeeting} onInstantMeet={handleInstantMeeting} onOpenSpace={(spaceId) => { openSpace(spaceId, 'Meetings'); }} onDeleteMeeting={handleDeleteMeeting} onEndMeeting={handleEndMeeting} tasks={tasks} />;
             case ViewState.FILES:
                 if (permissions ? !permissions.view_files : !can('can_view_files')) return <div className="p-8">Access Denied</div>;
                 return <GlobalFilesView clients={clients} profile={profile} />;
@@ -688,8 +724,52 @@ case ViewState.STAFF:
         [ViewState.INVITATIONS]: 'Invitations',
     };
     const currentViewLabel = currentViewLabelMap[currentView] || 'Workspace';
+    const roleLabel = getWorkspaceRoleLabel(permissionRole || userRole);
 
-    const dockItems = [
+    const dockItems = currentView === ViewState.SPACE_DETAIL ? [
+        {
+            label: 'Back',
+            icon: ArrowLeft,
+            allowed: true,
+            isActive: false,
+            onClick: () => setCurrentView(ViewState.SPACES),
+        },
+        {
+            label: 'Overview',
+            icon: LayoutGrid,
+            allowed: true,
+            isActive: selectedSpaceTab === 'Dashboard',
+            onClick: () => setSelectedSpaceTab('Dashboard'),
+        },
+        {
+            label: 'Chat',
+            icon: Inbox,
+            allowed: true,
+            isActive: selectedSpaceTab === 'Chat',
+            onClick: () => setSelectedSpaceTab('Chat'),
+        },
+        {
+            label: 'Meetings',
+            icon: Calendar,
+            allowed: true,
+            isActive: selectedSpaceTab === 'Meetings',
+            onClick: () => setSelectedSpaceTab('Meetings'),
+        },
+        {
+            label: 'Tasks',
+            icon: CheckSquare,
+            allowed: true,
+            isActive: selectedSpaceTab === 'Tasks',
+            onClick: () => setSelectedSpaceTab('Tasks'),
+        },
+        {
+            label: 'Docs',
+            icon: FolderClosed,
+            allowed: true,
+            isActive: selectedSpaceTab === 'Docs',
+            onClick: () => setSelectedSpaceTab('Docs'),
+        },
+    ] : [
         {
             label: 'Dashboard',
             icon: LayoutGrid,
@@ -771,7 +851,15 @@ case ViewState.STAFF:
             <Route path="/accept-invite" element={<AcceptInviteView />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route path="/spaces/pending" element={<PendingSpaceView />} />
             <Route path="/spaces/:spaceId/meetings/:meetingId/review" element={<MeetingReviewPage />} />
+            <Route path="/spaces/:spaceId/settings" element={
+                <PermissionGuard requiredPermission="manage_spaces">
+                    <SettingsView />
+                </PermissionGuard>
+            } />
+            <Route path="/spaces/:spaceId" element={<ClientSpaceRoute />} />
+            <Route path="/client/space/:spaceId" element={<LegacyClientSpaceRedirect />} />
 
 <Route path="/org/settings/billing" element={<BillingSettingsView />} />
             <Route path="/org/settings/team" element={
@@ -779,16 +867,13 @@ case ViewState.STAFF:
                     <StaffView staff={staff} spaces={clients} onInvite={() => setShowInviteModal(true)} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />
                 </PermissionGuard>
             } />
-            <Route path="/spaces/:spaceId/settings" element={
-                <PermissionGuard requiredPermission="manage_spaces">
-                    <SettingsView />
-                </PermissionGuard>
-            } />
             <Route path="/dashboard" element={
                 (() => {
                     if (!isAuthenticated) return <LoginPage />;
                     if (contexts?.routing === 'switcher' && !activeContext) return <ContextSwitcher />;
-                    if (activeContext?.context_type === 'client_space') return <Navigate to={`/spaces/${activeContext.context_id}`} replace />;
+                    if (activeContext?.context_type === 'client_space') {
+                        return <Navigate to={normalizeInviteRedirectPath(activeContext.route) || `/spaces/${activeContext.context_id}`} replace />;
+                    }
 
                     if (userRole === 'client') {
                         // ── Client dashboard ──────────────────────────────────
@@ -802,14 +887,15 @@ case ViewState.STAFF:
                             <AppLayout sidebar={null}>
                                 <div className="flex min-h-screen flex-1 flex-col">
                                     <header className="sticky top-0 z-20 px-4 pt-4 md:px-8 md:pt-6">
-                                        <div className="glass-surface flex items-center justify-between rounded-[8px] px-4 py-4 md:px-6">
+                                        <div className="sheet-panel flex flex-col gap-4 rounded-[8px] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6">
                                             <div className="flex min-w-0 items-center gap-2">
                                                 <span className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#6E6E80]">Main</span>
                                                 <ChevronRight size={14} className="text-[#6E6E80]" />
                                                 <span className="truncate text-[11px] font-medium uppercase tracking-[0.22em] text-[#0D0D0D]">{currentViewLabel}</span>
+                                                <span className="hidden md:inline text-[11px] font-medium uppercase tracking-[0.22em] text-[#6E6E80]">· {roleLabel}</span>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <div className="hidden md:flex items-center gap-2 rounded-[8px] border border-[#E5E5E5] bg-white px-3 py-2 text-xs text-[#6E6E80]">
+                                                <div className="hidden items-center gap-2 rounded-[8px] border border-[#E5E5E5] bg-white px-3 py-2 text-xs text-[#6E6E80] md:flex">
                                                     <Search size={13} />
                                                     Search
                                                 </div>
@@ -817,11 +903,11 @@ case ViewState.STAFF:
                                             </div>
                                         </div>
                                     </header>
-                                    <div className="flex-1 overflow-y-auto px-4 pb-36 pt-6 md:px-8 md:pb-40 md:pt-8">
-                                        <div className="w-full">{renderContent()}</div>
+                                    <div className="flex-1 overflow-y-auto px-4 pb-24 pt-5 md:px-6 md:pb-32 md:pt-6">
+                                        <div className="mx-auto w-full max-w-[1240px]">{renderContent()}</div>
                                     </div>
-                                    <nav className="fixed inset-x-0 bottom-8 z-30 flex justify-center px-4">
-                                        <div className="dock-enter flex max-w-[calc(100vw-1.5rem)] items-center gap-1 overflow-x-auto rounded-[8px] border border-[#E5E5E5] bg-white px-2 py-2 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+                                    <nav className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4 md:bottom-8">
+                                        <div className="dock-shell dock-enter flex max-w-[calc(100vw-2rem)] items-center gap-2 overflow-x-auto rounded-[999px] px-2 py-2">
                                             {dockItems.map((item, index) => {
                                                 const Icon = item.icon;
                                                 return (
@@ -830,19 +916,22 @@ case ViewState.STAFF:
                                                         aria-label={item.label}
                                                         onClick={item.onClick}
                                                         style={{ animationDelay: `${index * 20}ms` }}
-                                                        className={`group relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[8px] border transition-all duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] active:scale-[0.95] ${
+                                                        className={`group relative flex h-10 shrink-0 items-center overflow-hidden border transition-[width,background-color,border-color,color,box-shadow,transform,opacity] duration-150 ease-out active:scale-[0.98] ${
                                                             item.isActive
-                                                                ? 'border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]'
-                                                                : 'border-transparent bg-transparent text-[#6E6E80] hover:border-[#E5E5E5] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]'
+                                                                ? 'dock-morph-enter w-[108px] justify-start rounded-[999px] border-[#DADADA] bg-[#F7F7F8] px-3.5 text-[#0D0D0D]'
+                                                                : 'w-10 justify-center rounded-full border-transparent bg-transparent px-0 text-[#6E6E80] hover:border-[#DADADA] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]'
                                                         }`}
                                                     >
-                                                        <Icon size={18} />
+                                                        <Icon size={16} className="shrink-0" />
+                                                        <span className={`dock-tab-label ml-1.5 whitespace-nowrap text-[11px] font-medium ${item.isActive ? 'opacity-100' : 'w-0 overflow-hidden opacity-0'}`}>
+                                                            {item.label}
+                                                        </span>
                                                         {item.badge ? (
                                                             <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-1.5 py-0.5 text-[10px] font-semibold text-[#6E6E80]">
                                                                 {item.badge}
                                                             </span>
                                                         ) : null}
-                                                        <span className="tooltip-enter pointer-events-none absolute -top-9 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-medium text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)] group-hover:block">
+                                                        <span className="tooltip-enter pointer-events-none absolute -top-9 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border border-[#DADADA] bg-white px-2.5 py-1 text-[11px] font-medium text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)] group-hover:block">
                                                             {item.label}
                                                         </span>
                                                     </button>
@@ -861,8 +950,7 @@ case ViewState.STAFF:
                 // Redirect user back to where they came from
                 if (meetingEntrySource) {
                     if (meetingEntrySource.spaceId) {
-                        setSelectedSpaceId(meetingEntrySource.spaceId);
-                        setCurrentView(ViewState.SPACE_DETAIL);
+                        openSpace(meetingEntrySource.spaceId, 'Meetings');
                     } else {
                         setCurrentView(meetingEntrySource.view);
                     }

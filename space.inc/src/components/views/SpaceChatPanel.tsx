@@ -78,22 +78,30 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
     };
 
     return (
-        <div className="h-[600px] flex flex-col bg-white rounded-lg border border-[#D1D5DB] overflow-hidden">
+        <div className="sheet-panel flex h-[600px] flex-col overflow-hidden rounded-[8px]">
             {/* Header */}
-            <div className="p-4 border-b border-[#D1D5DB] bg-[#F7F7F8]">
-                <h3 className="font-semibold text-[#1D1D1D]">Chat with {spaceName}</h3>
-                <p className="text-[10px] text-[#8E8EA0] uppercase tracking-wider">{loading ? 'Loading...' : `${messages.length} messages`}</p>
+            <div className="border-b border-[#E5E5E5] bg-[#F7F7F8] px-4 py-4">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <h3 className="text-lg font-semibold tracking-[-0.03em] text-[#0D0D0D]">Chat with {spaceName}</h3>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">{loading ? 'Loading...' : `${messages.length} messages`}</p>
+                    </div>
+                    <div className="surface-chip px-3 py-1.5 text-[11px] font-medium">
+                        <span className="indicator-dot" data-tone="blue" />
+                        Client-facing thread
+                    </div>
+                </div>
             </div>
 
             {/* Messages Area */}
             <div className="flex-1 flex flex-col min-h-0">
-                <div className={`flex-1 overflow-y-auto p-6 space-y-4 bg-white ${showInternal ? 'border-b border-[#D1D5DB]' : ''}`}>
-                    <div className="sticky top-0 z-10 bg-white py-2 mb-4 border-b border-[#E5E5E5] flex items-center gap-2">
+                <div className={`flex-1 overflow-y-auto p-5 space-y-4 bg-white ${showInternal ? 'border-b border-[#E5E5E5]' : ''}`}>
+                    <div className="sticky top-0 z-10 mb-4 flex items-center gap-2 border-b border-[#E5E5E5] bg-white py-2">
                         <MessageSquare size={14} className="text-[#0D0D0D]" />
-                        <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">Client Chat</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Client chat</span>
                     </div>
                     {loading ? (
-                        <div className="flex items-center justify-center py-10 text-zinc-400">
+                        <div className="flex items-center justify-center py-10 text-[#6E6E80]">
                             <div className="animate-pulse">Loading messages...</div>
                         </div>
                     ) : (
@@ -111,10 +119,10 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
                 </div>
 
                 {showInternal && (
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#F7F7F8]">
-                        <div className="sticky top-0 z-10 bg-white py-2 mb-4 border-b border-[#E5E5E5] flex items-center gap-2">
+                    <div className="flex-1 overflow-y-auto bg-[#F7F7F8] p-5 space-y-4">
+                        <div className="sticky top-0 z-10 mb-4 flex items-center gap-2 border-b border-[#E5E5E5] bg-[#F7F7F8] py-2">
                             <Shield size={14} className="text-[#0D0D0D]" />
-                            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">Internal (Staff Only)</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Internal staff note</span>
                         </div>
                         {messages.filter(m => m.channel === 'internal').map(msg => (
                             <MessageItem
@@ -130,18 +138,18 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
             </div>
 
             {/* Input Areas */}
-            <div className="border-t border-[#D1D5DB] bg-white divide-y divide-zinc-100">
+            <div className="divide-y divide-[#E5E5E5] border-t border-[#E5E5E5] bg-white">
                 {/* Client Chat Input */}
-                <div className="p-4 flex items-center gap-3">
+                <div className="flex items-center gap-3 p-4">
                     <button
                         title="Attach File"
                         onClick={() => setIsUploadModalOpen(true)}
-                        className="h-10 w-10 flex items-center justify-center text-[#8E8EA0] hover:text-[#10A37F] hover:bg-[#ECECF1] rounded-md transition-all"
+                        className="flex h-10 w-10 items-center justify-center rounded-[8px] text-[#6E6E80] transition-colors hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
                     >
                         <Plus size={20} />
                     </button>
                     <input
-                        className="flex-1 border border-[#D1D5DB] rounded-md px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#10A37F] focus:border-[#10A37F]"
+                        className="flex-1 rounded-[8px] border border-[#DADADA] bg-white px-4 py-2.5 text-sm text-[#0D0D0D] placeholder:text-[#6E6E80] focus:border-black focus:outline-none"
                         placeholder="Message client..."
                         value={messageInput}
                         onChange={(e) => setMessageInput(e.target.value)}
@@ -152,7 +160,7 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
                         title="Send Message"
                         onClick={() => handleSend('general')}
                         disabled={sending || !messageInput.trim()}
-                        className="h-10 w-10 rounded-md flex items-center justify-center bg-[#10A37F] hover:bg-[#0E8A6B] text-white disabled:opacity-50"
+                        className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-[#0D0D0D] text-white disabled:opacity-50"
                     >
                         <ArrowRight size={18} />
                     </button>
@@ -160,12 +168,12 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
 
                 {/* Internal Chat Input */}
                 {showInternal && (
-                    <div className="p-4 bg-[#F7F7F8] flex items-center gap-3">
-                        <div className="h-10 w-10 flex items-center justify-center text-[#0D0D0D]">
+                    <div className="flex items-center gap-3 bg-[#F7F7F8] p-4">
+                        <div className="flex h-10 w-10 items-center justify-center text-[#0D0D0D]">
                             <Shield size={20} />
                         </div>
                         <input
-                            className="flex-1 border border-[#E5E5E5] bg-white rounded-md px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-black placeholder:text-[#6E6E80] text-[#0D0D0D]"
+                            className="flex-1 rounded-[8px] border border-[#DADADA] bg-white px-4 py-2.5 text-sm text-[#0D0D0D] placeholder:text-[#6E6E80] focus:border-black focus:outline-none"
                             placeholder="Add an internal staff note..."
                             value={internalMessageInput}
                             onChange={(e) => setInternalMessageInput(e.target.value)}
@@ -176,7 +184,7 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string, spaceName: st
                             title="Send Internal Note"
                             onClick={() => handleSend('internal')}
                             disabled={sending || !internalMessageInput.trim()}
-                            className="h-10 w-10 rounded-md flex items-center justify-center bg-black hover:bg-[#1A1A1A] text-white disabled:opacity-50"
+                            className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-black text-white disabled:opacity-50"
                         >
                             <ArrowRight size={18} />
                         </button>

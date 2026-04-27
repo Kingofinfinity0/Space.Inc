@@ -126,12 +126,9 @@ serve(async (req: Request) => {
         );
       }
 
-      const anon = createClient(
-        SUPABASE_URL,
-        Deno.env.get("SUPABASE_ANON_KEY") ?? ""
-      );
+      const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-      const { data, error } = await anon.rpc("resolve_space_invite_token", {
+      const { data, error } = await supabaseAdmin.rpc("resolve_space_invite_token", {
         p_token: token,
       });
 
@@ -265,23 +262,8 @@ serve(async (req: Request) => {
 
       const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-      let resolvedClientName = client_name;
-      if (!resolvedClientName) {
-        const { data: profile } = await supabaseAdmin
-          .from("profiles")
-          .select("full_name, email")
-          .eq("id", userId)
-          .single();
-        resolvedClientName =
-          profile?.full_name ??
-          profile?.email?.split("@")[0] ??
-          "Team member";
-      }
-
-      const { data, error } = await supabase.rpc("accept_space_invite", {
+      const { data, error } = await supabaseAdmin.rpc("accept_space_invite_token", {
         p_token: token,
-        p_client_name: resolvedClientName,
-        p_client_company: client_company ?? null,
       });
 
       if (error) throw error;

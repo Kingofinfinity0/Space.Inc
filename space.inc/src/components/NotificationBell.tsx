@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Bell, MessageSquare, FileText, Calendar, AlertTriangle, Settings, Rocket } from 'lucide-react';
+import { Bell, MessageSquare, FileText, Calendar, AlertTriangle, Settings, Rocket, Inbox, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,7 +30,7 @@ const ICON_BY_TYPE: Record<string, React.ReactNode> = {
     staff_assigned: <Settings size={16} />,
     capability_changed: <Settings size={16} />,
     invitation_received: <Rocket size={16} />,
-    system: <Bell size={16} />,
+    system: <Bell size={16} />
 };
 
 function timeAgo(dateStr?: string) {
@@ -147,10 +147,9 @@ export const NotificationBell: React.FC = () => {
     }, [fetchUnreadCount, userId]);
 
     const handleBellClick = async () => {
-        setOpen((v) => !v);
-        if (!open) {
-            await fetchLatest();
-        }
+        const next = !open;
+        setOpen(next);
+        if (next) await fetchLatest();
     };
 
     const iconForType = (type?: string) => {
@@ -195,43 +194,63 @@ export const NotificationBell: React.FC = () => {
         setOpen(false);
     };
 
-    if (!userId || unreadCount <= 0) return null;
+    if (!userId) return null;
 
     return (
         <div className="relative">
             <button
-                className="relative rounded-[6px] border border-[#E5E5E5] bg-white p-2 text-[#6E6E80] hover:bg-[#F7F7F8] hover:text-[#0D0D0D] transition-colors"
+                className="relative rounded-[8px] border border-[#E5E5E5] bg-white p-2 text-[#6E6E80] transition-colors hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
                 onClick={handleBellClick}
                 aria-label="Notifications"
                 title="Notifications"
             >
                 <Bell size={18} />
                 {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-black px-1 text-[10px] font-semibold text-white">
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-black px-1 text-[10px] font-semibold text-white">
                         {unreadCount}
                     </span>
                 )}
             </button>
 
             {open && (
-                <div className="absolute right-0 mt-2 w-[380px] max-w-[90vw] overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] z-[999]">
-                    <div className="flex items-center justify-between border-b border-[#E5E5E5] p-3">
+                <div className="sheet-panel absolute right-0 z-[999] mt-2 w-[400px] max-w-[90vw] overflow-hidden rounded-[8px]">
+                    <div className="flex items-center justify-between border-b border-[#E5E5E5] px-4 py-3">
                         <div className="flex items-center gap-2">
                             <Bell size={16} className="text-[#0D0D0D]" />
                             <span className="text-sm font-semibold text-[#0D0D0D]">Notifications</span>
                         </div>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#6E6E80]">
+                        <div className="flex items-center gap-2">
+                            <span className="surface-chip px-3 py-1.5 text-[11px] font-medium">
+                                <Inbox size={12} />
+                                {notifications.length} total
+                            </span>
+                            <button
+                                onClick={() => setOpen(false)}
+                                className="rounded-full p-1 text-[#6E6E80] transition-colors hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                                aria-label="Close notifications"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 border-b border-[#E5E5E5] px-4 py-3">
+                        <span className="surface-chip surface-chip-active px-3 py-1.5 text-[11px] font-medium">
+                            <span className="indicator-dot" data-tone={unreadCount > 0 ? 'blue' : 'green'} />
                             {unreadCount} unread
                         </span>
+                        <span className="surface-chip px-3 py-1.5 text-[11px] font-medium">Messages</span>
+                        <span className="surface-chip px-3 py-1.5 text-[11px] font-medium">Files</span>
+                        <span className="surface-chip px-3 py-1.5 text-[11px] font-medium">Meetings</span>
                     </div>
 
                     {loadingDropdown ? (
                         <div className="p-4 text-sm text-[#6E6E80]">Loading...</div>
                     ) : notifications.length === 0 ? (
-                        <div className="p-4 text-sm text-[#6E6E80]">No notifications.</div>
+                        <div className="p-8 text-center text-sm text-[#6E6E80]">No notifications yet.</div>
                     ) : (
                         <div className="max-h-[420px] overflow-y-auto">
-                            {notifications.map((n) => {
+                            {notifications.map((n, index) => {
                                 const isUnread = n?.read !== true;
                                 const title = n.payload?.title || n.payload?.content || n.message || n.type || 'Notification';
                                 const body =
@@ -240,17 +259,18 @@ export const NotificationBell: React.FC = () => {
                                     n.payload?.content ||
                                     n.type ||
                                     '';
-                                const excerpt = body.length > 80 ? body.slice(0, 80) + '...' : body;
+                                const excerpt = body.length > 110 ? body.slice(0, 110) + '...' : body;
                                 return (
                                     <button
                                         key={n.id}
                                         onClick={() => handleNotificationClick(n)}
-                                        className={`flex w-full items-start gap-3 border-b border-[#E5E5E5] px-3 py-3 text-left transition-colors hover:bg-[#F7F7F8] ${
+                                        style={{ animationDelay: `${index * 20}ms` }}
+                                        className={`page-enter flex w-full items-start gap-3 border-b border-[#E5E5E5] px-4 py-3 text-left transition-colors hover:bg-[#F7F7F8] ${
                                             isUnread ? 'bg-[#F7F7F8]' : ''
                                         }`}
                                     >
                                         <div className={`mt-1 h-2.5 w-2.5 rounded-full ${isUnread ? 'bg-black' : 'bg-[#D4D4D8]'}`} />
-                                        <div className="flex-shrink-0 mt-0.5 text-[#6E6E80]">
+                                        <div className="mt-0.5 flex-shrink-0 text-[#6E6E80]">
                                             {iconForType(n.type)}
                                         </div>
                                         <div className="min-w-0 flex-1">
@@ -259,7 +279,7 @@ export const NotificationBell: React.FC = () => {
                                                     <p className={`truncate text-sm ${isUnread ? 'font-semibold text-[#0D0D0D]' : 'font-medium text-[#6E6E80]'}`}>
                                                         {title}
                                                     </p>
-                                                    <p className="mt-1 truncate text-[12px] text-[#6E6E80]">
+                                                    <p className="mt-1 line-clamp-2 text-[12px] text-[#6E6E80]">
                                                         {excerpt || '—'}
                                                     </p>
                                                 </div>
@@ -278,4 +298,3 @@ export const NotificationBell: React.FC = () => {
         </div>
     );
 };
-

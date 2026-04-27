@@ -20,7 +20,7 @@ export const Button: React.FC<ButtonProps> = ({
   icon,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-[6px] border text-sm font-medium tracking-[-0.01em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 focus-visible:ring-offset-0 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]';
+  const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-[8px] border text-sm font-medium tracking-[-0.01em] transition-[transform,background-color,border-color,color,box-shadow,opacity] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 focus-visible:ring-offset-0 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]';
 
   const variantStyles = {
     primary: 'border-black bg-black text-white hover:bg-[#1A1A1A]',

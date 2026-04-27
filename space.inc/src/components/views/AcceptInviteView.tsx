@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Mail, CheckCircle2, XCircle, Clock, ShieldCheck, ArrowRight, User, LogIn } from 'lucide-react';
 import { apiService } from '../../services/apiService';
+import { normalizeInviteRedirectPath } from '../../services/inviteService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Heading, Text } from '../UI/index';
@@ -120,10 +121,14 @@ export default function AcceptInviteView() {
                 showToast('Invitation accepted successfully!', 'success');
                 
                 // Role-based redirect logic
-                if (res.data.role === 'client') {
-                    window.location.href = `/client/space/${res.data.spaceId}`;
+                const redirectPath = normalizeInviteRedirectPath(res.data.redirect_path) || (
+                    res.data.role === 'client' ? `/spaces/${res.data.spaceId}` : null
+                );
+
+                if (redirectPath) {
+                    window.location.href = redirectPath;
                 } else {
-                    window.location.href = res.data.redirect_path;
+                    window.location.href = '/dashboard';
                 }
             } else {
                 setStatus('invalid');

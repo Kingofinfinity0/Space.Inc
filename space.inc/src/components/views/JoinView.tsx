@@ -6,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { GlassCard } from '../UI/GlassCard';
 import { Button } from '../UI/Button';
 import { Heading } from '../UI/Heading';
+import { normalizeInviteRedirectPath } from '../../services/inviteService';
 import '../../styles/JoinView.css';
 
 type PageStatus = 'loading' | 'valid' | 'invalid' | 'authing' | 'done' | 'error';
@@ -109,7 +110,7 @@ export default function JoinView() {
                 setPageStatus('done');
                 showToast('Successfully joined!', 'success');
                 setTimeout(() => {
-                    window.location.href = result.redirect_path || '/';
+                    window.location.href = normalizeInviteRedirectPath(result.redirect_path) || '/';
                 }, 1000);
             } else {
                 setPageStatus('valid');
