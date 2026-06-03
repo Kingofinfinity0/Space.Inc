@@ -29,7 +29,7 @@ serve(async (req: Request) => {
         // ── GET /files-api?spaceId=X → List files (RLS enforced) ──────────────
         if (req.method === 'GET') {
             const url = new URL(req.url)
-            const spaceId = url.searchParams.get('spaceId')
+            const spaceId = url.searchParams.get('space_id') ?? url.searchParams.get('spaceId')
 
             let query = supabase
                 .from('files')
@@ -87,8 +87,10 @@ serve(async (req: Request) => {
                     return new Response(JSON.stringify({
                         data: {
                             upload_url: uploadData.signedUrl,
+                            upload_token: uploadData.token,
                             file_id: voucher.file_id,
-                            storage_path: voucher.storage_path
+                            storage_path: voucher.storage_path,
+                            quota: voucher.quota ?? null
                         }
                     }), {
                         status: 200,
@@ -120,6 +122,7 @@ serve(async (req: Request) => {
                     return new Response(JSON.stringify({
                         data: {
                             upload_url: uploadData.signedUrl,
+                            upload_token: uploadData.token,
                             file_id: voucher.file_id,
                             storage_path: voucher.storage_path,
                             version_number: voucher.version_number

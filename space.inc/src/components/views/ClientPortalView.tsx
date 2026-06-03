@@ -150,9 +150,9 @@ const ClientPortalView = ({
             <Button variant="ghost" size="sm" className="rounded-full px-3" onClick={() => setShowQuickReview(true)}>
               Review
             </Button>
-            <Button variant="ghost" size="sm" className="rounded-full px-3" onClick={onLogout}>
+            <Button variant="ghost" size="sm" className="rounded-full border border-[#F2D4D1] bg-white px-3 text-[#B42318] hover:bg-[#FFF4F2]" onClick={onLogout}>
               <LogOut size={14} className="mr-2" />
-              Sign out
+              Log out
             </Button>
             <Button variant="ghost" size="sm" className="h-9 w-9 rounded-full p-0">
               <MoreVertical size={16} />
@@ -345,9 +345,9 @@ const ClientPortalView = ({
                 <span className="indicator-dot" data-tone="green" />
                 Active thread
               </span>
-              <Button variant="ghost" size="sm" className="rounded-full px-3" onClick={onLogout}>
+              <Button variant="ghost" size="sm" className="rounded-full border border-[#F2D4D1] bg-white px-3 text-[#B42318] hover:bg-[#FFF4F2]" onClick={onLogout}>
                 <LogOut size={14} className="mr-2" />
-                Sign out
+                Log out
               </Button>
               <Button variant="ghost" size="sm" className="h-9 w-9 rounded-full p-0">
                 <MoreVertical size={16} />
@@ -594,9 +594,9 @@ const ClientPortalView = ({
   );
 
   return (
-    <div className="min-h-screen bg-[#F7F7F8] p-4 md:p-6 font-sans">
-      <div className="mx-auto max-w-[1320px] space-y-6 pb-20">
-        <div className="sheet-panel flex flex-col gap-3 rounded-[8px] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6">
+    <div className="min-h-screen bg-[#F7F7F8] p-2 font-sans sm:p-3 md:p-4">
+      <div className="w-full min-w-0 space-y-6 pb-20">
+        <div className="sheet-panel flex flex-col gap-3 rounded-[999px] px-4 py-3 md:flex-row md:items-center md:justify-between md:px-5">
           <div>
             <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#6E6E80]">Main</div>
             <div className="mt-1 text-[13px] font-medium uppercase tracking-[0.18em] text-[#0D0D0D]">{activeTab}</div>
@@ -605,9 +605,9 @@ const ClientPortalView = ({
             <Button variant="ghost" size="sm" className="rounded-full px-3" onClick={() => setShowQuickReview(true)}>
               Review
             </Button>
-            <Button variant="ghost" size="sm" className="rounded-full px-3" onClick={onLogout}>
+            <Button variant="ghost" size="sm" className="rounded-full border border-[#F2D4D1] bg-white px-3 text-[#B42318] hover:bg-[#FFF4F2]" onClick={onLogout}>
               <LogOut size={14} className="mr-2" />
-              Sign out
+              Log out
             </Button>
           </div>
         </div>

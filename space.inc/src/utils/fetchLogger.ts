@@ -3,6 +3,8 @@
 
 export function initializeFetchLogger() {
     if (typeof window === 'undefined') return;
+    const meta = import.meta as ImportMeta & { env?: { DEV?: boolean } };
+    if (!meta.env?.DEV) return;
 
     const originalFetch = window.fetch;
 
@@ -18,7 +20,7 @@ export function initializeFetchLogger() {
         }
         const method = config?.method || 'GET';
 
-        console.log('🚨 FETCH CALL DETECTED:', {
+        console.debug('FETCH CALL DETECTED:', {
             method,
             url,
             stack: new Error().stack?.split('\n').slice(2, 5).join('\n')
@@ -26,7 +28,7 @@ export function initializeFetchLogger() {
 
         // Highlight suspicious calls
         if (url === '/' || url === '') {
-            console.error('⚠️ PHANTOM REQUEST TO ROOT:', {
+            console.warn('PHANTOM REQUEST TO ROOT:', {
                 method,
                 url,
                 fullStack: new Error().stack
@@ -36,5 +38,5 @@ export function initializeFetchLogger() {
         return originalFetch(...args);
     };
 
-    console.log('🔍 Global fetch logger initialized');
+    console.debug('Global fetch logger initialized');
 }

@@ -9,9 +9,10 @@ interface HeadingProps {
 export const Heading: React.FC<HeadingProps> = ({ children, level = 2, className = '' }) => {
     const Tag = `h${level}` as any;
 
-    const baseStyles = "font-semibold tracking-tight text-[#0D0D0D]";
+    const weightStyle = level === 1 ? "font-normal" : level === 2 ? "font-bold" : "font-medium";
+    const baseStyles = `${weightStyle} tracking-tight text-[color:var(--text-primary)]`;
     const sizeStyles = {
-        1: "text-3xl md:text-4xl",
+        1: "section-heading text-[35px] leading-[0.95] tracking-[-0.03em]",
         2: "text-2xl md:text-3xl",
         3: "text-xl md:text-2xl",
         4: "text-lg md:text-xl",
@@ -20,7 +21,7 @@ export const Heading: React.FC<HeadingProps> = ({ children, level = 2, className
     };
 
     return (
-        <Tag className={`font-serif ${baseStyles} ${sizeStyles[level]} ${className}`}>
+        <Tag className={`font-sans ${baseStyles} ${sizeStyles[level]} ${className}`}>
             {children}
         </Tag>
     );

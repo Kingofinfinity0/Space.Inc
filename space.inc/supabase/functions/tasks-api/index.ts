@@ -38,7 +38,19 @@ serve(async (req: Request) => {
         // ── POST /tasks-api → Create task via RPC ──────────────────────────────
         if (req.method === 'POST') {
             const body = await req.json().catch(() => ({}))
-            const { space_id, title, description, due_date, priority, assignee_id, status } = body
+            const {
+                space_id,
+                title,
+                description,
+                due_date,
+                priority,
+                assignee_id,
+                reviewer_id,
+                status,
+                assigned_group,
+                estimate_points,
+                estimate_hours
+            } = body
 
             // 3. Input validation
             if (!space_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'space_id' }))
@@ -52,7 +64,11 @@ serve(async (req: Request) => {
                 p_due_date: due_date ?? null,
                 p_priority: priority ?? 'medium',
                 p_assignee_id: assignee_id ?? null,
-                p_status: status ?? 'Pending'
+                p_status: status ?? 'todo',
+                p_reviewer_id: reviewer_id ?? null,
+                p_assigned_group: assigned_group ?? null,
+                p_estimate_points: estimate_points ?? null,
+                p_estimate_hours: estimate_hours ?? null
             })
 
             if (error) throw error
@@ -85,7 +101,8 @@ serve(async (req: Request) => {
 
         // ── DELETE /tasks-api?task_id=<uuid> → Delete task via RPC ─────────────────
         if (req.method === 'DELETE') {
-            const taskId = url.searchParams.get('task_id')
+            const body = await req.json().catch(() => ({}))
+            const taskId = url.searchParams.get('task_id') || body.task_id
 
             if (!taskId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'task_id' }))
 

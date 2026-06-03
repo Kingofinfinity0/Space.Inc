@@ -24,7 +24,7 @@ export const NavItem = ({ icon, label, active, onClick, badge }: { icon: any; la
 );
 
 export const AppLayout: React.FC<{ children: React.ReactNode; sidebar: React.ReactNode }> = ({ children, sidebar }) => (
-  <div className="relative flex min-h-[100svh] overflow-x-hidden bg-[#FFFFFF] font-sans text-[#0D0D0D]">
+  <div className="app-root-shell relative flex min-h-[100svh] overflow-x-hidden font-sans">
     {sidebar}
     <main className="relative flex min-h-[100svh] flex-1 overflow-visible">
       {children}
@@ -33,7 +33,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode; sidebar: React.Rea
 );
 
 export const ClientLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="min-h-[100svh] bg-[#FFFFFF] font-sans text-[#0D0D0D]">
+  <div className="app-root-shell min-h-[100svh] font-sans">
     {children}
   </div>
 );

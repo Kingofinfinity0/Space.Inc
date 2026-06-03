@@ -20,14 +20,14 @@ export const Button: React.FC<ButtonProps> = ({
   icon,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-[8px] border text-sm font-medium tracking-[-0.01em] transition-[transform,background-color,border-color,color,box-shadow,opacity] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 focus-visible:ring-offset-0 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]';
+  const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-full border font-medium tracking-[-0.01em] transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--theme-accent-soft)] focus-visible:ring-offset-0 disabled:opacity-50 disabled:pointer-events-none';
 
   const variantStyles = {
-    primary: 'border-black bg-black text-white hover:bg-[#1A1A1A]',
-    secondary: 'border-[#E5E5E5] bg-white text-[#0D0D0D] hover:bg-[#F7F7F8]',
-    ghost: 'border-transparent bg-transparent text-[#6E6E80] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]',
-    outline: 'border-[#E5E5E5] bg-white text-[#0D0D0D] hover:bg-[#F7F7F8]',
-    link: 'border-transparent bg-transparent px-0 text-[#0D0D0D] hover:text-[#6E6E80]',
+    primary: 'border-[color:var(--theme-accent-muted)] bg-[color:var(--theme-accent-muted)] text-white hover:border-[color:var(--theme-accent-soft)] hover:bg-[color:var(--theme-accent-soft)]',
+    secondary: 'border-[color:var(--theme-accent-surface)] bg-[color:var(--theme-accent-surface)] text-[color:var(--theme-accent)] hover:border-[color:var(--theme-accent-surface)] hover:bg-[color:var(--theme-accent-surface)]',
+    ghost: 'border-transparent bg-transparent text-[color:var(--text-primary)] hover:bg-[color:var(--bg-hover)] hover:text-[color:var(--text-primary)]',
+    outline: 'border-[color:var(--border)] bg-[color:var(--bg-base)] text-[color:var(--text-primary)] hover:border-[color:var(--border)] hover:bg-[color:var(--bg-hover)]',
+    link: 'border-transparent bg-transparent px-0 text-[color:var(--theme-accent)] hover:text-[color:var(--theme-accent-hover)]',
     danger: 'border-[#E5E5E5] bg-white text-[#B42318] hover:bg-[#FEF2F2]',
   };
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
@@ -19,6 +19,9 @@ type StaffDashboardProps = {
     onInstantMeet?: () => void;
     onCreateTask: (task: Partial<Task>) => Promise<void> | void;
     onUpdateTask: (id: string, updates: Partial<Task>) => Promise<void> | void;
+    onRequestReview?: (taskId: string, reviewerId: string) => Promise<void> | void;
+    onCompleteReview?: (taskId: string, approved: boolean, comment?: string) => Promise<void> | void;
+    onAddTaskComment?: (taskId: string, content: string) => Promise<Task | void> | Task | void;
     onGoToSpace?: (spaceId: string) => void;
 };
 
@@ -37,11 +40,16 @@ function timeAgo(dateStr?: string) {
 
 export default function StaffDashboardView({
     clients,
+    meetings,
+    messages,
     tasks,
     onJoin,
     onInstantMeet,
     onCreateTask,
     onUpdateTask,
+    onRequestReview,
+    onCompleteReview,
+    onAddTaskComment,
     onGoToSpace
 }: StaffDashboardProps) {
     const { user, organizationId } = useAuth();
@@ -57,6 +65,27 @@ export default function StaffDashboardView({
         meetingsMonth: 0,
         filesMonth: 0
     });
+
+    const displayAnalytics = useMemo(() => {
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+
+        return {
+            activeSpaces: Math.max(analytics.activeSpaces || 0, clients.filter((space) => !space.deleted_at && ['active', 'onboarding'].includes(space.status)).length),
+            activeClients: Math.max(analytics.activeClients || 0, clients.filter((space) => space.status === 'active').length),
+            totalMessagesWeek: Math.max(
+                analytics.totalMessagesWeek || 0,
+                messages.filter((message) => new Date(message.createdAt).getTime() >= sevenDaysAgo).length
+            ),
+            meetingsMonth: Math.max(
+                analytics.meetingsMonth || 0,
+                meetings.filter((meeting) => !meeting.deleted_at && new Date(meeting.starts_at).getTime() >= monthStart.getTime()).length
+            ),
+            filesMonth: analytics.filesMonth || 0
+        };
+    }, [analytics, clients, meetings, messages]);
 
     useEffect(() => {
         const loadData = async () => {
@@ -102,23 +131,23 @@ export default function StaffDashboardView({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">My Spaces</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeSpaces}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.activeSpaces}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Clients Active (7d)</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.activeClients}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.activeClients}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Messages (7d)</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.totalMessagesWeek}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.totalMessagesWeek}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Meetings (Month)</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.meetingsMonth}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.meetingsMonth}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Files (Month)</Text>
-                    <div className="mt-1 text-2xl font-semibold">{loading ? <SkeletonLoader width="40px" height="24px" /> : analytics.filesMonth}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.filesMonth}</div>
                 </GlassCard>
             </div>
 
@@ -129,11 +158,14 @@ export default function StaffDashboardView({
                         clients={clients}
                         loading={loading}
                         compact
-                        title="Task Management"
-                        subtitle="Board, list, timeline, calendar, and space views are all available from the overview."
+                        title="Tasks"
+                        subtitle="List-first team work grouped by workflow status."
                         groupOptions={['Design', 'Engineering', 'Marketing']}
                         onCreateTask={onCreateTask}
                         onUpdateTask={onUpdateTask}
+                        onRequestReview={onRequestReview}
+                        onCompleteReview={onCompleteReview}
+                        onAddTaskComment={onAddTaskComment}
                         onOpenSpace={onGoToSpace}
                         emptyTitle="No tasks assigned yet"
                         emptyDescription="Start a task here and keep the rest of the team aligned from the same system."
@@ -155,11 +187,11 @@ export default function StaffDashboardView({
                                             <div className="flex items-center gap-4">
                                                 <div className="min-w-[50px] text-center">
                                                     <p className="text-[10px] font-black uppercase text-zinc-400">{startTime.toLocaleString('en-US', { month: 'short' })}</p>
-                                                    <p className="text-xl font-bold text-zinc-900">{startTime.getDate()}</p>
+                                                    <p className="dashboard-number text-xl text-zinc-900">{startTime.getDate()}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-bold text-zinc-900">{meeting.title}</p>
-                                                    <p className="text-xs text-zinc-500">{meeting.space_name} · {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                    <p className="text-xs text-zinc-500">{meeting.space_name} - {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                                 </div>
                                             </div>
                                             {canJoin && <Button variant="primary" size="sm" onClick={() => onJoin(meeting.id)}>Join Now</Button>}
@@ -176,7 +208,11 @@ export default function StaffDashboardView({
                         <div className="mb-6 flex items-center justify-between">
                             <Heading level={3}>Inbox</Heading>
                             <Button variant="ghost" size="sm" onClick={async () => {
-                                await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
+                                if (!user?.id) return;
+                                await supabase
+                                    .from('notifications')
+                                    .update({ read: true, read_at: new Date().toISOString() })
+                                    .or(`recipient_id.eq.${user.id},user_id.eq.${user.id}`);
                                 setNotifications([]);
                             }}>
                                 Mark all read

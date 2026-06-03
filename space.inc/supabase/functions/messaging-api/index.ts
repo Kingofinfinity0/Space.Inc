@@ -30,18 +30,23 @@ serve(async (req: Request) => {
             if (!spaceId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'space_id' }))
             if (!organizationId) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'organization_id' }))
 
-            // 4. SQL RPC: Explicit multi-tenancy logic
-            const { data: messages, error } = await supabase.rpc('list_messages_v2', {
+            const { data: result, error } = await supabase.rpc('get_space_messages', {
                 p_space_id: spaceId,
-                p_organization_id: organizationId,
-                p_channel: channel ?? null,
-                p_before: before ?? null,
-                p_limit: limit
+                p_limit: limit,
+                p_before_created_at: before ?? null
             })
 
             if (error) throw error
+            if (result?.success === false) {
+                return errorResponse(await hydrateError(supabase, result?.error_code || 'INTERNAL_ERROR'))
+            }
 
-            return new Response(JSON.stringify({ data: messages }), {
+            const messages = Array.isArray(result) ? result : result?.data ?? []
+            const filteredMessages = channel
+                ? messages.filter((message: any) => message?.channel === channel)
+                : messages
+
+            return new Response(JSON.stringify({ data: filteredMessages }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
@@ -50,7 +55,10 @@ serve(async (req: Request) => {
         // ── POST /messaging-api → Send message via RPC ─────────────────────────
         if (req.method === 'POST') {
             const body = await req.json().catch(() => ({}))
-            const { space_id, organization_id, content, extension = 'chat', payload = {}, channel = 'general' } = body
+            const space_id = body.space_id ?? body.spaceId
+            const organization_id = body.organization_id ?? body.organizationId
+            const idempotency_key = body.idempotency_key ?? body.idempotencyKey ?? null
+            const { content, extension = 'chat', payload = {}, channel = 'general' } = body
 
             if (!space_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'space_id' }))
             if (!organization_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'organization_id' }))
@@ -60,11 +68,11 @@ serve(async (req: Request) => {
 
             const { data: result, error: rpcError } = await supabase.rpc('send_message', {
                 p_space_id: space_id,
-                p_organization_id: organization_id,
                 p_content: content.trim(),
                 p_channel: channel,
                 p_extension: extension,
-                p_payload: payload
+                p_payload: payload,
+                p_idempotency_key: idempotency_key
             })
 
             if (rpcError) throw rpcError

@@ -507,7 +507,7 @@ CREATE OR REPLACE FUNCTION public.create_task(
   p_due_date    date DEFAULT NULL,
   p_priority    text DEFAULT 'medium',
   p_assignee_id uuid DEFAULT NULL,
-  p_status      text DEFAULT 'Pending'
+  p_status      text DEFAULT 'todo'
 )
 RETURNS public.tasks
 LANGUAGE plpgsql

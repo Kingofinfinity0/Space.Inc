@@ -106,8 +106,8 @@ serve(async (req: Request) => {
         Deno.env.get("SUPABASE_ANON_KEY") ?? ""
       );
 
-      const { data, error } = await anon.rpc("validate_invitation_context", {
-        p_token: token,
+      const { data, error } = await anon.rpc("get_invitation_by_token", {
+        p_raw_token: token,
       });
 
       if (error) throw error;
@@ -128,8 +128,8 @@ serve(async (req: Request) => {
 
       const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-      const { data, error } = await supabaseAdmin.rpc("resolve_space_invite_token", {
-        p_token: token,
+      const { data, error } = await supabaseAdmin.rpc("get_share_link_by_token", {
+        p_raw_token: token,
       });
 
       if (error) throw error;
@@ -159,14 +159,51 @@ serve(async (req: Request) => {
         );
       }
 
-      // Call the fixed RPC (no more pg_net, just creates row + background_job)
-      const { data, error } = await supabase.rpc("send_staff_invitation", {
-        p_email:             email.toLowerCase().trim(),
-        p_role:              role,
-        p_space_assignments: space_assignments,
-      });
+      if (!Array.isArray(space_assignments) || space_assignments.length === 0) {
+        return errorResponse(
+          await hydrateError(supabase, "VAL_MISSING_FIELD", {
+            fields: ["space_assignments"],
+          })
+        );
+      }
 
-      if (error) throw error;
+      const normalizedRole = role === "admin" ? "admin" : "member";
+      const created = [];
+
+      for (const assignment of space_assignments) {
+        if (!assignment?.space_id) continue;
+        const { data: invitation, error: createError } = await supabase.rpc("create_invitation", {
+          p_space_id: assignment.space_id,
+          p_email: email.toLowerCase().trim(),
+          p_member_type: "staff",
+          p_role: normalizedRole,
+        });
+
+        if (createError) throw createError;
+        created.push(Array.isArray(invitation) ? invitation[0] : invitation);
+      }
+
+      if (created.length === 0) {
+        return errorResponse(
+          await hydrateError(supabase, "VAL_MISSING_FIELD", {
+            fields: ["space_assignments.space_id"],
+          })
+        );
+      }
+
+      const data = {
+        invitations: created,
+        token: created[0]?.raw_token ?? "",
+        org_id: "",
+      };
+
+      const { data: firstSpace } = await supabaseAdmin
+        .from("spaces")
+        .select("organization_id")
+        .eq("id", space_assignments[0].space_id)
+        .single();
+
+      data.org_id = firstSpace?.organization_id ?? "";
 
       // Fetch inviter context for email template vars
       const ctx = await getInviterContext(supabaseAdmin, userId, data.org_id);
@@ -203,20 +240,30 @@ serve(async (req: Request) => {
         );
       }
 
-      const { data, error } = await supabase.rpc("send_client_invitation", {
-        p_email:    email.toLowerCase().trim(),
+      const { data, error } = await supabase.rpc("create_invitation", {
         p_space_id: space_id,
+        p_email: email.toLowerCase().trim(),
+        p_member_type: "client",
+        p_role: "member",
       });
 
       if (error) throw error;
 
-      const ctx = await getInviterContext(supabaseAdmin, userId, data.org_id ?? "");
+      const invitation = Array.isArray(data) ? data[0] : data;
+      const { data: space } = await supabaseAdmin
+        .from("spaces")
+        .select("organization_id")
+        .eq("id", space_id)
+        .single();
+      const orgId = space?.organization_id ?? "";
+
+      const ctx = await getInviterContext(supabaseAdmin, userId, orgId);
 
       await dispatchEmail({
         to:           email.toLowerCase().trim(),
         template_key: "client_invitation",
-        token:        data.token ?? "",
-        org_id:       data.org_id ?? "",
+        token:        invitation?.raw_token ?? "",
+        org_id:       orgId,
         vars: {
           inviter_name:  ctx.inviter_name,
           org_name:      ctx.org_name,
@@ -226,7 +273,7 @@ serve(async (req: Request) => {
       });
 
       return new Response(
-        JSON.stringify({ data }),
+        JSON.stringify({ data: invitation }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -241,7 +288,7 @@ serve(async (req: Request) => {
       }
 
       const { data, error } = await supabase.rpc("accept_invitation", {
-        p_token: token,
+        p_raw_token: token,
       });
 
       if (error) throw error;
@@ -253,17 +300,15 @@ serve(async (req: Request) => {
     }
 
     if (action === "accept_space_link") {
-      const { token, client_name, client_company } = body;
+      const { token } = body;
       if (!token) {
         return errorResponse(
           await hydrateError(supabase, "VAL_MISSING_FIELD", { field: "token" })
         );
       }
 
-      const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_KEY);
-
-      const { data, error } = await supabaseAdmin.rpc("accept_space_invite_token", {
-        p_token: token,
+      const { data, error } = await supabase.rpc("join_via_share_link", {
+        p_raw_token: token,
       });
 
       if (error) throw error;

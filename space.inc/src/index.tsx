@@ -6,6 +6,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { initializeFetchLogger } from './utils/fetchLogger';
 import { Analytics } from '@vercel/analytics/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
 
 import { BrowserRouter } from 'react-router-dom';
 
@@ -22,12 +24,14 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <ToastProvider>
-          <App />
-          <Analytics />
-        </ToastProvider>
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <ToastProvider>
+            <App />
+            <Analytics />
+          </ToastProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

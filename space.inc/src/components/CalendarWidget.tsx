@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Filter, ListTodo, Video } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Filter, ListTodo, MoreHorizontal, Video, X } from 'lucide-react';
 import { Button, GlassCard } from './UI/index';
 import { ClientSpace, Meeting, Task } from '../types';
 
@@ -12,7 +12,11 @@ type CalendarItem = {
     title: string;
     startAt: string;
     endAt?: string | null;
+    status?: string | null;
 };
+
+type CalendarTaskAction = 'complete' | 'postpone' | 'open';
+type CalendarMeetingAction = 'join' | 'delete' | 'review';
 
 type Props = {
     meetings: Meeting[];
@@ -22,7 +26,11 @@ type Props = {
     showSpaceFilter?: boolean;
     showTypeFilter?: boolean;
     title?: string;
+    variant?: 'default' | 'compact';
     onOpenSpace?: (spaceId: string) => void;
+    onTaskAction?: (taskId: string, action: CalendarTaskAction) => void | Promise<void>;
+    onMeetingAction?: (meetingId: string, action: CalendarMeetingAction) => void | Promise<void>;
+    canDeleteMeetings?: boolean;
 };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -70,12 +78,18 @@ export function CalendarWidget({
     showSpaceFilter = true,
     showTypeFilter = true,
     title = 'Calendar',
-    onOpenSpace
+    variant = 'default',
+    onOpenSpace,
+    onTaskAction,
+    onMeetingAction,
+    canDeleteMeetings = false
 }: Props) {
     const now = new Date();
     const [cursorYear, setCursorYear] = useState(now.getFullYear());
     const [cursorMonth, setCursorMonth] = useState(now.getMonth());
     const [selectedDayKey, setSelectedDayKey] = useState<string>(toDayKey(now));
+    const [agendaDayKey, setAgendaDayKey] = useState<string | null>(null);
+    const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
     const [spaceFilter, setSpaceFilter] = useState<string>(defaultSpaceId || 'all');
     const [showMeetings, setShowMeetings] = useState(true);
@@ -100,7 +114,8 @@ export function CalendarWidget({
                     spaceId: (m as any).space_id,
                     title: (m as any).title || 'Meeting',
                     startAt: (m as any).starts_at,
-                    endAt: null
+                    endAt: null,
+                    status: (m as any).status || null
                 });
             }
         }
@@ -159,6 +174,20 @@ export function CalendarWidget({
     }, [gridStart]);
 
     const selectedItems = useMemo(() => itemsByDay.get(selectedDayKey) || [], [itemsByDay, selectedDayKey]);
+    const agendaItems = useMemo(() => agendaDayKey ? itemsByDay.get(agendaDayKey) || [] : [], [agendaDayKey, itemsByDay]);
+    const hasAgendaItems = agendaItems.length > 0;
+
+    const compactGridDays = useMemo(() => {
+        const first = new Date(cursorYear, cursorMonth, 1);
+        const last = new Date(cursorYear, cursorMonth + 1, 0);
+        const offset = (first.getDay() + 6) % 7;
+        const dayCount = offset + last.getDate();
+        const visibleCells = Math.ceil(dayCount / 7) * 7;
+        const days: Date[] = [];
+        for (let i = 0; i < visibleCells; i++) days.push(addDays(gridStart, i));
+        return days;
+    }, [cursorYear, cursorMonth, gridStart]);
+    const compactWeekCount = compactGridDays.length / 7;
 
     const goPrevMonth = () => {
         const d = new Date(cursorYear, cursorMonth - 1, 1);
@@ -173,6 +202,233 @@ export function CalendarWidget({
     };
 
     const todayKey = toDayKey(now);
+    const todayStartMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    const handleTaskAction = async (taskId: string, action: CalendarTaskAction) => {
+        setOpenActionMenuId(null);
+        await onTaskAction?.(taskId, action);
+    };
+
+    const handleMeetingAction = async (meetingId: string, action: CalendarMeetingAction) => {
+        setOpenActionMenuId(null);
+        await onMeetingAction?.(meetingId, action);
+    };
+
+    if (variant === 'compact') {
+        return (
+            <section className="relative h-full overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white p-3 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
+                <div
+                    className={`absolute left-3 right-3 top-3 flex min-h-0 flex-col transition-all duration-500 ease-out ${
+                        agendaDayKey
+                            ? hasAgendaItems
+                                ? 'bottom-3 -translate-y-full scale-[0.96] opacity-0'
+                                : 'bottom-[118px] -translate-y-1 scale-100 opacity-100'
+                            : 'bottom-3 translate-y-0 scale-100 opacity-100'
+                    }`}
+                >
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <h3 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#0D0D0D]">{monthLabel}</h3>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <Button variant="ghost" size="sm" className="h-6 w-6 border border-[#E5E5E5] bg-white p-0 text-[#0D0D0D] hover:bg-[#F7F7F8]" onClick={goPrevMonth} title="Previous month">
+                                <ChevronLeft size={12} />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-6 w-6 border border-[#E5E5E5] bg-white p-0 text-[#0D0D0D] hover:bg-[#F7F7F8]" onClick={goNextMonth} title="Next month">
+                                <ChevronRight size={12} />
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div
+                        className="grid min-h-0 flex-1 grid-cols-7 gap-x-2 gap-y-1.5"
+                        style={{ gridTemplateRows: `20px repeat(${compactWeekCount}, minmax(0, 1fr))` }}
+                    >
+                        {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
+                            <div key={day} className="flex h-full items-center justify-center rounded-full bg-[#F7F7F8] text-[8px] font-semibold text-[#6E6E80]">
+                                {day}
+                            </div>
+                        ))}
+
+                        {compactGridDays.map((day) => {
+                            const key = toDayKey(day);
+                            const dayItems = itemsByDay.get(key) || [];
+                            const inMonth = isSameMonth(day, cursorYear, cursorMonth);
+                            const isToday = key === todayKey;
+                            const isSelected = key === selectedDayKey;
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedDayKey(key);
+                                        setAgendaDayKey(key);
+                                        setOpenActionMenuId(null);
+                                    }}
+                                    className="relative flex h-full items-center justify-center"
+                                    title={day.toDateString()}
+                                    disabled={!inMonth}
+                                >
+                                    {inMonth && (
+                                        <>
+                                            <span
+                                                className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold leading-none transition ${
+                                                    isSelected
+                                                        ? 'bg-black text-white'
+                                                        : isToday
+                                                            ? 'bg-[#F1F1F2] text-[#0D0D0D]'
+                                                            : 'text-[#0D0D0D] hover:bg-[#F7F7F8]'
+                                                }`}
+                                            >
+                                                {day.getDate()}
+                                            </span>
+                                            {dayItems.length > 0 && (
+                                                <div className="absolute right-1.5 top-1 flex gap-0.5">
+                                                    {dayItems.slice(0, 2).map((item) => (
+                                                        <span
+                                                            key={item.id}
+                                                            className={`h-1.5 w-1.5 rounded-full ring-1 ring-white ${item.type === 'meeting' ? 'bg-orange-500' : 'bg-lime-500'}`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {dayItems.length > 2 && (
+                                                <span className="absolute bottom-0.5 right-1 rounded-full bg-[#F7F7F8] px-1 text-[8px] text-[#6E6E80]">
+                                                    +{dayItems.length - 2}
+                                                </span>
+                                            )}
+                                        </>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div
+                    className={`absolute inset-3 z-20 transition-[transform,opacity] duration-500 ease-out ${
+                        agendaDayKey ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-[calc(100%+12px)] opacity-0'
+                    }`}
+                >
+                    <div className={`${hasAgendaItems ? 'h-full' : 'flex h-full items-end'}`}>
+                    <div className={`${hasAgendaItems ? 'h-full' : 'h-[102px]'} w-full overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white p-3 text-[#0D0D0D] shadow-[0_16px_32px_rgba(15,23,42,0.12)]`}>
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className={`${hasAgendaItems ? 'text-sm' : 'text-[11px]'} font-semibold text-[#0D0D0D]`}>Events</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setAgendaDayKey(null);
+                                    setOpenActionMenuId(null);
+                                }}
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#6E6E80] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                                aria-label="Close events"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                        <div className={`${hasAgendaItems ? 'max-h-[calc(100%-44px)]' : 'max-h-[62px]'} overflow-y-auto pr-1`}>
+                            {agendaItems.length === 0 ? (
+                                <div className="rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-2">
+                                    <p className="text-[11px] font-semibold text-[#0D0D0D]">No events scheduled</p>
+                                    <p className="mt-0.5 text-[10px] text-[#6E6E80]">This day is open.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {agendaItems.map((item) => {
+                                        const d = new Date(item.startAt);
+                                        const time = item.type === 'meeting'
+                                            ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                            : 'Due';
+                                        const isActionMenuOpen = openActionMenuId === item.id;
+                                        const isPastMeeting = item.type === 'meeting' && (
+                                            item.status === 'ended'
+                                            || item.status === 'cancelled'
+                                            || d.getTime() < todayStartMs
+                                        );
+                                        return (
+                                            <div
+                                                key={item.id}
+                                                className={`w-full rounded-[8px] border px-3 py-2.5 text-left transition-all duration-300 ease-out ${
+                                                    isActionMenuOpen
+                                                        ? 'border-[#D7D7DB] bg-white shadow-[0_8px_20px_rgba(15,23,42,0.08)]'
+                                                        : 'border-[#E5E5E5] bg-[#F7F7F8] hover:bg-white'
+                                                }`}
+                                            >
+                                                <div className="flex items-start gap-2">
+                                                    <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${item.type === 'meeting' ? 'bg-orange-500' : 'bg-lime-500'}`} />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => item.type === 'task'
+                                                            ? void handleTaskAction(item.id, 'open')
+                                                            : void handleMeetingAction(item.id, isPastMeeting ? 'review' : 'join')
+                                                        }
+                                                        className="min-w-0 flex-1 text-left"
+                                                    >
+                                                        <span className="block truncate text-[12px] font-semibold text-[#0D0D0D]">{item.title}</span>
+                                                        <span className="mt-0.5 block truncate text-[11px] text-[#6E6E80]">{item.type === 'meeting' ? 'Meeting' : 'Task'} - {spaceNameById.get(item.spaceId) || 'This space'}</span>
+                                                    </button>
+                                                    <span className="ml-2 shrink-0 text-[10px] font-medium text-[#6E6E80]">{time}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOpenActionMenuId((current) => current === item.id ? null : item.id)}
+                                                        className={`-mr-1 flex h-7 shrink-0 items-center justify-center rounded-full transition-all duration-300 ease-out ${
+                                                            isActionMenuOpen
+                                                                ? 'w-10 bg-black text-white'
+                                                                : 'w-7 text-[#6E6E80] hover:bg-white hover:text-[#0D0D0D]'
+                                                        }`}
+                                                        aria-label={`${item.type === 'meeting' ? 'Meeting' : 'Task'} actions for ${item.title}`}
+                                                    >
+                                                        <MoreHorizontal size={15} className={`transition-transform duration-300 ${isActionMenuOpen ? 'rotate-90' : ''}`} />
+                                                    </button>
+                                                </div>
+                                                <div className={`overflow-hidden transition-all duration-300 ease-out ${
+                                                    isActionMenuOpen ? 'mt-2 max-h-28 opacity-100' : 'mt-0 max-h-0 opacity-0'
+                                                }`}>
+                                                    <div className="flex flex-wrap gap-1.5 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-1">
+                                                        {item.type === 'task' ? (
+                                                            <>
+                                                                <button type="button" onClick={() => void handleTaskAction(item.id, 'complete')} className="rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-[#1A1A1A]">
+                                                                    Completed
+                                                                </button>
+                                                                <button type="button" onClick={() => void handleTaskAction(item.id, 'postpone')} className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#0D0D0D] transition hover:bg-[#F7F7F8]">
+                                                                    Postpone
+                                                                </button>
+                                                                <button type="button" onClick={() => void handleTaskAction(item.id, 'open')} className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#0D0D0D] transition hover:bg-[#F7F7F8]">
+                                                                    Open task
+                                                                </button>
+                                                            </>
+                                                        ) : isPastMeeting ? (
+                                                            <button type="button" onClick={() => void handleMeetingAction(item.id, 'review')} className="rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-[#1A1A1A]">
+                                                                Review meeting
+                                                            </button>
+                                                        ) : (
+                                                            <>
+                                                                <button type="button" onClick={() => void handleMeetingAction(item.id, 'join')} className="rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-[#1A1A1A]">
+                                                                    Join meeting
+                                                                </button>
+                                                                {canDeleteMeetings && (
+                                                                    <button type="button" onClick={() => void handleMeetingAction(item.id, 'delete')} className="rounded-full border border-rose-100 bg-white px-2.5 py-1 text-[10px] font-semibold text-rose-600 transition hover:bg-rose-50">
+                                                                        Delete meeting
+                                                                    </button>
+                                                                )}
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    </div>
+                </div>
+            </section>
+        );
+    }
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

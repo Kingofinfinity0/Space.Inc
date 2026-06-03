@@ -61,4 +61,27 @@ export interface ContextsResponse {
   org_contexts:    OrgContext[]
   client_contexts: ClientContext[]
   routing:         "onboarding" | "auto_org" | "auto_client" | "switcher"
+  available?: {
+    count:              number
+    has_any:            boolean
+    has_zero:           boolean
+    has_single:         boolean
+    has_multiple:       boolean
+    has_org_context:    boolean
+    has_client_context: boolean
+  }
+  active_snapshot?: {
+    exists:            boolean
+    role:              ContextRole | null
+    organization_id:   string | null
+    matches_available: boolean
+  }
+  activation?: {
+    required:          boolean
+    auto_route_safe:   boolean
+    switcher_required: boolean
+  }
+  routing_basis?: {
+    availability_only: boolean
+  }
 }

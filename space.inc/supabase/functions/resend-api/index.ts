@@ -94,7 +94,7 @@ serve(async (req: Request) => {
     }
 
     // 2. Build all template variables
-    const inviteLink = `${FRONTEND_URL}/join?token=${token}`;
+    const inviteLink = `${FRONTEND_URL}/invite/${token}`;
     const allVars: Record<string, string> = {
       invite_link:  inviteLink,
       inviter_name: vars.inviter_name ?? "Your team",

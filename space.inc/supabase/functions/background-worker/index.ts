@@ -72,7 +72,7 @@ serve(async (req: Request) => {
                     if (!template) throw new Error(`No template for ${p.type}`);
 
                     const vars = {
-                        invite_link: `${FRONTEND_URL}/join?token=${p.token}`,
+                        invite_link: `${FRONTEND_URL}/invite/${p.token}`,
                         inviter_name: inviter?.full_name ?? "Your team",
                         org_name: org?.name ?? "Space.inc",
                         role: p.role ?? "member",

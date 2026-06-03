@@ -2,10 +2,15 @@ import React, { createContext, useContext, useEffect, useState, ReactNode, useRe
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, onAuthStateChange } from '../lib/supabase';
 import { apiService } from '../services/apiService';
-import { inviteService } from '../services/inviteService';
 import { UserContext, ContextsResponse } from '../types/context';
 import { isOrganizationRole, normalizeWorkspaceRole } from '../lib/workspaceRoles';
-import { normalizeInviteRedirectPath } from '../services/inviteService';
+import {
+  getActivationTarget,
+  getActiveSnapshotContext,
+  getAutoRouteTarget,
+  getContextReadinessDecision,
+  isContextAvailable,
+} from '../lib/contextReadiness';
 
 type AuthContextType = {
   user: User | null;
@@ -15,6 +20,7 @@ type AuthContextType = {
   activeContext: UserContext | null;
   setActiveContext: (context: UserContext | null) => void;
   refreshContexts: () => Promise<ContextsResponse | null>;
+  refreshProfile: () => Promise<void>;
   capabilities: string[];
   capabilityCache: any;
   userRole: string | null;
@@ -22,7 +28,7 @@ type AuthContextType = {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithOAuth: (provider: 'google' | 'github') => Promise<{ error: any }>;
-  signUp: (email: string, password: string, userData: any) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, userData: any, options?: { emailRedirectTo?: string }) => Promise<{ error: any }>;
   signOut: () => Promise<{ error: any }>;
   refreshCapabilities: () => Promise<void>;
   can: (capability: string, spaceId?: string) => boolean;
@@ -41,9 +47,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [activeContext, _setActiveContext] = useState<UserContext | null>(null);
 
   const setActiveContext = (context: UserContext | null) => {
+    capabilitiesCacheRef.current = false;
     _setActiveContext(context);
     if (context) {
       setUserRole(normalizeWorkspaceRole(context.context_role));
+    } else {
+      setUserRole(null);
     }
   };
 
@@ -58,19 +67,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const refreshContexts = async () => {
     try {
-      const response = await apiService.getMyContexts();
+      let response = await apiService.getMyContexts();
+      let decision = getContextReadinessDecision(response);
+
+      if (decision.kind === 'activation_required') {
+        const target = getActivationTarget(response);
+        if (target) {
+          const activation = await apiService.activateMembershipContext(target.context_type, target.context_id);
+          if (!activation.success) {
+            throw new Error(`Failed to activate membership context: ${activation.error_code || 'UNKNOWN_ERROR'}`);
+          }
+
+          capabilitiesCacheRef.current = false;
+          response = await apiService.getMyContexts();
+          decision = getContextReadinessDecision(response);
+        }
+      }
+
       setContexts(response);
 
-      // Auto-select context if applicable
-      if (response.routing === 'auto_org' && response.org_contexts.length === 1) {
-        const ctx = response.org_contexts[0];
-        setActiveContext(ctx);
-        setUserRole(normalizeWorkspaceRole(ctx.context_role));
-      } else if (response.routing === 'auto_client' && response.client_contexts.length === 1) {
-        const ctx = response.client_contexts[0];
-        setActiveContext(ctx);
-        setUserRole(normalizeWorkspaceRole(ctx.context_role));
+      const autoRouteTarget = getAutoRouteTarget(response);
+      const activeSnapshotTarget = getActiveSnapshotContext(response);
+      if (autoRouteTarget) {
+        setActiveContext(autoRouteTarget);
+      } else if (activeSnapshotTarget) {
+        setActiveContext(activeSnapshotTarget);
+      } else if (decision.kind === 'switcher_required' && isContextAvailable(activeContext, response)) {
+        setActiveContext(activeContext);
+      } else if (decision.kind === 'no_contexts' || decision.kind === 'activation_required') {
+        setActiveContext(null);
       }
+
       return response;
     } catch (err) {
       console.error('[AuthContext] Error fetching contexts:', err);
@@ -94,12 +121,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) throw error;
         if (data) {
           setCapabilityCache(data);
-          // Sync userRole with activeContext if available
-          if (activeContext) {
-          setUserRole(normalizeWorkspaceRole(activeContext.context_role));
-          } else {
-          setUserRole(normalizeWorkspaceRole(data.role));
-          }
+        setUserRole(normalizeWorkspaceRole(data.role || activeContext?.context_role));
         setOrganizationId(data.org_id);
         capabilitiesCacheRef.current = true;
 
@@ -144,14 +166,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', uid).single();
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle();
       if (error) throw error;
+      if (!data) {
+        setProfile(null);
+        return;
+      }
       setProfile(data);
       profileCacheRef.current[uid] = data;
     } catch (err) {
-      console.warn('Error fetching profile:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Error fetching profile:', err);
+      }
       setProfile(null);
     }
+  };
+
+  const refreshProfile = async () => {
+    if (!user?.id) return;
+    delete profileCacheRef.current[user.id];
+    await fetchProfile(user.id);
   };
 
   useEffect(() => {
@@ -163,9 +197,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setSession(supSession);
           await Promise.all([
             fetchProfile(supSession.user.id),
-            refreshContexts(),
-            refreshCapabilities()
+            refreshContexts()
           ]);
+          await refreshCapabilities();
         }
       } catch (e) {
         console.error("Auth init failed", e);
@@ -185,44 +219,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         capabilitiesCacheRef.current = false;
 
         if (isNewUser || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-          // Handle pending invites
-          if (event === 'SIGNED_IN') {
-            const pendingInviteToken = inviteService.getAndClearPendingToken()?.token;
-            if (pendingInviteToken) {
-              try {
-                const resolvedInvite = await inviteService.resolveInviteToken(pendingInviteToken);
-                const acceptedInvite = await inviteService.acceptResolvedInvite(
-                  resolvedInvite,
-                  currentSession.access_token,
-                  {
-                    clientName:
-                      profile?.full_name ||
-                      currentSession.user.user_metadata?.full_name ||
-                      currentSession.user.email?.split('@')[0] ||
-                      undefined,
-                    clientCompany:
-                      profile?.company ||
-                      currentSession.user.user_metadata?.company ||
-                      null,
-                  }
-                );
-
-                if (acceptedInvite?.redirect_path) {
-                  window.location.href = normalizeInviteRedirectPath(acceptedInvite.redirect_path) || '/dashboard';
-                  return;
-                }
-              } catch (err) {
-                console.error('Error accepting invitation:', err);
-              }
-            }
-          }
-
           try {
             await Promise.all([
               fetchProfile(currentSession.user.id),
-              refreshContexts(),
-              refreshCapabilities()
+              refreshContexts()
             ]);
+            await refreshCapabilities();
           } catch (e) {
             console.error('Post-auth data fetch failed:', e);
           } finally {
@@ -261,11 +263,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { error };
   };
 
-  const signUp = async (email: string, password: string, metadata: any) => {
+  const signUp = async (email: string, password: string, metadata: any, signUpOptions?: { emailRedirectTo?: string }) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: metadata }
+      options: {
+        data: metadata,
+        emailRedirectTo: signUpOptions?.emailRedirectTo,
+      }
     });
     return { error };
   };
@@ -283,6 +288,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     activeContext,
     setActiveContext,
     refreshContexts,
+    refreshProfile,
     capabilities,
     capabilityCache,
     userRole,
@@ -296,9 +302,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     can
   };
 
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const shouldRenderWhileLoading =
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname === '/invite' ||
+    pathname.startsWith('/invite/') ||
+    pathname === '/join' ||
+    pathname.startsWith('/join/');
+
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {(!loading || shouldRenderWhileLoading) && children}
     </AuthContext.Provider>
   );
 };

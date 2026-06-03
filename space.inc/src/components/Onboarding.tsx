@@ -2,8 +2,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, ArrowRight, Check, Briefcase, User, Building, Mail, Lock } from 'lucide-react';
-import { apiService } from '../services/apiService';
-
 interface OnboardingProps {
     onComplete: () => void;
 }
@@ -14,19 +12,14 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const params = new URLSearchParams(window.location.search);
-    const inviteTokenInit = params.get('invite_token');
-    const inviteEmailInit = params.get('email') || '';
-
     const [formData, setFormData] = useState({
         purpose: '',
         role: '',
         orgName: '',
-        email: inviteEmailInit,
+        email: '',
         password: '',
         fullName: ''
     });
-    const [inviteToken] = useState(inviteTokenInit);
 
     const handleNext = async () => {
         if (step < 4) {
@@ -40,16 +33,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                     organization_name: formData.orgName,
                     role: formData.role,
                     purpose: formData.purpose,
-                    invite_token: inviteToken // CRITICAL for handle_new_user trigger
                 });
 
                 if (signUpError) throw signUpError;
-
-                // Accept invitation if coming from an invite link
-                if (inviteToken) {
-                    await apiService.acceptInvitation(inviteToken);
-                }
-
                 onComplete();
             } catch (err: any) {
                 setError(err.message || 'Failed to create account. Please try again.');
@@ -175,12 +161,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                                         <input
                                             type="email"
                                             placeholder="Email Address"
-                                            className={`w-full bg-white border border-[#D1D5DB] rounded-md py-3 pl-12 pr-4 text-[#1D1D1D] focus:ring-1 focus:ring-[#10A37F] focus:border-[#10A37F] outline-none transition-all ${
-                                                inviteToken ? 'bg-zinc-100 cursor-not-allowed opacity-70' : ''
-                                            }`}
+                                            className="w-full bg-white border border-[#D1D5DB] rounded-md py-3 pl-12 pr-4 text-[#1D1D1D] focus:ring-1 focus:ring-[#10A37F] focus:border-[#10A37F] outline-none transition-all"
                                             value={formData.email}
-                                            onChange={e => !inviteToken && setFormData({ ...formData, email: e.target.value })}
-                                            readOnly={!!inviteToken}
+                                            onChange={e => setFormData({ ...formData, email: e.target.value })}
                                         />
                                     </div>
                                     <div className="relative">

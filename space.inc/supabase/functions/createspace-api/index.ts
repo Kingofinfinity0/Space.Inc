@@ -34,7 +34,7 @@ serve(async (req: Request) => {
 
             if (!name) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'name' }))
 
-            const { data: spaceId, error: rpcError } = await supabase.rpc('create_space', {
+            const { data: space, error: rpcError } = await supabase.rpc('create_space', {
                 p_name: name.trim(),
                 p_description: description ?? null,
                 p_modules: modules ?? { messages: true, chat: true, upload: true, meetings: true },
@@ -43,7 +43,7 @@ serve(async (req: Request) => {
 
             if (rpcError) throw rpcError
 
-            return new Response(JSON.stringify({ data: { id: spaceId } }), {
+            return new Response(JSON.stringify({ data: space }), {
                 status: 201,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })

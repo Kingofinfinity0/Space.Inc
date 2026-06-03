@@ -1,37 +1,50 @@
-import React, { useEffect, useState } from 'react';
-import { Shield, Save, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, Check, LockKeyhole, Plus, RefreshCw, Save, Shield } from 'lucide-react';
 import { apiService } from '../../services/apiService';
 import { useAuth } from '../../contexts/AuthContext';
+import { OrgTeamPolicies } from '../../types';
 
-interface PolicyConfig {
-    allow_client_invites: boolean;
-    allow_staff_invites: boolean;
-    client_can_upload: boolean;
-    client_can_delete_own: boolean;
-    client_can_create_tasks: boolean;
-    require_2fa: boolean;
-    auto_archive_months: number;
-}
+type SaveSection = 'features' | 'limits' | 'roles';
+
+const DEFAULT_POLICIES: OrgTeamPolicies = {
+    messaging_enabled: true,
+    meetings_enabled: true,
+    file_uploads_enabled: true,
+    max_spaces_per_member: null,
+    max_file_size_mb: 100,
+    custom_roles_enabled: false
+};
 
 export const PolicySettings: React.FC = () => {
-    const { profile } = useAuth();
-    const [policies, setPolicies] = useState<PolicyConfig | null>(null);
+    const { userRole } = useAuth();
+    const [policies, setPolicies] = useState<OrgTeamPolicies>(DEFAULT_POLICIES);
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [savingSection, setSavingSection] = useState<SaveSection | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [customRoleName, setCustomRoleName] = useState('');
+    const [customRolePermissions, setCustomRolePermissions] = useState('{"base_role":"client"}');
+
+    const canManage = userRole === 'owner' || userRole === 'admin';
+
+    const disabledFeatures = useMemo(() => {
+        const names: string[] = [];
+        if (!policies.messaging_enabled) names.push('messaging');
+        if (!policies.meetings_enabled) names.push('meetings');
+        if (!policies.file_uploads_enabled) names.push('file uploads');
+        return names;
+    }, [policies.file_uploads_enabled, policies.meetings_enabled, policies.messaging_enabled]);
 
     const fetchPolicies = async () => {
-        if (!profile?.organization_id) return;
         setLoading(true);
         setError(null);
         try {
-            const { data, error } = await apiService.getOrganizationPolicies(profile.organization_id);
+            const { data, error } = await apiService.getOrgTeamPolicies();
             if (error) throw error;
-            setPolicies(data);
+            setPolicies({ ...DEFAULT_POLICIES, ...(data || {}) });
         } catch (err: any) {
-            console.error("Failed to fetch policies:", err);
-            setError(err.message || "Failed to load policies");
+            console.error('Failed to fetch org team policies:', err);
+            setError(err.message || 'Failed to load org team policies');
         } finally {
             setLoading(false);
         }
@@ -39,154 +52,266 @@ export const PolicySettings: React.FC = () => {
 
     useEffect(() => {
         fetchPolicies();
-    }, [profile?.organization_id]);
+    }, []);
 
-    const handleToggle = (key: keyof PolicyConfig) => {
-        if (!policies) return;
-        setPolicies(prev => prev ? { ...prev, [key]: !prev[key] } : null);
-    };
-
-    const handleSave = async () => {
-        if (!policies || !profile?.organization_id) return;
-        setSaving(true);
+    const saveSection = async (section: SaveSection, updates: Record<string, any>) => {
+        setSavingSection(section);
         setError(null);
         setSuccess(null);
         try {
-            const { error } = await apiService.updateOrganizationPolicies(profile.organization_id, policies);
+            const { data, error } = await apiService.updateOrgTeamPolicies(updates);
             if (error) throw error;
-            setSuccess("Policies updated successfully");
-            setTimeout(() => setSuccess(null), 3000);
+            setPolicies({ ...DEFAULT_POLICIES, ...(data || policies), ...updates });
+            setSuccess('Org team policies updated');
+            setTimeout(() => setSuccess(null), 2500);
         } catch (err: any) {
-            console.error("Failed to save policies:", err);
-            // Revert or show error
-            setError(err.message || "Failed to save policies");
-            fetchPolicies(); // Revert to server state
+            console.error('Failed to save org team policies:', err);
+            setError(err.message || 'Failed to save org team policies');
+            fetchPolicies();
         } finally {
-            setSaving(false);
+            setSavingSection(null);
         }
     };
 
-    if (loading) return <div className="p-8 text-center text-zinc-500">Loading policies...</div>;
+    const createRole = async () => {
+        if (!customRoleName.trim()) return;
+        setSavingSection('roles');
+        setError(null);
+        try {
+            const parsed = JSON.parse(customRolePermissions || '{}');
+            const { error } = await apiService.createCustomRole(customRoleName.trim(), parsed);
+            if (error) throw error;
+            setCustomRoleName('');
+            setCustomRolePermissions('{"base_role":"client"}');
+            setSuccess('Custom role created');
+            setTimeout(() => setSuccess(null), 2500);
+        } catch (err: any) {
+            setError(err.message || 'Failed to create custom role');
+        } finally {
+            setSavingSection(null);
+        }
+    };
+
+    if (loading) {
+        return <div className="p-8 text-center text-zinc-500">Loading org team policies...</div>;
+    }
+
+    if (!canManage) {
+        return (
+            <div className="mx-auto max-w-4xl p-6">
+                <div className="rounded-[8px] border border-[#E5E5E5] bg-white p-6 text-[#6E6E80]">
+                    <Shield className="mb-4 text-[#0D0D0D]" />
+                    <p className="font-medium text-[#0D0D0D]">Owner or Admin access required</p>
+                    <p className="mt-1 text-sm">Org team policies control global defaults across all spaces.</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="max-w-4xl mx-auto p-6">
-            <div className="flex items-center justify-between mb-8">
+        <div className="mx-auto max-w-4xl space-y-6 p-6">
+            <div className="flex items-start justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-[#1D1D1D] flex items-center gap-2">
-                        <Shield className="text-[#10A37F]" /> Organization Policies
+                    <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-[-0.03em] text-[#0D0D0D]">
+                        <Shield size={24} />
+                        Org Team Policies
                     </h2>
-                    <p className="text-zinc-500 mt-1">Configure global rules for your workspace.</p>
+                    <p className="mt-1 text-sm text-[#6E6E80]">Global defaults for members, limits, permissions, and role controls.</p>
                 </div>
                 <button
+                    type="button"
                     onClick={fetchPolicies}
-                    className="p-2 text-zinc-400 hover:text-[#10A37F] transition-colors"
-                    title="Refresh Policies"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-white text-[#6E6E80] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                    title="Refresh policies"
+                    aria-label="Refresh policies"
                 >
-                    <RefreshCw size={20} />
+                    <RefreshCw size={18} />
                 </button>
             </div>
 
             {error && (
-                <div className="mb-6 bg-red-50 text-red-600 p-4 rounded-lg flex items-center gap-2">
-                    <AlertCircle size={20} />
+                <div className="flex items-center gap-2 rounded-[8px] border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    <AlertCircle size={18} />
                     {error}
                 </div>
             )}
 
             {success && (
-                <div className="mb-6 bg-green-50 text-green-600 p-4 rounded-lg flex items-center gap-2">
-                    <Check size={20} />
+                <div className="flex items-center gap-2 rounded-[8px] border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+                    <Check size={18} />
                     {success}
                 </div>
             )}
 
-            <div className="bg-white rounded-xl border border-[#D1D5DB] overflow-hidden shadow-sm">
-                <div className="p-6 border-b border-[#D1D5DB] bg-[#F7F7F8]">
-                    <h3 className="font-semibold text-zinc-800">Client Permissions</h3>
-                </div>
-                <div className="p-6 space-y-6">
+            <section className="rounded-[8px] border border-[#E5E5E5] bg-white">
+                <SectionHeader title="Feature Controls" subtitle="Disable major surfaces across every space." />
+                <div className="space-y-5 p-5">
                     <PolicyToggle
-                        label="Allow Clients to Upload Files"
-                        description="If disabled, clients can only view files shared by staff."
-                        enabled={policies?.client_can_upload ?? true}
-                        onChange={() => handleToggle('client_can_upload')}
+                        label="Enable Messaging"
+                        enabled={policies.messaging_enabled}
+                        onChange={() => setPolicies((current) => ({ ...current, messaging_enabled: !current.messaging_enabled }))}
                     />
                     <PolicyToggle
-                        label="Allow Clients to Delete Own Files"
-                        description="Clients can remove files they uploaded."
-                        enabled={policies?.client_can_delete_own ?? true}
-                        onChange={() => handleToggle('client_can_delete_own')}
+                        label="Enable Meetings"
+                        enabled={policies.meetings_enabled}
+                        onChange={() => setPolicies((current) => ({ ...current, meetings_enabled: !current.meetings_enabled }))}
                     />
                     <PolicyToggle
-                        label="Allow Clients to Create Tasks"
-                        description="Enable clients to assign tasks to themselves or staff."
-                        enabled={policies?.client_can_create_tasks ?? false}
-                        onChange={() => handleToggle('client_can_create_tasks')}
+                        label="Enable File Uploads"
+                        enabled={policies.file_uploads_enabled}
+                        onChange={() => setPolicies((current) => ({ ...current, file_uploads_enabled: !current.file_uploads_enabled }))}
                     />
-                    <PolicyToggle
-                        label="Allow Clients to Invite Users"
-                        description="Permit clients to add new members to their organization."
-                        enabled={policies?.allow_client_invites ?? false}
-                        onChange={() => handleToggle('allow_client_invites')}
-                    />
-                </div>
 
-                <div className="p-6 border-t border-b border-[#D1D5DB] bg-[#F7F7F8]">
-                    <h3 className="font-semibold text-zinc-800">Security & Governance</h3>
-                </div>
-                <div className="p-6 space-y-6">
-                    <PolicyToggle
-                        label="Require 2FA for All Staff"
-                        description="Force two-factor authentication for staff accounts."
-                        enabled={policies?.require_2fa ?? false}
-                        onChange={() => handleToggle('require_2fa')}
-                    />
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h4 className="font-medium text-[#1D1D1D]">Auto-Archive Inactive Spaces</h4>
-                            <p className="text-sm text-zinc-500">Months of inactivity before auto-archiving.</p>
+                    {disabledFeatures.length > 0 && (
+                        <div className="rounded-[8px] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                            This will disable {disabledFeatures.join(', ')} for all members across all spaces.
                         </div>
-                        <select
-                            value={policies?.auto_archive_months ?? 6}
-                            onChange={(e) => setPolicies(p => p ? { ...p, auto_archive_months: parseInt(e.target.value) } : null)}
-                            className="border border-[#D1D5DB] rounded-md px-3 py-1.5 text-sm focus:ring-[#10A37F] focus:border-[#10A37F]"
-                        >
-                            <option value={3}>3 Months</option>
-                            <option value={6}>6 Months</option>
-                            <option value={12}>12 Months</option>
-                            <option value={0}>Disabled</option>
-                        </select>
+                    )}
+
+                    <SectionSaveButton
+                        loading={savingSection === 'features'}
+                        onClick={() => saveSection('features', {
+                            messaging_enabled: policies.messaging_enabled,
+                            meetings_enabled: policies.meetings_enabled,
+                            file_uploads_enabled: policies.file_uploads_enabled
+                        })}
+                    />
+                </div>
+            </section>
+
+            <section className="rounded-[8px] border border-[#E5E5E5] bg-white">
+                <SectionHeader title="Limits" subtitle="Organization-wide ceilings and safety checks." />
+                <div className="grid gap-4 p-5 sm:grid-cols-2">
+                    <label className="space-y-2">
+                        <span className="text-sm font-medium text-[#0D0D0D]">Max spaces per team member</span>
+                        <input
+                            type="number"
+                            min={0}
+                            value={policies.max_spaces_per_member ?? ''}
+                            onChange={(event) => setPolicies((current) => ({
+                                ...current,
+                                max_spaces_per_member: event.target.value === '' ? null : Number(event.target.value)
+                            }))}
+                            placeholder="Unlimited"
+                            className="w-full rounded-[8px] border border-[#DADADA] bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                        />
+                    </label>
+                    <label className="space-y-2">
+                        <span className="text-sm font-medium text-[#0D0D0D]">Max file size (MB)</span>
+                        <input
+                            type="number"
+                            min={1}
+                            value={policies.max_file_size_mb}
+                            onChange={(event) => setPolicies((current) => ({
+                                ...current,
+                                max_file_size_mb: Number(event.target.value || 1)
+                            }))}
+                            className="w-full rounded-[8px] border border-[#DADADA] bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                        />
+                    </label>
+                    <div className="sm:col-span-2">
+                        <SectionSaveButton
+                            loading={savingSection === 'limits'}
+                            onClick={() => saveSection('limits', {
+                                max_spaces_per_member: policies.max_spaces_per_member,
+                                max_file_size_mb: policies.max_file_size_mb
+                            })}
+                        />
                     </div>
                 </div>
+            </section>
 
-                <div className="p-6 border-t border-[#D1D5DB] bg-[#F7F7F8] flex justify-end">
+            <section className="rounded-[8px] border border-[#E5E5E5] bg-white">
+                <SectionHeader title="Roles" subtitle="Custom roles build on base permissions when enabled." />
+                <div className="space-y-5 p-5">
+                    <PolicyToggle
+                        label="Enable Custom Roles"
+                        enabled={policies.custom_roles_enabled}
+                        onChange={() => setPolicies((current) => ({ ...current, custom_roles_enabled: !current.custom_roles_enabled }))}
+                    />
+                    <SectionSaveButton
+                        loading={savingSection === 'roles'}
+                        onClick={() => saveSection('roles', { custom_roles_enabled: policies.custom_roles_enabled })}
+                    />
+
+                    {policies.custom_roles_enabled ? (
+                        <div className="grid gap-3 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4">
+                            <input
+                                value={customRoleName}
+                                onChange={(event) => setCustomRoleName(event.target.value)}
+                                placeholder="Role name"
+                                className="rounded-[8px] border border-[#DADADA] bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                            />
+                            <textarea
+                                value={customRolePermissions}
+                                onChange={(event) => setCustomRolePermissions(event.target.value)}
+                                className="min-h-[96px] rounded-[8px] border border-[#DADADA] bg-white px-3 py-2 font-mono text-xs outline-none focus:border-black"
+                            />
+                            <button
+                                type="button"
+                                onClick={createRole}
+                                disabled={savingSection === 'roles' || !customRoleName.trim()}
+                                className="inline-flex w-fit items-center gap-2 rounded-[8px] border border-[#0D0D0D] bg-[#0D0D0D] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                            >
+                                <Plus size={16} />
+                                Create Role
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4 text-sm text-[#6E6E80]">
+                            Custom roles are off. Base owner, admin, staff, and client roles remain active.
+                        </p>
+                    )}
+                </div>
+            </section>
+
+            <section className="rounded-[8px] border border-red-200 bg-white">
+                <SectionHeader title="Danger Zone" subtitle="Ownership changes affect every space and member." tone="danger" />
+                <div className="p-5">
                     <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="flex items-center gap-2 bg-[#10A37F] text-white px-6 py-2.5 rounded-lg hover:bg-[#0E8A6B] disabled:opacity-50 transition-colors font-medium shadow-sm"
+                        type="button"
+                        disabled
+                        className="inline-flex items-center gap-2 rounded-[8px] border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 opacity-70"
+                        title="Transfer ownership flow is not yet connected"
                     >
-                        {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
-                        Save Changes
+                        <LockKeyhole size={16} />
+                        Transfer ownership
                     </button>
                 </div>
-            </div>
+            </section>
         </div>
     );
 };
 
-const PolicyToggle: React.FC<{ label: string, description: string, enabled: boolean, onChange: () => void }> = ({ label, description, enabled, onChange }) => (
-    <div className="flex items-center justify-between">
-        <div>
-            <h4 className="font-medium text-[#1D1D1D]">{label}</h4>
-            <p className="text-sm text-zinc-500">{description}</p>
-        </div>
+const SectionHeader = ({ title, subtitle, tone = 'default' }: { title: string; subtitle: string; tone?: 'default' | 'danger' }) => (
+    <div className={`border-b px-5 py-4 ${tone === 'danger' ? 'border-red-200 bg-red-50' : 'border-[#E5E5E5] bg-[#F7F7F8]'}`}>
+        <h3 className={`text-base font-semibold ${tone === 'danger' ? 'text-red-700' : 'text-[#0D0D0D]'}`}>{title}</h3>
+        <p className={`mt-1 text-sm ${tone === 'danger' ? 'text-red-600' : 'text-[#6E6E80]'}`}>{subtitle}</p>
+    </div>
+);
+
+const PolicyToggle = ({ label, enabled, onChange }: { label: string; enabled: boolean; onChange: () => void }) => (
+    <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium text-[#0D0D0D]">{label}</span>
         <button
+            type="button"
             onClick={onChange}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#10A37F] focus:ring-offset-2 ${enabled ? 'bg-[#10A37F]' : 'bg-zinc-200'}`}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 ${enabled ? 'bg-black' : 'bg-[#D4D4D8]'}`}
+            aria-pressed={enabled}
         >
-            <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`}
-            />
+            <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>
     </div>
+);
+
+const SectionSaveButton = ({ loading, onClick }: { loading: boolean; onClick: () => void }) => (
+    <button
+        type="button"
+        onClick={onClick}
+        disabled={loading}
+        className="inline-flex items-center gap-2 rounded-[8px] border border-[#0D0D0D] bg-[#0D0D0D] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+    >
+        {loading ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+        Save Changes
+    </button>
 );

@@ -39,18 +39,38 @@ export const onboardingService = {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('User not authenticated');
 
-    // Start a transaction to ensure data consistency
-    const { data, error } = await supabase.rpc('complete_onboarding', {
-      user_id: userId,
-      business_name: formData.businessName,
-      business_type: formData.businessType,
-      business_website: formData.businessWebsite || null,
-      full_name: formData.fullName,
-      phone_number: formData.phoneNumber,
-      goals: formData.goals,
-      team_size: formData.teamSize,
-      industry: formData.industry,
-    });
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('attributes')
+      .eq('id', userId)
+      .single();
+
+    if (profileError) throw profileError;
+
+    const attributes = {
+      ...(profile?.attributes || {}),
+      onboarding: {
+        business_name: formData.businessName,
+        business_type: formData.businessType,
+        business_website: formData.businessWebsite || null,
+        goals: formData.goals,
+        team_size: formData.teamSize,
+        industry: formData.industry,
+        completed_at: new Date().toISOString(),
+      },
+    };
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        full_name: formData.fullName,
+        phone: formData.phoneNumber,
+        attributes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId)
+      .select()
+      .single();
 
     if (error) throw error;
     return data;

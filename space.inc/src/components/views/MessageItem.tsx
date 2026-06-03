@@ -2,26 +2,67 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Message } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
-import { File as DocIconLucide, Download as DownloadIcon, Check as CheckIcon, X as XIcon, Edit2 as EditIcon, Trash2 as TrashIcon, MoreVertical as MoreVerticalIcon, Shield, Sparkles } from 'lucide-react';
+import { File as DocIconLucide, Image as ImageIcon, Download as DownloadIcon, Check as CheckIcon, X as XIcon, Edit2 as EditIcon, Trash2 as TrashIcon, MoreVertical as MoreVerticalIcon, Pin, Reply, Shield, SmilePlus, Sparkles } from 'lucide-react';
 import { apiService } from '../../services/apiService';
+
+const REACTION_OPTIONS = [
+    { emoji: '👍', label: 'Agree' },
+    { emoji: '✅', label: 'Done' },
+    { emoji: '👀', label: 'Reviewing' },
+    { emoji: '🙌', label: 'Great' },
+    { emoji: '💡', label: 'Idea' },
+    { emoji: '🎯', label: 'On target' },
+    { emoji: '🚀', label: 'Ship it' },
+    { emoji: '❤️', label: 'Appreciate' }
+];
 
 export const MessageItem = ({ 
     msg, 
     currentUserId, 
     organizationId, 
-    theme = 'inbox'
+    theme = 'inbox',
+    showHeader = true,
+    onReply,
+    onReact,
+    onPin
 }: { 
     msg: Message, 
     currentUserId: string, 
     organizationId: string, 
-    theme?: 'inbox' | 'panel'
+    theme?: 'inbox' | 'panel',
+    showHeader?: boolean,
+    onReply?: (message: Message) => void,
+    onReact?: (message: Message, emoji: string) => void,
+    onPin?: (message: Message) => void
 }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState(msg.content);
     const [showMenu, setShowMenu] = useState(false);
+    const [showReactionPicker, setShowReactionPicker] = useState(false);
+    const [imageUrl, setImageUrl] = useState<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
     const isOwner = msg.senderId === currentUserId;
+    const mimeType = msg.payload?.mime_type || '';
+    const isImageAttachment = msg.extension === 'image' || msg.payload?.kind === 'image' || mimeType.startsWith('image/');
+    const isFileAttachment = msg.extension === 'file' && !isImageAttachment;
+    const quoted = msg.payload?.reply_to;
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadImageUrl = async () => {
+            if (!isImageAttachment || !msg.payload?.file_id || !organizationId) {
+                setImageUrl(null);
+                return;
+            }
+            const { data } = await apiService.getSignedUrl(msg.payload.file_id, organizationId);
+            if (!cancelled) setImageUrl(data?.signedUrl || null);
+        };
+        void loadImageUrl();
+        return () => {
+            cancelled = true;
+        };
+    }, [isImageAttachment, msg.payload?.file_id, organizationId]);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -80,6 +121,17 @@ export const MessageItem = ({
 
     const shellTone = isInternal ? 'bg-[#F7F7F8]' : alignRight ? 'bg-[#0D0D0D] text-white' : 'bg-white';
     const senderTone = alignRight ? 'text-white/70' : 'text-[#6E6E80]';
+    const quoteTone = alignRight
+        ? 'border-white/20 bg-white/10 text-white/80'
+        : 'border-[#DADADD] bg-[#EFEFF1] text-[#4F4F5A]';
+
+    const quotedPreview = quoted
+        ? quoted.extension === 'image' || quoted.mime_type?.startsWith?.('image/')
+            ? quoted.file_name || 'Image'
+            : quoted.extension === 'file'
+                ? quoted.file_name || 'File'
+                : quoted.content || 'Message'
+        : '';
 
     return (
         <div className={`relative mb-4 flex ${alignRight ? 'justify-end' : 'justify-start'}`}>
@@ -117,13 +169,57 @@ export const MessageItem = ({
                         Internal note
                     </div>
                 )}
-                {msg.senderName && (
+                {showHeader && msg.senderName && (
                     <p className={`mb-1 text-[10px] font-medium ${senderTone}`}>
                         {msg.senderName}
                     </p>
                 )}
 
-                {msg.extension === 'file' ? (
+                {quoted && (
+                    <div className={`mb-2 rounded-[8px] border-l-2 px-3 py-2 ${quoteTone}`}>
+                        <p className="text-[11px] font-semibold">
+                            Replying to {quoted.sender_id === currentUserId ? 'yourself' : (quoted.sender_name || 'message')}
+                        </p>
+                        <p className="mt-0.5 line-clamp-2 text-xs opacity-80">{quotedPreview}</p>
+                    </div>
+                )}
+
+                {isImageAttachment ? (
+                    <div className="overflow-hidden rounded-[10px] border border-[#E5E5E5] bg-white">
+                        {imageUrl ? (
+                            <button
+                                type="button"
+                                onClick={() => window.open(imageUrl, '_blank')}
+                                className="block w-full bg-[#F7F7F8]"
+                                title="Open image"
+                                aria-label="Open image"
+                            >
+                                <img src={imageUrl} alt={msg.payload?.file_name || 'Shared image'} className="max-h-72 w-full object-cover" />
+                            </button>
+                        ) : (
+                            <div className="flex h-40 items-center justify-center gap-2 bg-[#F7F7F8] text-xs text-[#6E6E80]">
+                                <ImageIcon size={16} />
+                                Image preview
+                            </div>
+                        )}
+                        <div className="flex items-center justify-between gap-3 px-3 py-2">
+                            <div className="min-w-0">
+                                <p className="truncate text-xs font-medium text-[#0D0D0D]">{msg.payload?.file_name || 'Image'}</p>
+                                <p className="text-[10px] text-[#6E6E80]">Image shared</p>
+                            </div>
+                            <button
+                                title="Download Image"
+                                onClick={async () => {
+                                    const { data } = await apiService.getSignedUrl(msg.payload.file_id, organizationId);
+                                    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                                }}
+                                className="rounded-full p-1.5 text-[#6E6E80] transition-colors hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                            >
+                                <DownloadIcon size={16} />
+                            </button>
+                        </div>
+                    </div>
+                ) : isFileAttachment ? (
                     <div className={`flex items-center gap-3 rounded-[8px] border border-[#E5E5E5] px-3 py-2 ${shellTone}`}>
                         <div className="rounded-[8px] border border-[#E5E5E5] bg-[#FFFFFF] p-2 text-[#0D0D0D]">
                             <DocIconLucide size={20} />
@@ -183,6 +279,78 @@ export const MessageItem = ({
                 <p className="mt-2 text-right text-[10px] text-[#6E6E80]">
                     {formatTime(msg.createdAt)}
                 </p>
+
+                {Array.isArray(msg.reactions) && msg.reactions.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                        {msg.reactions.map((reaction) => (
+                            <button
+                                key={reaction.emoji}
+                                type="button"
+                                onClick={() => onReact?.(msg, reaction.emoji)}
+                                title={reaction.names?.join(', ') || `${reaction.count} reactions`}
+                                className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-0.5 text-[11px] text-[#0D0D0D]"
+                            >
+                                <span>{reaction.emoji}</span>
+                                <span>{reaction.count}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {(onReply || onReact || onPin) && msg.content !== '[Message deleted]' && !isEditing && (
+                    <div className="mt-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        {onReact && (
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowReactionPicker((current) => !current)}
+                                    className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1 text-[10px] font-medium text-[#6E6E80] hover:text-[#0D0D0D]"
+                                >
+                                    <SmilePlus size={12} />
+                                    React
+                                </button>
+                                {showReactionPicker && (
+                                    <div className={`absolute bottom-full z-20 mb-2 grid w-44 grid-cols-4 gap-1 rounded-[12px] border border-[#D7D7DC] bg-white p-2 shadow-[0_12px_24px_rgba(15,23,42,0.12)] ${alignRight ? 'right-0' : 'left-0'}`}>
+                                        {REACTION_OPTIONS.map((reaction) => (
+                                            <button
+                                                key={reaction.emoji}
+                                                type="button"
+                                                onClick={() => {
+                                                    onReact(msg, reaction.emoji);
+                                                    setShowReactionPicker(false);
+                                                }}
+                                                title={reaction.label}
+                                                className="flex h-8 w-8 items-center justify-center rounded-full text-base transition hover:bg-[#F1F1F3]"
+                                            >
+                                                {reaction.emoji}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {onReply && (
+                            <button
+                                type="button"
+                                onClick={() => onReply(msg)}
+                                className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1 text-[10px] font-medium text-[#6E6E80] hover:text-[#0D0D0D]"
+                            >
+                                <Reply size={12} />
+                                Reply
+                            </button>
+                        )}
+                        {onPin && (
+                            <button
+                                type="button"
+                                onClick={() => onPin(msg)}
+                                className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1 text-[10px] font-medium text-[#6E6E80] hover:text-[#0D0D0D]"
+                            >
+                                <Pin size={12} />
+                                Pin
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

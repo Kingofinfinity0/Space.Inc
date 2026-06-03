@@ -5,7 +5,6 @@ import LoginPage from './views/LoginPage';
 import SignupPage from './views/SignupPage';
 import { apiService } from './services/apiService';
 import {
-    ChevronRight,
     Rocket,
     LayoutGrid,
     Users,
@@ -19,27 +18,27 @@ import {
     Bell,
     Video,
     Shield,
-    FileVideo,
     X,
-    Search,
-    Copy,
-    Key,
-    ArrowLeft
+    ArrowLeft,
+    Building2,
+    UserCircle,
+    Clock,
+    ChevronsUpDown,
+    Settings,
+    LogOut,
+    Moon,
+    Sun
 } from 'lucide-react';
 import {
     Button,
     Heading,
     Text,
-    GlassCard,
-    SkeletonLoader,
-    SkeletonText,
-    SkeletonCard
+    GlassCard
 } from './components/UI/index';
 import { FileViewerModal } from './components/FileViewerModal';
 import { FileUploadModal } from './components/FileUploadModal';
-import { InvitationsManagementView } from './components/views/InvitationsManagementView';
 import {
-    ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle, Invitation
+    ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile, ChartData, ClientLifecycle
 } from './types';
 import { supabase } from './lib/supabase';
 import { friendlyError } from './utils/errors';
@@ -63,17 +62,18 @@ import SettingsView, { BillingSettingsView } from './components/views/SettingsVi
 import InboxView from './components/views/InboxView';
 import HistoryView from './components/views/HistoryView';
 import ClientPortalView from './components/views/ClientPortalView';
-import { InviteStaffModal } from './components/views/InviteStaffModal';
 import { MeetingRoom } from './components/MeetingRoom';
 import { Routes, Route, useNavigate, Navigate, useParams } from 'react-router-dom';
-import JoinView from './components/views/JoinView';
-import AcceptInviteView from './components/views/AcceptInviteView';
 import ClientSpaceRoute from './components/views/ClientSpaceRoute';
 import { PermissionGuard } from "./components/auth/PermissionGuard";
 import { ContextSwitcher } from './components/auth/ContextSwitcher';
+import { InvitePage } from './components/invite/InvitePage';
+import { JoinPage } from './components/invite/JoinPage';
+import { SpaceMembersPage } from './components/invite/SpaceMembersPage';
 import { supabase as _supabase } from './lib/supabase';
 import { getWorkspaceRoleLabel } from './lib/workspaceRoles';
-import { normalizeInviteRedirectPath } from './services/inviteService';
+import { getAvailableContexts, getContextRoute } from './lib/contextReadiness';
+import type { UserContext } from './types/context';
 
 type SpaceDetailTab = 'Dashboard' | 'Chat' | 'Meetings' | 'Tasks' | 'Docs';
 
@@ -120,7 +120,29 @@ const LegacyClientSpaceRedirect = () => {
 };
 
 const resolveClientRoute = (route?: string | null, contextId?: string | null) => {
-    return normalizeInviteRedirectPath(route) || (contextId ? `/spaces/${contextId}` : null);
+    return route || (contextId ? `/spaces/${contextId}` : null);
+};
+
+const getContextDisplayName = (context: UserContext) => {
+    return context.context_type === 'org' ? context.org_name : context.space_name;
+};
+
+const getContextSubtitle = (context: UserContext) => {
+    if (context.context_type === 'org') {
+        return `${getWorkspaceRoleLabel(context.context_role)} role`;
+    }
+
+    return `${context.org_name} - Client profile`;
+};
+
+const getProfileInitials = (name?: string | null, email?: string | null) => {
+    const label = name || email || 'Account';
+    return label
+        .split(/[.@\s_-]+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join('') || 'A';
 };
 
 // ── Client Space Picker ─────────────────────────────────────────────────
@@ -193,11 +215,32 @@ const ClientSpacePicker: React.FC = () => {
 };
 
 const App = () => {
-    const { user, profile, loading, userRole, organizationId, can, signOut, contexts, activeContext } = useAuth();
+    const {
+        user,
+        profile,
+        loading,
+        userRole,
+        organizationId,
+        can,
+        signOut,
+        contexts,
+        activeContext,
+        setActiveContext,
+        refreshContexts,
+        refreshCapabilities
+    } = useAuth();
     const { showToast, removeToast } = useToast();
     const navigate = useNavigate();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [currentTime, setCurrentTime] = useState(() => new Date());
+    const [isSwitchMenuOpen, setIsSwitchMenuOpen] = useState(false);
+    const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+    const [switchingContextId, setSwitchingContextId] = useState<string | null>(null);
+    const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+        if (typeof window === 'undefined') return 'light';
+        return window.localStorage.getItem('space-theme') === 'dark' ? 'dark' : 'light';
+    });
 
     // Sidebar/View State
     const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
@@ -207,10 +250,6 @@ const App = () => {
     const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
     const [activeMeetingRoomUrl, setActiveMeetingRoomUrl] = useState<string | null>(null);
     const [meetingEntrySource, setMeetingEntrySource] = useState<{ view: ViewState; spaceId?: string } | null>(null);
-    const [showInviteModal, setShowInviteModal] = useState(false);
-    const [lastInviteData, setLastInviteData] = useState<{ link: string | null, email: string, status?: string, invite_id?: string } | null>(null);
-    const [copiedLink, setCopiedLink] = useState(false);
-
     // Data State
     const [clients, setClients] = useState<ClientSpace[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -240,6 +279,17 @@ const App = () => {
             setIsAuthenticated(false);
         }
     }, [user, loading]);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setCurrentTime(new Date()), 30000);
+        return () => window.clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+        document.documentElement.dataset.theme = theme;
+        window.localStorage.setItem('space-theme', theme);
+    }, [theme]);
 
     // ── Client role redirect ─────────────────────────────────────────────────
     // If the backend has already selected a client-space context, send the user
@@ -277,7 +327,6 @@ const App = () => {
             return;
         }
         if (isAuthenticated && organizationId) {
-            console.log('[App] Auth and Tenant ready, initiating data fetch...');
             // Skip full data fetch for clients — they only need their own space data
             if (userRole === 'client') return;
             fetchData();
@@ -307,6 +356,30 @@ const App = () => {
         };
     }, [user, profile, showToast]);
 
+    const handleHeaderContextSwitch = useCallback(async (context: UserContext) => {
+        setSwitchingContextId(context.context_id);
+        try {
+            const activation = await apiService.activateMembershipContext(context.context_type, context.context_id);
+            if (!activation.success) {
+                throw new Error(activation.error_code || 'UNKNOWN_ERROR');
+            }
+
+            setActiveContext(context);
+            setIsSwitchMenuOpen(false);
+            setIsAccountMenuOpen(false);
+            setSwitchingContextId(null);
+            navigate(getContextRoute(context) || '/dashboard', { replace: true });
+            showToast(`Switched to ${getContextDisplayName(context)}`, 'success');
+
+            void Promise.all([refreshContexts(), refreshCapabilities()]).catch((syncError) => {
+                console.warn('[App] Background context refresh failed:', syncError);
+            });
+        } catch (err: any) {
+            showToast(err?.message || 'Could not switch account right now.', 'error');
+            setSwitchingContextId(null);
+        }
+    }, [navigate, refreshCapabilities, refreshContexts, setActiveContext, showToast]);
+
     const fetchData = async (silent = false) => {
         if (!user || !organizationId) {
             if (!silent && !loading && !user) setIsInitialLoading(false);
@@ -314,9 +387,6 @@ const App = () => {
         }
         
         if (!silent) setIsInitialLoading(true);
-        const startTime = Date.now();
-        console.log('[App] Fetching organization data for:', organizationId);
-
         try {
             // Phase 1: Critical UI Data (Spaces, Tasks, Meetings)
             // We fetch these first to get the main dashboard ready
@@ -353,7 +423,6 @@ const App = () => {
                 setInboxData(peripheralResults[3].value as any[]);
             }
 
-            console.log(`[App] Data fetch completed in ${Date.now() - startTime}ms`);
         } catch (error) {
             console.error("[App] Critical error fetching system data:", error);
             showToast("Failed to sync some data. Please check your connection.", "error");
@@ -406,7 +475,8 @@ const App = () => {
             const { data: newSpace, error } = await apiService.createSpace(
                 data.name || 'New Client',
                 `Workspace for ${data.name || 'New Client'}`,
-                organizationId || ''
+                organizationId || '',
+                data.modules
             );
 
             if (error) throw error;
@@ -414,7 +484,7 @@ const App = () => {
                 // Handle both direct response and nested response structures
                 const spaceData = newSpace.space || newSpace;
                 const createdSpaceId = spaceData.id || newSpace.id || newSpace;
-                let invitationToken = spaceData.invitation_token;
+                let invitationToken = spaceData.invitation_token || spaceData.share_link_token;
 
                 if (!invitationToken && createdSpaceId && organizationId) {
                     const { data: hydratedSpace } = await apiService.getSpaceById(createdSpaceId, organizationId);
@@ -435,14 +505,15 @@ const App = () => {
                     name: data.name || 'New Client',
                     description: `Workspace for ${data.name || 'New Client'}`,
                     status: 'active',
-                    role: 'client',
+                    role: 'owner',
                     permission_level: 'principal',
                     message_count: 0,
                     file_count: 0,
                     meeting_count: 0,
                     member_count: 0,
                     last_activity_at: new Date().toISOString(),
-                    organization_id: profile?.organization_id || '',
+                    organization_id: organizationId || profile?.organization_id || '',
+                    visibility: 'organization',
                     invitation_token: invitationToken,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
@@ -480,11 +551,57 @@ const App = () => {
 
     const handleUpdateTask = async (taskId: string, updates: Partial<Task>) => {
         try {
-            const { error } = await apiService.updateTask(taskId, updates, organizationId || '');
+            const { data, error } = await apiService.updateTask(taskId, updates, organizationId || '');
             if (error) throw error;
-            setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...updates } : task));
+            setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...(data || updates) } : task));
         } catch (err: any) {
             showToast(`Error updating task: ${err.message}`, "error");
+        }
+    };
+
+    const handleArchiveTask = async (taskId: string) => {
+        try {
+            const { data, error } = await apiService.archiveTask(taskId);
+            if (error) throw error;
+            setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...(data || {}), archived_at: data?.archived_at || new Date().toISOString() } : task));
+            showToast('Task archived.', 'success');
+        } catch (err: any) {
+            showToast(`Error archiving task: ${err.message}`, 'error');
+        }
+    };
+
+    const handleRequestTaskReview = async (taskId: string, reviewerId: string) => {
+        try {
+            const { data, error } = await apiService.requestTaskReview(taskId, reviewerId);
+            if (error) throw error;
+            setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...(data || {}) } : task));
+            showToast('Review requested.', 'success');
+        } catch (err: any) {
+            showToast(`Error requesting review: ${err.message}`, 'error');
+        }
+    };
+
+    const handleCompleteTaskReview = async (taskId: string, approved: boolean, comment?: string) => {
+        try {
+            const { data, error } = await apiService.completeTaskReview(taskId, approved, comment);
+            if (error) throw error;
+            setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...(data || {}) } : task));
+            showToast(approved ? 'Task approved.' : 'Task sent back.', 'success');
+        } catch (err: any) {
+            showToast(`Error completing review: ${err.message}`, 'error');
+        }
+    };
+
+    const handleAddTaskComment = async (taskId: string, content: string) => {
+        try {
+            const { data, error } = await apiService.addTaskComment(taskId, content);
+            if (error) throw error;
+            if (data) setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...data } : task));
+            showToast('Comment added.', 'success');
+            return data as Task | undefined;
+        } catch (err: any) {
+            showToast(`Error adding comment: ${err.message}`, 'error');
+            return undefined;
         }
     };
 
@@ -586,14 +703,29 @@ case ViewState.DASHBOARD:
                     return (
                         <OwnerDashboardView
                             clients={clients}
+                            staff={staff}
+                            clientLifecycle={clientLifecycle}
                             messages={[]}
                             meetings={meetings}
                             tasks={tasks}
+                            files={files}
                             profile={profile}
                             onJoin={handleJoinMeeting}
                             onInstantMeet={() => handleInstantMeeting(clients[0]?.id)}
+                            onCreateSpace={handleCreateSpace}
+                            onScheduleMeeting={handleScheduleMeeting}
                             onCreateTask={handleCreateTask}
                             onUpdateTask={handleUpdateTask}
+                            onRequestReview={handleRequestTaskReview}
+                            onCompleteReview={handleCompleteTaskReview}
+                            onAddTaskComment={handleAddTaskComment}
+                            onGoToSpaces={() => setCurrentView(ViewState.SPACES)}
+                            onGoToClients={() => setCurrentView(ViewState.CLIENTS)}
+                            onGoToStaff={() => setCurrentView(ViewState.STAFF)}
+                            onGoToMeetings={() => setCurrentView(ViewState.MEETINGS)}
+                            onGoToFiles={() => setCurrentView(ViewState.FILES)}
+                            onGoToTasks={() => setCurrentView(ViewState.TASKS)}
+                            onRefreshData={() => fetchData(true)}
                             onGoToSpace={(spaceId) => {
                                 openSpace(spaceId, 'Dashboard');
                             }}
@@ -612,6 +744,9 @@ case ViewState.DASHBOARD:
                             onInstantMeet={() => handleInstantMeeting(clients[0]?.id)}
                             onCreateTask={handleCreateTask}
                             onUpdateTask={handleUpdateTask}
+                            onRequestReview={handleRequestTaskReview}
+                            onCompleteReview={handleCompleteTaskReview}
+                            onAddTaskComment={handleAddTaskComment}
                             onGoToSpace={(spaceId) => {
                                 openSpace(spaceId, 'Dashboard');
                             }}
@@ -639,13 +774,20 @@ case ViewState.DASHBOARD:
                 if (!can('owner') && !can('admin')) return <div className="p-8">Access Denied</div>;
                 // Use clientLifecycle data for now - this shows all clients across the organization
                 // In the future, this could be enhanced to show space-specific client data
-                return <ClientsCRMView clients={clientLifecycle} loading={isInitialLoading} />;
+                return (
+                    <ClientsCRMView
+                        clients={clientLifecycle}
+                        loading={false}
+                        onCreateSpace={() => setCurrentView(ViewState.SPACES)}
+                        onInvitePerson={() => setCurrentView(ViewState.STAFF)}
+                    />
+                );
 case ViewState.STAFF:
                 if (permissions ? !permissions.manage_team : !can('can_manage_team')) return <div className="p-8">Access Denied</div>;
-                return <StaffView staff={staff} spaces={clients} onInvite={() => setShowInviteModal(true)} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />;
+                return <StaffView staff={staff} spaces={clients} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />;
             case ViewState.TASKS:
                 if (permissions ? !permissions.view_tasks : !can('can_view_tasks')) return <div className="p-8">Access Denied</div>;
-                return <TaskView tasks={tasks} clients={clients} onUpdateTask={handleUpdateTask} onCreateTask={handleCreateTask} onOpenSpace={(spaceId) => {
+                return <TaskView tasks={tasks} clients={clients} onUpdateTask={handleUpdateTask} onCreateTask={handleCreateTask} onArchiveTask={handleArchiveTask} onRequestReview={handleRequestTaskReview} onCompleteReview={handleCompleteTaskReview} onAddTaskComment={handleAddTaskComment} onOpenSpace={(spaceId) => {
                     openSpace(spaceId, 'Dashboard');
                 }} />;
             case ViewState.MEETINGS:
@@ -657,9 +799,6 @@ case ViewState.STAFF:
             case ViewState.SETTINGS:
                 if (permissions ? (!permissions.manage_spaces && !permissions.manage_team) : !can('can_view_settings')) return <div className="p-8">Access Denied</div>;
                 return <SettingsView />;
-            case ViewState.INVITATIONS:
-                if (permissions ? !permissions.manage_team : !can('can_manage_team')) return <div className="p-8">Access Denied</div>;
-                return <InvitationsManagementView />;
             default:
                 return <div className="p-8">View Not Found</div>;
         }
@@ -717,10 +856,22 @@ case ViewState.STAFF:
         [ViewState.SETTINGS]: 'Settings',
         [ViewState.ACTIVITY_LEDGER]: 'History',
         [ViewState.CLIENTS]: 'Clients',
-        [ViewState.INVITATIONS]: 'Invitations',
     };
     const currentViewLabel = currentViewLabelMap[currentView] || 'Workspace';
     const roleLabel = getWorkspaceRoleLabel(permissionRole || userRole);
+    const availableContexts = getAvailableContexts(contexts);
+    const contextCount = contexts?.available?.count ?? contexts?.total ?? availableContexts.length;
+    const isTeamContext = ['owner', 'admin', 'staff'].includes(userRole || '');
+    const showSwitchAccount = isTeamContext && contextCount >= 2;
+    const activeOrganizationName =
+        activeContext?.org_name ||
+        contexts?.org_contexts?.[0]?.org_name ||
+        contexts?.client_contexts?.[0]?.org_name ||
+        profile?.organization_name ||
+        'Organization';
+    const accountName = profile?.full_name || user?.email || 'Account';
+    const accountInitials = getProfileInitials(profile?.full_name, user?.email);
+    const timeLabel = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const dockItems = currentView === ViewState.SPACE_DETAIL ? [
         {
@@ -784,7 +935,7 @@ case ViewState.STAFF:
             label: 'Spaces',
             icon: Users,
             allowed: permissions ? (!!permissions.view_all_spaces || !!permissions.view_assigned_spaces) : (can('can_view_all_spaces') || can('can_view_assigned_spaces')),
-            isActive: currentView === ViewState.SPACES || currentView === ViewState.SPACE_DETAIL,
+            isActive: currentView === ViewState.SPACES,
             onClick: () => setCurrentView(ViewState.SPACES),
         },
         {
@@ -801,13 +952,6 @@ case ViewState.STAFF:
             allowed: permissions ? !!permissions.manage_team : can('can_manage_team'),
             isActive: currentView === ViewState.STAFF,
             onClick: () => setCurrentView(ViewState.STAFF),
-        },
-        {
-            label: 'Invites',
-            icon: Key,
-            allowed: permissions ? !!permissions.manage_team : can('can_manage_team'),
-            isActive: currentView === ViewState.INVITATIONS,
-            onClick: () => setCurrentView(ViewState.INVITATIONS),
         },
         {
             label: 'Clients',
@@ -841,8 +985,8 @@ case ViewState.STAFF:
 
     return (
         <Routes>
-            <Route path="/join/:token" element={<JoinView />} />
-            <Route path="/accept-invite" element={<AcceptInviteView />} />
+            <Route path="/join/:token" element={<JoinPage />} />
+            <Route path="/invite/:token" element={<InvitePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/spaces/pending" element={<PendingSpaceView />} />
@@ -852,13 +996,14 @@ case ViewState.STAFF:
                     <SettingsView />
                 </PermissionGuard>
             } />
+            <Route path="/spaces/:spaceId/members" element={!isAuthenticated ? <LoginPage /> : <SpaceMembersPage />} />
             <Route path="/spaces/:spaceId" element={<ClientSpaceRoute />} />
             <Route path="/client/space/:spaceId" element={<LegacyClientSpaceRedirect />} />
 
 <Route path="/org/settings/billing" element={<BillingSettingsView />} />
             <Route path="/org/settings/team" element={
                 <PermissionGuard requiredPermission="manage_team">
-                    <StaffView staff={staff} spaces={clients} onInvite={() => setShowInviteModal(true)} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />
+                    <StaffView staff={staff} spaces={clients} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />
                 </PermissionGuard>
             } />
             <Route path="/dashboard" element={
@@ -878,28 +1023,162 @@ case ViewState.STAFF:
 
                     return (
                         <>
+                            <button
+                                type="button"
+                                onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+                                className="fixed right-3 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-colors hover:bg-[#F7F7F8] md:right-5 md:top-4"
+                                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                            >
+                                {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                            </button>
                             <AppLayout sidebar={null}>
                                 <div className="flex min-h-screen flex-1 flex-col">
-                                    <header className="sticky top-0 z-20 px-4 pt-4 md:px-8 md:pt-6">
-                                        <div className="sheet-panel flex flex-col gap-4 rounded-[8px] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6">
-                                            <div className="flex min-w-0 items-center gap-2">
-                                                <span className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#6E6E80]">Main</span>
-                                                <ChevronRight size={14} className="text-[#6E6E80]" />
-                                                <span className="truncate text-[11px] font-medium uppercase tracking-[0.22em] text-[#0D0D0D]">{currentViewLabel}</span>
-                                                <span className="hidden md:inline text-[11px] font-medium uppercase tracking-[0.22em] text-[#6E6E80]">· {roleLabel}</span>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <div className="hidden items-center gap-2 rounded-[8px] border border-[#E5E5E5] bg-white px-3 py-2 text-xs text-[#6E6E80] md:flex">
-                                                    <Search size={13} />
-                                                    Search
+                                    {currentView !== ViewState.SPACE_DETAIL ? (
+                                        <header className="sticky top-0 z-30 px-2 pt-2 sm:px-3 sm:pt-3 md:px-4 md:pt-4">
+                                            <div className="mx-auto grid w-fit max-w-[calc(100vw-1rem)] min-w-0 grid-cols-[auto_minmax(0,180px)_auto] items-center gap-2 rounded-[999px] border border-[#E5E5E5] bg-white/95 px-2.5 py-2 shadow-[0_1px_3px_rgba(0,0,0,0.06)] backdrop-blur sm:max-w-[calc(100vw-1.5rem)] sm:grid-cols-[auto_minmax(0,260px)_auto] md:max-w-[min(920px,calc(100vw-2rem))] md:grid-cols-[auto_minmax(0,360px)_auto] md:px-3">
+                                                <div className="flex min-w-0 items-center justify-start">
+                                                    <div className="flex h-9 items-center gap-2 rounded-full bg-[#F7F7F8] px-3 text-xs font-medium text-[#0D0D0D]">
+                                                        <Clock size={14} className="text-[#6E6E80]" />
+                                                        <span className="tabular-nums">{timeLabel}</span>
+                                                    </div>
                                                 </div>
-                                                <Button variant="primary" size="sm">Upgrade</Button>
+
+                                                <div className="min-w-0 text-center">
+                                                    <div className="truncate text-sm font-semibold text-[#0D0D0D] md:text-[15px]">
+                                                        {activeOrganizationName}
+                                                    </div>
+                                                    <div className="hidden text-[10px] font-medium uppercase tracking-[0.18em] text-[#6E6E80] sm:block">
+                                                        {currentViewLabel}
+                                                    </div>
+                                                </div>
+
+                                                <div className="relative flex min-w-0 items-center justify-end gap-2">
+                                                {showSwitchAccount ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setIsSwitchMenuOpen((open) => !open);
+                                                            setIsAccountMenuOpen(false);
+                                                        }}
+                                                        className="flex h-9 items-center gap-2 rounded-full border border-[#E5E5E5] bg-white px-2.5 text-xs font-semibold text-[#0D0D0D] transition-colors hover:bg-[#F7F7F8] md:px-3"
+                                                    >
+                                                        <ChevronsUpDown size={14} />
+                                                        <span className="hidden md:inline">Switch to another account</span>
+                                                    </button>
+                                                ) : null}
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsSwitchMenuOpen(false);
+                                                        setIsAccountMenuOpen(false);
+                                                        void signOut();
+                                                    }}
+                                                    className="flex h-9 items-center gap-2 rounded-full border border-[#F2D4D1] bg-white px-2.5 text-xs font-semibold text-[#B42318] transition-colors hover:bg-[#FFF4F2] md:px-3"
+                                                    aria-label="Log out"
+                                                >
+                                                    <LogOut size={14} />
+                                                    <span className="hidden md:inline">Log out</span>
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsAccountMenuOpen((open) => !open);
+                                                        setIsSwitchMenuOpen(false);
+                                                    }}
+                                                    className="flex h-9 items-center gap-2 rounded-full border border-[#E5E5E5] bg-white px-1.5 pr-2.5 text-xs font-semibold text-[#0D0D0D] transition-colors hover:bg-[#F7F7F8]"
+                                                    aria-label="Open account menu"
+                                                >
+                                                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0D0D0D] text-[11px] font-semibold text-white">
+                                                        {accountInitials}
+                                                    </span>
+                                                    <span className="hidden max-w-[120px] truncate sm:inline">{roleLabel}</span>
+                                                </button>
+
+                                                {isSwitchMenuOpen && showSwitchAccount ? (
+                                                    <div className="absolute right-11 top-12 z-50 w-[320px] overflow-hidden rounded-[18px] border border-[#E5E5E5] bg-white shadow-[0_18px_40px_rgba(0,0,0,0.12)]">
+                                                        <div className="border-b border-[#EFEFEF] px-4 py-3">
+                                                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Choose profile</p>
+                                                            <p className="mt-1 text-sm font-medium text-[#0D0D0D]">{contextCount} available</p>
+                                                        </div>
+                                                        <div className="max-h-[320px] overflow-y-auto p-2">
+                                                            {availableContexts.map((context) => {
+                                                                const isActive =
+                                                                    activeContext?.context_type === context.context_type &&
+                                                                    activeContext?.context_id === context.context_id;
+                                                                const Icon = context.context_type === 'org' ? Building2 : UserCircle;
+                                                                const isSwitching = switchingContextId === context.context_id;
+
+                                                                return (
+                                                                    <button
+                                                                        key={`${context.context_type}:${context.context_id}`}
+                                                                        type="button"
+                                                                        disabled={switchingContextId !== null}
+                                                                        onClick={() => void handleHeaderContextSwitch(context)}
+                                                                        className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-left transition-colors ${
+                                                                            isActive ? 'bg-[#F2F2F3]' : 'hover:bg-[#F7F7F8]'
+                                                                        } ${switchingContextId !== null ? 'cursor-wait opacity-70' : ''}`}
+                                                                    >
+                                                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#E5E5E5] bg-white">
+                                                                            <Icon size={16} className="text-[#0D0D0D]" />
+                                                                        </span>
+                                                                        <span className="min-w-0 flex-1">
+                                                                            <span className="block truncate text-sm font-semibold text-[#0D0D0D]">
+                                                                                {getContextDisplayName(context)}
+                                                                            </span>
+                                                                            <span className="block truncate text-xs text-[#6E6E80]">
+                                                                                {isSwitching ? 'Switching...' : getContextSubtitle(context)}
+                                                                            </span>
+                                                                        </span>
+                                                                        {isActive ? (
+                                                                            <span className="h-2 w-2 rounded-full bg-[#0D0D0D]" />
+                                                                        ) : null}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+
+                                                {isAccountMenuOpen ? (
+                                                    <div className="absolute right-0 top-12 z-50 w-[260px] overflow-hidden rounded-[18px] border border-[#E5E5E5] bg-white shadow-[0_18px_40px_rgba(0,0,0,0.12)]">
+                                                        <div className="border-b border-[#EFEFEF] px-4 py-4">
+                                                            <p className="truncate text-sm font-semibold text-[#0D0D0D]">{accountName}</p>
+                                                            <p className="mt-1 truncate text-xs text-[#6E6E80]">{user?.email}</p>
+                                                        </div>
+                                                        <div className="p-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setCurrentView(ViewState.SETTINGS);
+                                                                    setIsAccountMenuOpen(false);
+                                                                }}
+                                                                className="flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-sm font-medium text-[#0D0D0D] transition-colors hover:bg-[#F7F7F8]"
+                                                            >
+                                                                <Settings size={16} />
+                                                                Account settings
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => void signOut()}
+                                                                className="flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-sm font-medium text-[#B42318] transition-colors hover:bg-[#FFF4F2]"
+                                                            >
+                                                                <LogOut size={16} />
+                                                                Sign out
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                                </div>
                                             </div>
-                                        </div>
-                                    </header>
-                                    <div className="flex-1 overflow-y-auto px-4 pb-20 pt-5 md:px-6 md:pb-24 md:pt-6">
-                                        <div className="mx-auto w-full max-w-[1240px]">{renderContent()}</div>
+                                        </header>
+                                    ) : null}
+                                    <div className="flex-1 overflow-y-auto px-2 pb-20 pt-3 sm:px-3 md:px-4 md:pb-24 md:pt-4">
+                                        <div className="w-full min-w-0">{renderContent()}</div>
                                     </div>
+                                    {currentView !== ViewState.SPACE_DETAIL ? (
                                     <nav className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4 md:bottom-8">
                                         <div className="dock-shell dock-enter flex max-w-[calc(100vw-2rem)] items-center gap-2 overflow-x-auto rounded-[999px] px-2 py-2">
                                             {dockItems.map((item, index) => {
@@ -933,6 +1212,7 @@ case ViewState.STAFF:
                                             })}
                                         </div>
                                     </nav>
+                                    ) : null}
                                 </div>
                             </AppLayout>
 
@@ -987,60 +1267,6 @@ case ViewState.STAFF:
                                 </div>
                             )}
 
-                            {showInviteModal && lastInviteData && (
-                                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/30 p-4">
-                                    <GlassCard className="max-w-md w-full p-10 text-center relative overflow-hidden">
-                                        <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8]">
-                                            <Rocket className="text-[#0D0D0D]" size={40} />
-                                        </div>
-                                        <h2 className="text-3xl font-semibold mb-2 tracking-tight text-[#0D0D0D]">Space ready</h2>
-                                        <p className="text-[#6E6E80] mb-8 leading-relaxed text-sm">
-                                            Invite generated for <strong>{lastInviteData.email}</strong>.<br/> Share the link below with your client.
-                                        </p>
-                                        
-                                        <div className="space-y-4 mb-10 text-left">
-                                            <label className="block text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80] mb-2 ml-1">Secure Link</label>
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    readOnly 
-                                                    title="Invitation Link"
-                                                    value={lastInviteData.link || ''} 
-                                                    className="flex-1 rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-3 text-[10px] font-mono text-[#6E6E80] focus:outline-none"
-                                                />
-                                                <Button 
-                                                    variant={copiedLink ? "primary" : "secondary"}
-                                                    size="sm" 
-                                                    onClick={() => {
-                                                        if (lastInviteData.link) {
-                                                            navigator.clipboard.writeText(lastInviteData.link);
-                                                            setCopiedLink(true);
-                                                            setTimeout(() => setCopiedLink(false), 2000);
-                                                        }
-                                                    }}
-                                                    className="min-w-[100px] font-black uppercase tracking-widest text-[9px]"
-                                                >
-                                                    {copiedLink ? 'Copied!' : 'Copy Link'}
-                                                </Button>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-1.5 w-1.5 bg-black rounded-full animate-pulse" />
-                                                <p className="text-[10px] text-[#6E6E80] font-semibold uppercase tracking-widest">
-                                                    This link expires in 72 hours
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <Button variant="primary" className="w-full py-4 text-xs font-semibold uppercase tracking-[0.3em]" onClick={() => { setShowInviteModal(false); setLastInviteData(null); }}>Done</Button>
-                                    </GlassCard>
-                                </div>
-                            )}
-
-                            <InviteStaffModal 
-                                isOpen={showInviteModal && !lastInviteData} 
-                                onClose={() => setShowInviteModal(false)}
-                                organizationId={organizationId || ''}
-                                spaces={clients}
-                            />
                         </>
                     );
                 })()

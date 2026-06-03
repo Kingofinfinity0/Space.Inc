@@ -6,11 +6,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, getAuthContext, hydrateError, errorResponse } from '../_shared/auth.ts'
 
 // HMAC verification for Daily.co webhooks
-async function verifyDailyWebhook(req: Request, secret: string): Promise<boolean> {
+async function verifyDailyWebhook(req: Request, secret: string, rawBody: string): Promise<boolean> {
     const signature = req.headers.get('X-Webhook-Signature')
     const timestamp = req.headers.get('X-Webhook-Timestamp')
     if (!signature || !timestamp || !secret) return false
-    const rawBody = await req.clone().text()
     const dataToVerify = `${timestamp}.${rawBody}`
     try {
         const encoder = new TextEncoder()
@@ -40,8 +39,9 @@ serve(async (req: Request) => {
 
         // ── WEBHOOK (UNAUTHENTICATED — HMAC secured) ──────────────────────────
         if (url.pathname.endsWith('/webhook')) {
-            const body = await req.json()
-            if (!(await verifyDailyWebhook(req, webhookSecret))) {
+            const rawBody = await req.text()
+            const body = JSON.parse(rawBody || '{}')
+            if (!(await verifyDailyWebhook(req, webhookSecret, rawBody))) {
                 return new Response(JSON.stringify({ error: 'Invalid webhook signature' }), {
                     status: 401,
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -54,24 +54,61 @@ serve(async (req: Request) => {
             )
 
             const { type, payload } = body
-            const roomName = payload?.room_name ?? ''
-            const meetingId = roomName.includes('meeting-') ? roomName.split('meeting-')[1] : null
+            const roomName = payload?.room_name ?? payload?.room ?? ''
+            const meetingId =
+                payload?.meeting_id ??
+                payload?.meetingId ??
+                (roomName.includes('meeting-') ? roomName.split('meeting-')[1] : null)
 
-            if (type === 'recording.ready_to_download' && meetingId) {
-                const { data: recData, error: recError } = await supabaseAdmin
-                    .from('recordings')
-                    .insert({
-                        meeting_id: meetingId,
-                        daily_recording_id: payload.recording_id,
-                        download_url: payload.download_url,
-                        status: 'ready'
-                    })
-                    .select()
+            if (['recording.ready_to_download', 'recording.ready-to-download', 'recording.ready'].includes(type) && meetingId) {
+                const recordingId = payload?.recording_id ?? payload?.recordingId ?? payload?.id
+
+                const { data: meeting, error: meetingError } = await supabaseAdmin
+                    .from('meetings')
+                    .select('id, organization_id')
+                    .eq('id', meetingId)
                     .single()
 
-                if (!recError && recData) {
-                    await supabaseAdmin.from('meetings').update({ recording_id: recData.id }).eq('id', meetingId)
+                if (meetingError) throw meetingError
+
+                let recordingResponse: Response | null = null
+                if (recordingId) {
+                    recordingResponse = await fetch(`https://api.daily.co/v1/recordings/${recordingId}/download`, {
+                        headers: { 'Authorization': `Bearer ${dailyApiKey}` }
+                    })
                 }
+
+                if ((!recordingResponse || !recordingResponse.ok) && payload?.download_url) {
+                    recordingResponse = await fetch(payload.download_url)
+                }
+
+                if (!recordingResponse || !recordingResponse.ok) {
+                    throw new Error(`Daily recording download failed: ${recordingResponse?.status ?? 'no response'}`)
+                }
+
+                const bytes = new Uint8Array(await recordingResponse.arrayBuffer())
+                const contentType = recordingResponse.headers.get('content-type') || 'video/mp4'
+                const extension = contentType.includes('webm') ? 'webm' : 'mp4'
+                const storagePath = `recordings/${meeting.organization_id}/${meetingId}/${recordingId || crypto.randomUUID()}.${extension}`
+
+                const { error: uploadError } = await supabaseAdmin
+                    .storage
+                    .from('meeting-recordings')
+                    .upload(storagePath, bytes, {
+                        contentType,
+                        upsert: true
+                    })
+
+                if (uploadError) throw uploadError
+
+                const { error: rpcError } = await supabaseAdmin.rpc('save_meeting_recording', {
+                    p_meeting_id: meetingId,
+                    p_storage_path: storagePath,
+                    p_duration_seconds: payload?.duration ?? payload?.duration_seconds ?? null,
+                    p_file_size_bytes: bytes.byteLength
+                })
+
+                if (rpcError) throw rpcError
             }
 
             return new Response(JSON.stringify({ received: true }), {
@@ -107,7 +144,8 @@ serve(async (req: Request) => {
         // ── POST /meetings-api → Action-based meeting operations ───────────────
         if (req.method === 'POST') {
             const body = await req.json().catch(() => ({}))
-            const { action, meeting_id } = body
+            const { action } = body
+            const meeting_id = body.meeting_id ?? body.meetingId
 
             if (!action) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'action' }))
 
@@ -197,6 +235,35 @@ serve(async (req: Request) => {
                 }
 
                 // ── START_MEETING ──────────────────────────────────────────────
+                case 'UPDATE_MEETING': {
+                    if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
+
+                    const updates = body.updates ?? {}
+                    const allowedFields = ['title', 'description', 'starts_at', 'duration_minutes', 'recording_enabled', 'category']
+                    const safeUpdates = Object.fromEntries(
+                        Object.entries(updates).filter(([key]) => allowedFields.includes(key))
+                    )
+
+                    if (Object.keys(safeUpdates).length === 0) {
+                        return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'updates' }))
+                    }
+
+                    const { data: meeting, error: updateError } = await supabase
+                        .from('meetings')
+                        .update({ ...safeUpdates, updated_at: new Date().toISOString() })
+                        .eq('id', meeting_id)
+                        .is('deleted_at', null)
+                        .select()
+                        .single()
+
+                    if (updateError) throw updateError
+
+                    return new Response(JSON.stringify({ data: meeting }), {
+                        status: 200,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    })
+                }
+
                 case 'START_MEETING': {
                     if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
 
@@ -289,13 +356,55 @@ serve(async (req: Request) => {
                 case 'END_MEETING': {
                     if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
 
+                    const { data: meetingBeforeEnd } = await supabase
+                        .from('meetings')
+                        .select('daily_room_name')
+                        .eq('id', meeting_id)
+                        .maybeSingle()
+
                     const { error: rpcError } = await supabase.rpc('end_meeting', {
                         p_meeting_id: meeting_id
                     })
 
                     if (rpcError) throw rpcError
 
+                    if (meetingBeforeEnd?.daily_room_name && dailyApiKey) {
+                        const destroyRes = await fetch(`https://api.daily.co/v1/rooms/${meetingBeforeEnd.daily_room_name}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${dailyApiKey}` }
+                        })
+                        if (!destroyRes.ok && destroyRes.status !== 404) {
+                            const destroyText = await destroyRes.text().catch(() => '')
+                            throw new Error(`Daily room destroy failed: ${destroyText || destroyRes.status}`)
+                        }
+                    }
+
                     return new Response(JSON.stringify({ success: true }), {
+                        status: 200,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    })
+                }
+
+                case 'GET_RECORDINGS': {
+                    if (!meeting_id) return errorResponse(await hydrateError(supabase, 'VAL_MISSING_FIELD', { field: 'meeting_id' }))
+
+                    const { data: recordings, error: rpcError } = await supabase.rpc('get_meeting_recordings', {
+                        p_meeting_id: meeting_id
+                    })
+
+                    if (rpcError) throw rpcError
+
+                    const signedRecordings = await Promise.all((recordings || []).map(async (recording: any) => {
+                        const path = recording.storage_path || recording.file_path
+                        if (!path || recording.status !== 'ready') return recording
+                        const { data: signed } = await supabaseAdmin
+                            .storage
+                            .from('meeting-recordings')
+                            .createSignedUrl(path, 3600)
+                        return { ...recording, signed_url: signed?.signedUrl ?? null }
+                    }))
+
+                    return new Response(JSON.stringify({ data: signedRecordings }), {
                         status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     })

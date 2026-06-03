@@ -15,13 +15,13 @@ export const Toggle: React.FC<ToggleProps> = ({ checked, onChange, label }) => {
         onClick={() => onChange(!checked)}
         className={`relative flex h-7 w-12 items-center rounded-full border p-1 transition-all duration-100 ease-out active:scale-95 ${
           checked
-            ? 'border-black bg-black'
+            ? 'border-[color:var(--theme-accent)] bg-[color:var(--theme-accent)]'
             : 'border-[#E5E5E5] bg-white'
         }`}
       >
         <span
           className={`h-5 w-5 rounded-full bg-white shadow-[0_8px_20px_rgba(0,0,0,0.18)] transition-all duration-100 ease-out ${
-            checked ? 'translate-x-5 bg-white' : 'translate-x-0 bg-[#6E6E80]'
+            checked ? 'translate-x-5 bg-[color:var(--theme-on-accent)]' : 'translate-x-0 bg-[#6E6E80]'
           }`}
         />
       </button>

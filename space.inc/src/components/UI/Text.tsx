@@ -9,10 +9,17 @@ interface TextProps {
 
 export const Text: React.FC<TextProps> = ({ children, variant = 'primary', size = 'base', className = '' }) => {
     const colorStyles = {
-        primary: "text-[#0D0D0D]",
-        secondary: "text-[#6E6E80]",
-        muted: "text-[#6E6E80]",
-        accent: "text-[#0D0D0D]"
+        primary: "text-[color:var(--text-primary)]",
+        secondary: "text-[color:var(--text-muted)]",
+        muted: "text-[color:var(--text-muted)]",
+        accent: "text-[color:var(--theme-accent)]"
+    };
+
+    const weightStyles = {
+        primary: "font-normal",
+        secondary: "font-extralight",
+        muted: "font-extralight",
+        accent: "font-normal"
     };
 
     const sizeStyles = {
@@ -23,7 +30,7 @@ export const Text: React.FC<TextProps> = ({ children, variant = 'primary', size 
     };
 
     return (
-        <p className={`${colorStyles[variant]} ${sizeStyles[size]} ${className}`}>
+        <p className={`${colorStyles[variant]} ${weightStyles[variant]} ${sizeStyles[size]} ${className}`}>
             {children}
         </p>
     );

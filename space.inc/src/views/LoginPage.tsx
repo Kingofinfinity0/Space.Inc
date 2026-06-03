@@ -1,51 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { inviteService } from '@/services/inviteService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Heading, Text, GlassCard } from '@/components/UI/index';
-import { Rocket, Shield, ArrowRight, UserPlus, Mail } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-import { normalizeInviteRedirectPath } from '@/services/inviteService';
+import { Rocket, Shield, ArrowRight, UserPlus } from 'lucide-react';
+import { getSafeInviteRedirect } from '@/lib/inviteRedirect';
+import InviteAuthSwitcher from './InviteAuthSwitcher';
 
 export default function LoginPage() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { signIn } = useAuth();
 
-    const inviteToken = searchParams.get('invite_token');
-    const invitedEmail = searchParams.get('email');
     const message = searchParams.get('message');
+    const redirectParam = searchParams.get('redirectTo');
+    const inviteRedirectPath = getSafeInviteRedirect(redirectParam);
+    const isInviteFlow = Boolean(inviteRedirectPath);
 
-    const [email, setEmail] = useState(invitedEmail || '');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
-    const [inviteOrgName, setInviteOrgName] = useState<string | null>(null);
+    const [redirectTo, setRedirectTo] = useState<string | null>(null);
 
     useEffect(() => {
-        if (inviteToken) {
-            inviteService.storePendingToken(inviteToken);
-        }
-
-        const token = inviteService.peekPendingToken();
-        if (token) {
-            setPendingInviteToken(token);
-            inviteService.resolveInviteToken(token)
-                .then(data => {
-                    if (data.type === 'space_link') {
-                        setInviteOrgName(data.data.organization_name || data.data.space_name || null);
-                    } else {
-                        setInviteOrgName(data.data.org_name || null);
-                    }
-                })
-                .catch(err => {
-                    if (process.env.NODE_ENV === 'development') {
-                        console.error('Error fetching invite details:', err);
-                    }
-                });
-        }
-    }, [inviteToken]);
+        setRedirectTo(getSafeInviteRedirect(redirectParam));
+    }, [redirectParam]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,45 +34,19 @@ export default function LoginPage() {
         try {
             const { error: signInError } = await signIn(email, password);
             if (signInError) throw signInError;
-
-            const pendingSpaceToken = inviteService.peekPendingToken();
-
-            if (inviteToken || pendingSpaceToken) {
-                let session = null;
-                for (let i = 0; i < 10; i++) {
-                    const { data } = await supabase.auth.getSession();
-                    if (data.session?.access_token) {
-                        session = data.session;
-                        break;
-                    }
-                    await new Promise(r => setTimeout(r, 300));
-                }
-                if (!session) throw new Error('Session not ready. Please try again.');
-
-                const token = inviteService.getAndClearPendingToken()?.token || inviteToken;
-                if (token) {
-                    const resolvedInvite = await inviteService.resolveInviteToken(token);
-                    const acceptedInvite = await inviteService.acceptResolvedInvite(
-                        resolvedInvite,
-                        session.access_token
-                    );
-
-                    if (acceptedInvite?.redirect_path) {
-                        navigate(normalizeInviteRedirectPath(acceptedInvite.redirect_path) || '/dashboard', { replace: true });
-                        return;
-                    }
-                }
-
-                navigate('/dashboard', { replace: true });
-            } else {
-                navigate('/dashboard');
-            }
+            navigate(redirectTo || '/dashboard', { replace: true });
         } catch (err: any) {
             setError(err.message || 'Failed to sign in');
         } finally {
             setLoading(false);
         }
     };
+
+    const goToSignup = () => navigate(redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : '/signup');
+
+    if (isInviteFlow && inviteRedirectPath) {
+        return <InviteAuthSwitcher initialMode="login" redirectTo={inviteRedirectPath} />;
+    }
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-[#FFFFFF] p-6">
@@ -111,9 +64,32 @@ export default function LoginPage() {
                             Sign in
                         </Heading>
                         <Text variant="secondary" className="mt-2">
-                            {inviteToken ? 'Sign in to accept your invitation.' : 'Welcome back to your workspace.'}
+                            {isInviteFlow ? 'Continue to your invitation.' : 'Welcome back to your workspace.'}
                         </Text>
                     </div>
+
+                    {isInviteFlow ? (
+                        <div className="relative mb-6 grid grid-cols-2 overflow-hidden rounded-[14px] bg-[#F2F2F3] p-1">
+                            <span
+                                className="absolute bottom-1 left-1 top-1 w-[calc(50%-0.25rem)] rounded-[11px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-transform duration-[920ms] ease-[cubic-bezier(0.2,0.86,0.24,1)]"
+                                style={{ animation: 'auth-tab-slide-left 920ms cubic-bezier(0.2,0.86,0.24,1)' }}
+                                aria-hidden="true"
+                            />
+                            <button
+                                type="button"
+                                className="relative z-10 rounded-[11px] px-3 py-2 text-sm font-semibold text-[#0D0D0D]"
+                            >
+                                Sign in
+                            </button>
+                            <button
+                                type="button"
+                                onClick={goToSignup}
+                                className="relative z-10 rounded-[11px] px-3 py-2 text-sm font-semibold text-[#6E6E80] transition-colors duration-500 ease-[cubic-bezier(0.2,0.86,0.24,1)] hover:text-[#0D0D0D]"
+                            >
+                                Sign up
+                            </button>
+                        </div>
+                    ) : null}
 
                     {error && (
                         <div className="mb-6 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4 text-sm text-[#B42318]">
@@ -127,21 +103,7 @@ export default function LoginPage() {
                         </div>
                     )}
 
-                    {pendingInviteToken && (
-                        <div className="mb-6 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-4 text-sm text-[#0D0D0D]">
-                            <div className="mb-2 flex items-center gap-2 text-[#6E6E80]">
-                                <Mail size={16} />
-                                <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">Organization invite detected</span>
-                            </div>
-                            {inviteOrgName ? (
-                                <p>Sign in to accept your invitation to join <strong>{inviteOrgName}</strong>.</p>
-                            ) : (
-                                <p>Sign in to accept your organization invitation.</p>
-                            )}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-5">
+                    <form onSubmit={handleSubmit} className="animate-[auth-content-in_760ms_cubic-bezier(0.2,0.86,0.24,1)] space-y-5">
                         <div className="space-y-4">
                             <div>
                                 <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Work Email</label>
@@ -183,12 +145,13 @@ export default function LoginPage() {
 
                     <div className="mt-8 border-t border-[#E5E5E5] pt-6 text-center">
                         <Text variant="secondary" className="text-sm">
-                            Don't have an account?{' '}
+                            Don&apos;t have an account?{' '}
                             <button
-                                onClick={() => navigate(`/signup${window.location.search}`)}
+                                type="button"
+                                onClick={goToSignup}
                                 className="mt-2 inline-flex items-center gap-2 font-medium text-[#0D0D0D] hover:text-[#6E6E80]"
                             >
-                                <UserPlus size={14} /> Create account
+                                <UserPlus size={14} /> Sign up
                             </button>
                         </Text>
                     </div>

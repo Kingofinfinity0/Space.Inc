@@ -13,7 +13,6 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
     const [searchQuery, setSearchQuery] = useState('');
     const [newClientName, setNewClientName] = useState('');
     const [newClientContact, setNewClientContact] = useState('');
-    const [newClientEmail, setNewClientEmail] = useState('');
     const [selectedModules, setSelectedModules] = useState({
         messages: true,
         chat: true,
@@ -36,13 +35,11 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
         onCreate({
             name: newClientName,
             contactName: newClientContact,
-            email: newClientEmail,
             modules: selectedModules
         });
         setIsModalOpen(false);
         setNewClientName('');
         setNewClientContact('');
-        setNewClientEmail('');
     };
 
     return (
@@ -133,11 +130,6 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                         <Input placeholder="Client Name or Project" value={newClientName} onChange={e => setNewClientName(e.target.value)} />
                     </div>
 
-                    <div>
-                        <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">Invitee Email (Optional)</label>
-                        <Input placeholder="client@example.com" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} />
-                    </div>
-
                     <div className="pt-2">
                         <label className="mb-4 block text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">Included Features</label>
                         <div className="grid grid-cols-2 gap-4">
@@ -152,7 +144,6 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                         <Button className="w-full" variant="outline" onClick={() => {
                             setIsModalOpen(false);
                             setNewClientName('');
-                            setNewClientEmail('');
                         }}>Cancel</Button>
                         <Button className="w-full" onClick={handleSubmit}>Create Space</Button>
                     </div>

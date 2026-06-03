@@ -1,30 +1,35 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Archive,
     CalendarDays,
     CheckCircle2,
-    Clock3,
-    Columns3,
+    ChevronDown,
     Flag,
-    LayoutList,
+    ListFilter,
+    MessageSquare,
     Plus,
-    Search,
-    SlidersHorizontal,
-    Sparkles,
-    Workflow
+    Send,
+    UserRound,
+    UsersRound,
+    X
 } from 'lucide-react';
-import { Button, GlassCard, Heading, Input, Modal, Text } from '../UI';
-import { ClientSpace, Task } from '../../types';
+import { Button, GlassCard, Heading, Input, Text } from '../UI';
+import { ClientSpace, SpaceTaskMember, Task, TaskStatusDefinition } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+import { apiService } from '../../services/apiService';
 
-type TaskViewMode = 'board' | 'list' | 'timeline' | 'calendar' | 'space';
+type TaskScopeFilter = 'my' | 'team' | 'assigned';
 
 type TaskDraft = {
     title: string;
     description: string;
     priority: NonNullable<Task['priority']>;
     due_date: string;
-    assigned_group: string;
     status: Task['status'];
     space_id: string;
+    assignee_id: string;
+    reviewer_id: string;
+    assigned_group: string;
 };
 
 type TaskWorkspaceProps = {
@@ -34,7 +39,6 @@ type TaskWorkspaceProps = {
     subtitle: string;
     scopeSpaceId?: string;
     groupOptions?: string[];
-    defaultView?: TaskViewMode;
     compact?: boolean;
     allowCreate?: boolean;
     loading?: boolean;
@@ -42,49 +46,86 @@ type TaskWorkspaceProps = {
     emptyDescription?: string;
     showToolbar?: boolean;
     showSummary?: boolean;
-    previewLimitPerColumn?: number;
     onCreateTask?: (draft: Partial<Task>) => Promise<void> | void;
     onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void> | void;
+    onArchiveTask?: (taskId: string) => Promise<void> | void;
+    onRequestReview?: (taskId: string, reviewerId: string) => Promise<void> | void;
+    onCompleteReview?: (taskId: string, approved: boolean, comment?: string) => Promise<void> | void;
+    onAddTaskComment?: (taskId: string, content: string) => Promise<Task | void> | Task | void;
     onOpenSpace?: (spaceId: string) => void;
 };
 
-const VIEW_OPTIONS: Array<{ id: TaskViewMode; label: string; icon: React.ReactNode }> = [
-    { id: 'board', label: 'Board', icon: <Columns3 size={14} /> },
-    { id: 'list', label: 'List', icon: <LayoutList size={14} /> },
-    { id: 'timeline', label: 'Timeline', icon: <Workflow size={14} /> },
-    { id: 'calendar', label: 'Calendar', icon: <CalendarDays size={14} /> },
-    { id: 'space', label: 'Space', icon: <Sparkles size={14} /> }
+const SCOPE_OPTIONS: Array<{ id: TaskScopeFilter; label: string; icon: React.ReactNode }> = [
+    { id: 'my', label: 'My work', icon: <UserRound size={14} /> },
+    { id: 'team', label: 'Team Work', icon: <UsersRound size={14} /> },
+    { id: 'assigned', label: 'Assigned', icon: <CheckCircle2 size={14} /> }
 ];
 
-const BOARD_COLUMNS: Array<{ id: Task['status']; label: string }> = [
-    { id: 'todo', label: 'To Do' },
-    { id: 'in_progress', label: 'In Progress' },
-    { id: 'review', label: 'Review' },
-    { id: 'done', label: 'Done' }
-];
+type DisplayStatus = Task['status'] | 'archived';
+type StatusGroup = { id: DisplayStatus; label: string; caption: string; position: number; color?: string };
 
-const PRIORITY_STYLES: Record<NonNullable<Task['priority']>, string> = {
-    low: 'border-zinc-200 bg-zinc-100 text-zinc-600',
-        medium: 'border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]',
-    high: 'border-orange-200 bg-orange-50 text-orange-700',
-    urgent: 'border-rose-200 bg-rose-50 text-rose-700'
-};
+const DEFAULT_STATUS_GROUPS: StatusGroup[] = [
+    { id: 'in_progress', label: 'In Progress', caption: 'Actively moving', position: 10 },
+    { id: 'todo', label: 'To Do', caption: 'Ready or waiting', position: 20 },
+    { id: 'review', label: 'Review', caption: 'Needs handoff', position: 30 },
+    { id: 'done', label: 'Done', caption: 'Completed', position: 40 },
+    { id: 'archived', label: 'Archived', caption: 'Stored out of active flow', position: 50 }
+];
 
 const STATUS_LABELS: Record<Task['status'], string> = {
     todo: 'To Do',
     pending: 'To Do',
     in_progress: 'In Progress',
     review: 'Review',
-    done: 'Done'
+    done: 'Done',
+    canceled: 'Canceled'
 };
 
+const PRIORITY_STYLES: Record<NonNullable<Task['priority']>, string> = {
+    none: 'border-zinc-200 bg-white text-zinc-500',
+    low: 'border-zinc-200 bg-zinc-100 text-zinc-600',
+    medium: 'border-[#E5E5E5] bg-[#F7F7F8] text-[#0D0D0D]',
+    high: 'border-orange-200 bg-orange-50 text-orange-700',
+    urgent: 'border-rose-200 bg-rose-50 text-rose-700'
+};
+
+const PRIORITY_DOTS: Record<NonNullable<Task['priority']>, string> = {
+    none: 'bg-white border border-zinc-300',
+    low: 'bg-zinc-300',
+    medium: 'bg-amber-300',
+    high: 'bg-orange-500',
+    urgent: 'bg-rose-600'
+};
+
+const STATUS_CATEGORY_CAPTIONS: Record<TaskStatusDefinition['category'], string> = {
+    triage: 'Needs sorting',
+    backlog: 'Planned later',
+    unstarted: 'Ready or waiting',
+    started: 'Actively moving',
+    review: 'Needs handoff',
+    completed: 'Completed',
+    canceled: 'Closed without action'
+};
+
+const MONTHS = Array.from({ length: 12 }, (_, index) => new Date(2026, index, 1).toLocaleString(undefined, { month: 'long' }));
+const MONTH_INDEXES = MONTHS.map((_, index) => index);
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 31 }, (_, index) => CURRENT_YEAR - 10 + index);
+const WHEEL_ITEM_HEIGHT = 34;
+
 function normalizeStatus(status?: string): Task['status'] {
-    if (status === 'in_progress' || status === 'review' || status === 'done') return status;
+    if (status === 'in_progress' || status === 'review' || status === 'done' || status === 'canceled') return status;
     return 'todo';
 }
 
+function getDisplayStatus(task: Task): DisplayStatus {
+    if (task.archived_at) return 'archived';
+    const status = normalizeStatus(task.status);
+    return status === 'canceled' ? 'archived' : status;
+}
+
 function normalizePriority(priority?: string): NonNullable<Task['priority']> {
-    if (priority === 'low' || priority === 'high' || priority === 'urgent') return priority;
+    if (priority === 'none' || priority === 'low' || priority === 'high' || priority === 'urgent') return priority;
     return 'medium';
 }
 
@@ -95,137 +136,217 @@ function formatDateLabel(value?: string) {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function isOverdue(task: Task) {
+    if (!task.due_date || normalizeStatus(task.status) === 'done') return false;
+    const due = new Date(task.due_date);
+    if (Number.isNaN(due.getTime())) return false;
+    due.setHours(23, 59, 59, 999);
+    return due.getTime() < Date.now();
+}
+
 function getSpaceName(clients: ClientSpace[], spaceId?: string) {
-    return clients.find((client) => client.id === spaceId)?.name || 'Unassigned';
+    return clients.find((client) => client.id === spaceId)?.name || 'No space';
 }
 
-function getTaskGroupLabel(task: Task, clients: ClientSpace[]) {
-    return task.assigned_group || getSpaceName(clients, task.space_id);
-}
-
-function makeDraft(task?: Task, scopeSpaceId?: string, fallbackGroup?: string): TaskDraft {
+function makeDraft(task?: Task, scopeSpaceId?: string): TaskDraft {
     return {
         title: task?.title || '',
         description: task?.description || '',
         priority: normalizePriority(task?.priority),
         due_date: task?.due_date || '',
-        assigned_group: task?.assigned_group || fallbackGroup || '',
         status: normalizeStatus(task?.status),
-        space_id: task?.space_id || scopeSpaceId || ''
+        space_id: task?.space_id || scopeSpaceId || '',
+        assignee_id: task?.assignee_id || '',
+        reviewer_id: task?.reviewer_id || '',
+        assigned_group: task?.assigned_group || ''
     };
 }
 
 function TaskBadge({ priority }: { priority: NonNullable<Task['priority']> }) {
     return (
-        <span className={`surface-chip px-2.5 py-1 text-[11px] font-medium ${PRIORITY_STYLES[priority]}`}>
-            {priority.charAt(0).toUpperCase() + priority.slice(1)}
+        <span className={`surface-chip px-2.5 py-1.5 text-[12px] font-medium ${PRIORITY_STYLES[priority]}`}>
+            <span className={`h-2 w-2 rounded-full ${PRIORITY_DOTS[priority]}`} />
+            {priority === 'none' ? 'No priority' : priority.charAt(0).toUpperCase() + priority.slice(1)}
         </span>
     );
 }
 
-function TaskCard({
-    task,
-    clients,
-    compact,
-    onClick,
-    onDragStart
-}: {
-    task: Task;
-    clients: ClientSpace[];
-    compact?: boolean;
-    onClick: () => void;
-    onDragStart?: (taskId: string) => void;
-}) {
+function PersonCell({ name, avatar, fallback }: { name?: string; avatar?: string; fallback: string }) {
     return (
-        <button
-            type="button"
-            draggable={!!onDragStart}
-            onDragStart={onDragStart ? () => onDragStart(task.id) : undefined}
-            onClick={onClick}
-            className={`database-row interactive-surface w-full p-3 text-left ${compact ? 'min-h-[92px]' : 'min-h-[146px]'}`}
-        >
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="line-clamp-2 text-[12px] font-medium text-[#0D0D0D]">{task.title}</p>
-                    {task.description && <p className="mt-1 line-clamp-2 text-[11px] text-[#6E6E80]">{task.description}</p>}
-                </div>
-                <TaskBadge priority={normalizePriority(task.priority)} />
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-[#6E6E80]">
-                <span className="surface-chip px-2.5 py-1">
-                    <Clock3 size={11} />
-                    {formatDateLabel(task.due_date)}
-                </span>
-                <span className="surface-chip px-2.5 py-1">
-                    <Sparkles size={11} />
-                    {getTaskGroupLabel(task, clients)}
-                </span>
-            </div>
-        </button>
+        <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0D0D0D] text-sm font-medium uppercase text-white">
+                {avatar ? <img src={avatar} alt="" className="h-full w-full rounded-full object-cover" /> : (name || fallback).charAt(0)}
+            </span>
+            <span className="truncate text-base text-[#0D0D0D]">{name || fallback}</span>
+        </div>
     );
 }
 
-function TaskBoard({
-    tasks,
-    clients,
-    compact,
-    previewLimitPerColumn,
-    onCardClick,
-    onDragStart,
-    onDropTask
+function getMemberLabel(member: SpaceTaskMember) {
+    const name = member.full_name || member.email || 'Unknown member';
+    const detail = member.member_type || member.context_role || member.role;
+    return detail ? `${name} (${detail})` : name;
+}
+
+function toDateParts(value?: string) {
+    const fallback = new Date();
+    if (!value) {
+        return {
+            day: fallback.getDate(),
+            month: fallback.getMonth(),
+            year: fallback.getFullYear()
+        };
+    }
+
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) {
+        return {
+            day: fallback.getDate(),
+            month: fallback.getMonth(),
+            year: fallback.getFullYear()
+        };
+    }
+
+    return { day, month: month - 1, year };
+}
+
+function toDateValue(day: number, month: number, year: number) {
+    const safeDay = Math.min(day, new Date(year, month + 1, 0).getDate());
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+}
+
+function WheelColumn({
+    label,
+    options,
+    value,
+    onChange,
+    getLabel = String
 }: {
-    tasks: Task[];
-    clients: ClientSpace[];
-    compact?: boolean;
-    previewLimitPerColumn?: number;
-    onCardClick: (task: Task) => void;
-    onDragStart: (taskId: string) => void;
-    onDropTask: (status: Task['status']) => void;
+    label: string;
+    options: number[];
+    value: number;
+    onChange: (value: number) => void;
+    getLabel?: (value: number) => string;
 }) {
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const scrollTimeoutRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        const index = Math.max(0, options.indexOf(value));
+        scrollRef.current?.scrollTo({ top: index * WHEEL_ITEM_HEIGHT, behavior: 'smooth' });
+    }, [options, value]);
+
+    useEffect(() => {
+        return () => {
+            if (scrollTimeoutRef.current) window.clearTimeout(scrollTimeoutRef.current);
+        };
+    }, []);
+
+    const handleScroll = () => {
+        if (scrollTimeoutRef.current) window.clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = window.setTimeout(() => {
+            const nextIndex = Math.round((scrollRef.current?.scrollTop || 0) / WHEEL_ITEM_HEIGHT);
+            const nextValue = options[Math.min(options.length - 1, Math.max(0, nextIndex))];
+            if (nextValue !== undefined && nextValue !== value) onChange(nextValue);
+        }, 80);
+    };
+
+    const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+        const target = scrollRef.current;
+        if (!target) return;
+
+        event.preventDefault();
+        target.scrollBy({
+            top: event.deltaY * 0.28,
+            behavior: 'smooth'
+        });
+    };
+
     return (
-        <div className={`grid gap-3 ${compact ? 'xl:grid-cols-4' : 'xl:grid-cols-4'}`}>
-            {BOARD_COLUMNS.map((column) => {
-                const items = tasks.filter((task) => normalizeStatus(task.status) === column.id);
-                const visibleItems = previewLimitPerColumn ? items.slice(0, previewLimitPerColumn) : items;
-                return (
-                    <div
-                        key={column.id}
-                        className={`flex flex-col rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-2.5 ${compact ? 'min-h-[220px]' : 'min-h-[320px]'}`}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={() => onDropTask(column.id)}
-                    >
-                        <div className="mb-2 flex items-center justify-between px-0.5">
-                            <div>
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#0D0D0D]">{column.label}</p>
-                                <p className="text-[10px] text-[#6E6E80]">{items.length} tasks</p>
-                            </div>
-                            <span className="surface-chip px-2 py-0.5 text-[10px] font-medium">{items.length}</span>
-                        </div>
-                        <div className="flex flex-1 flex-col gap-2">
-                            {visibleItems.map((task) => (
-                                <TaskCard
-                                    key={task.id}
-                                    task={task}
-                                    clients={clients}
-                                    compact={compact}
-                                    onDragStart={onDragStart}
-                                    onClick={() => onCardClick(task)}
-                                />
-                            ))}
-                            {items.length === 0 && (
-                                <div className="flex flex-1 items-center justify-center rounded-[8px] border border-dashed border-[#E5E5E5] bg-white/70 p-4 text-center text-xs text-[#6E6E80]">
-                                    Drop a task here
-                                </div>
-                            )}
-                            {previewLimitPerColumn && items.length > previewLimitPerColumn && (
-                                <div className="px-1 pt-1 text-[10px] text-[#6E6E80]">
-                                    +{items.length - previewLimitPerColumn} more
-                                </div>
-                            )}
-                        </div>
+        <div className="min-w-[108px] flex-1">
+            <p className="mb-1 text-center text-[10px] font-medium uppercase tracking-[0.14em] text-[#0D0D0D]">{label}</p>
+            <div className="relative h-[170px] overflow-hidden rounded-[8px] bg-transparent">
+                <div className="pointer-events-none absolute inset-x-2 top-1/2 z-10 h-[34px] -translate-y-1/2 rounded-full bg-transparent" />
+                <div
+                    ref={scrollRef}
+                    onScroll={handleScroll}
+                    onWheel={handleWheel}
+                    className="date-wheel-scroll relative z-20 h-full overflow-y-auto px-1 py-[68px]"
+                    aria-label={label}
+                >
+                    {options.map((option) => {
+                        const distance = Math.min(3, Math.abs(options.indexOf(value) - options.indexOf(option)));
+                        const opacity = distance === 0 ? 1 : Math.max(0.2, 0.66 - distance * 0.16);
+                        return (
+                            <button
+                                key={option}
+                                type="button"
+                                onClick={() => onChange(option)}
+                                className="date-wheel-item flex h-[34px] w-full snap-center items-center justify-center rounded-full text-[13px] transition-[color,opacity,transform] duration-150"
+                                style={{
+                                    opacity,
+                                    transform: distance === 0 ? 'scale(1)' : 'scale(0.94)',
+                                    color: '#0D0D0D',
+                                    fontWeight: distance === 0 ? 600 : 400
+                                }}
+                            >
+                                {getLabel(option)}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function WheelDatePicker({
+    value,
+    onChange
+}: {
+    value: string;
+    onChange: (value: string) => void;
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+    const selected = toDateParts(value);
+    const daysInMonth = new Date(selected.year, selected.month + 1, 0).getDate();
+    const days = useMemo(() => Array.from({ length: daysInMonth }, (_, index) => index + 1), [daysInMonth]);
+
+    const updateDate = (next: Partial<{ day: number; month: number; year: number }>) => {
+        onChange(toDateValue(next.day ?? selected.day, next.month ?? selected.month, next.year ?? selected.year));
+    };
+
+    return (
+        <div className="shrink-0">
+            <button
+                type="button"
+                onClick={() => setIsOpen((open) => !open)}
+                className="task-composer-pill inline-flex h-9 min-w-[136px] items-center gap-2 rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 text-left text-[12px] text-[#0D0D0D] outline-none transition hover:border-[#D4D4D8]"
+                aria-expanded={isOpen}
+            >
+                <CalendarDays size={13} className="text-[#6E6E80]" />
+                <span>{value ? formatDateLabel(value) : 'mm/dd/yyyy'}</span>
+            </button>
+            {isOpen && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/20 px-4" onClick={() => setIsOpen(false)}>
+                <div className="w-[360px] max-w-[calc(100vw-2rem)] rounded-[14px] border border-white/10 bg-[#FDFDFD] p-3 text-[#0D0D0D] shadow-[0_18px_48px_rgba(0,0,0,0.3)]" onClick={(event) => event.stopPropagation()}>
+                    <div className="mb-2 h-1 w-9 rounded-full bg-zinc-300 mx-auto" />
+                    <div className="grid grid-cols-3 gap-2">
+                        <WheelColumn label="Day" options={days} value={Math.min(selected.day, daysInMonth)} onChange={(day) => updateDate({ day })} />
+                        <WheelColumn label="Month" options={MONTH_INDEXES} value={selected.month} onChange={(month) => updateDate({ month })} getLabel={(month) => MONTHS[month]} />
+                        <WheelColumn label="Year" options={YEARS} value={selected.year} onChange={(year) => updateDate({ year })} />
                     </div>
-                );
-            })}
+                    <div className="mt-3 flex justify-between gap-2">
+                        <button type="button" className="rounded-full px-3 py-1.5 text-[12px] font-medium text-zinc-500 hover:bg-zinc-100" onClick={() => onChange('')}>
+                            Clear
+                        </button>
+                        <button type="button" className="rounded-full bg-[#0D0D0D] px-4 py-1.5 text-[12px] font-semibold text-white" onClick={() => setIsOpen(false)}>
+                            Done
+                        </button>
+                    </div>
+                </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -237,106 +358,287 @@ export default function TaskWorkspace({
     subtitle,
     scopeSpaceId,
     groupOptions,
-    defaultView = 'board',
     compact = false,
     allowCreate = true,
     loading = false,
     emptyTitle = 'No tasks yet',
     emptyDescription = 'Create your first task to start building momentum.',
     showToolbar = true,
-    showSummary = true,
-    previewLimitPerColumn,
+    showSummary = false,
     onCreateTask,
     onUpdateTask,
+    onArchiveTask,
+    onRequestReview,
+    onCompleteReview,
+    onAddTaskComment,
     onOpenSpace
 }: TaskWorkspaceProps) {
-    const [activeView, setActiveView] = useState<TaskViewMode>(defaultView);
-    const [search, setSearch] = useState('');
-    const [priorityFilter, setPriorityFilter] = useState<'all' | NonNullable<Task['priority']>>('all');
-    const [groupFilter, setGroupFilter] = useState('all');
-    const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+    void groupOptions;
+    void showSummary;
+    const { user } = useAuth();
+    const [scopeFilter, setScopeFilter] = useState<TaskScopeFilter>('team');
+    const [spaceFilter, setSpaceFilter] = useState(scopeSpaceId || 'all');
+    const [statusFilter, setStatusFilter] = useState<'all' | DisplayStatus>('all');
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const filterMenuRef = useRef<HTMLDivElement | null>(null);
     const [isComposerOpen, setIsComposerOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [draft, setDraft] = useState<TaskDraft>(() => makeDraft(undefined, scopeSpaceId));
     const [isSaving, setIsSaving] = useState(false);
+    const [availableMembers, setAvailableMembers] = useState<SpaceTaskMember[]>([]);
+    const [membersLoading, setMembersLoading] = useState(false);
+    const [membersError, setMembersError] = useState<string | null>(null);
+    const [taskStatuses, setTaskStatuses] = useState<TaskStatusDefinition[]>([]);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [detailError, setDetailError] = useState<string | null>(null);
+    const [reviewComment, setReviewComment] = useState('');
+    const [commentDraft, setCommentDraft] = useState('');
+    const [isCommentSaving, setIsCommentSaving] = useState(false);
+
+    const activeTaskSpaceId = scopeSpaceId || draft.space_id;
+    const statusScopeId = scopeSpaceId || (spaceFilter !== 'all' ? spaceFilter : undefined);
+
+    const statusGroups = useMemo(() => {
+        if (taskStatuses.length === 0) return DEFAULT_STATUS_GROUPS;
+
+        const byKey = new Map<DisplayStatus, StatusGroup>();
+        taskStatuses.forEach((status) => {
+            const key = normalizeStatus(status.status_key);
+            if (key === 'pending' || key === 'canceled' || byKey.has(key)) return;
+
+            byKey.set(key, {
+                id: key,
+                label: status.name || STATUS_LABELS[key],
+                caption: STATUS_CATEGORY_CAPTIONS[status.category] || STATUS_LABELS[key],
+                position: status.position,
+                color: status.color
+            });
+        });
+
+        const customGroups = Array.from(byKey.values()).sort((left, right) => left.position - right.position);
+        DEFAULT_STATUS_GROUPS.forEach((group) => {
+            if (!byKey.has(group.id)) customGroups.push(group);
+        });
+
+        return customGroups.length > 0 ? customGroups : DEFAULT_STATUS_GROUPS;
+    }, [taskStatuses]);
+
+    const editableStatusGroups = useMemo(
+        () => statusGroups.filter((group): group is StatusGroup & { id: Task['status'] } => group.id !== 'archived'),
+        [statusGroups]
+    );
 
     const visibleTasks = useMemo(() => {
         const base = scopeSpaceId ? tasks.filter((task) => task.space_id === scopeSpaceId) : tasks;
         return base.filter((task) => {
-            const group = getTaskGroupLabel(task, clients);
-            const searchText = `${task.title} ${task.description || ''} ${group}`.toLowerCase();
-            const matchesSearch = !search.trim() || searchText.includes(search.trim().toLowerCase());
-            const matchesPriority = priorityFilter === 'all' || normalizePriority(task.priority) === priorityFilter;
-            const matchesGroup = groupFilter === 'all' || group === groupFilter;
-            return matchesSearch && matchesPriority && matchesGroup;
+            const assignedToMe = task.assignee_id === user?.id;
+            const reviewedByMe = task.reviewer_id === user?.id;
+            const createdByMe = task.created_by === user?.id;
+
+            if (scopeFilter === 'my' && !assignedToMe && !reviewedByMe && !createdByMe) return false;
+            if (scopeFilter === 'assigned' && !task.assignee_id) return false;
+            if (spaceFilter !== 'all' && task.space_id !== spaceFilter) return false;
+            if (statusFilter !== 'all' && getDisplayStatus(task) !== statusFilter) return false;
+
+            return true;
         });
-    }, [clients, groupFilter, priorityFilter, scopeSpaceId, search, tasks]);
+    }, [scopeFilter, scopeSpaceId, spaceFilter, statusFilter, tasks, user?.id]);
 
-    const availableGroups = useMemo(() => {
-        const fromTasks = visibleTasks.map((task) => getTaskGroupLabel(task, clients)).filter(Boolean);
-        return Array.from(new Set([...(groupOptions || []), ...fromTasks]));
-    }, [clients, groupOptions, visibleTasks]);
+    const groupedTasks = useMemo(() => {
+        const groups = new Map<DisplayStatus, Task[]>();
+        statusGroups.forEach((group) => groups.set(group.id, []));
 
-    const sortedTasks = useMemo(() => {
-        return [...visibleTasks].sort((left, right) => {
-            const leftDate = left.due_date ? new Date(left.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-            const rightDate = right.due_date ? new Date(right.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-            return leftDate - rightDate;
+        visibleTasks.forEach((task) => {
+            const status = getDisplayStatus(task);
+            const target = groups.get(status === 'pending' ? 'todo' : status) || [];
+            target.push(task);
+            groups.set(status === 'pending' ? 'todo' : status, target);
         });
-    }, [visibleTasks]);
 
-    const counts = useMemo(() => ({
-        open: sortedTasks.filter((task) => normalizeStatus(task.status) !== 'done').length,
-        dueSoon: sortedTasks.filter((task) => {
-            if (!task.due_date || normalizeStatus(task.status) === 'done') return false;
-            const due = new Date(task.due_date).getTime();
-            const now = Date.now();
-            const week = now + (7 * 24 * 60 * 60 * 1000);
-            return due >= now && due <= week;
-        }).length,
-        done: sortedTasks.filter((task) => normalizeStatus(task.status) === 'done').length
-    }), [sortedTasks]);
+        for (const [status, items] of groups.entries()) {
+            groups.set(status, [...items].sort((left, right) => {
+                const leftDue = left.due_date ? new Date(left.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+                const rightDue = right.due_date ? new Date(right.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+                if (leftDue !== rightDue) return leftDue - rightDue;
+                return new Date(right.updated_at || right.created_at || 0).getTime() - new Date(left.updated_at || left.created_at || 0).getTime();
+            }));
+        }
 
-    const calendarGroups = useMemo(() => {
-        const map = new Map<string, Task[]>();
-        sortedTasks.forEach((task) => {
-            const key = task.due_date || 'No due date';
-            const next = map.get(key) || [];
-            next.push(task);
-            map.set(key, next);
+        return statusGroups.map((group) => ({ ...group, tasks: groups.get(group.id) || [] }));
+    }, [statusGroups, visibleTasks]);
+
+    useEffect(() => {
+        let isCurrent = true;
+
+        apiService.listTaskStatuses(statusScopeId)
+            .then(({ data, error }) => {
+                if (!isCurrent) return;
+                setTaskStatuses(error ? [] : data || []);
+            })
+            .catch(() => {
+                if (isCurrent) setTaskStatuses([]);
+            });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [statusScopeId]);
+
+    const selectableMembers = useMemo(() => {
+        const byId = new Map<string, SpaceTaskMember>();
+        availableMembers.forEach((member) => {
+            if (member.user_id) byId.set(member.user_id, member);
         });
-        return Array.from(map.entries());
-    }, [sortedTasks]);
 
-    const tasksBySpace = useMemo(() => {
-        return clients
-            .map((client) => ({ client, tasks: sortedTasks.filter((task) => task.space_id === client.id) }))
-            .filter((entry) => entry.tasks.length > 0);
-    }, [clients, sortedTasks]);
+        if (editingTask?.assignee_id && !byId.has(editingTask.assignee_id)) {
+            byId.set(editingTask.assignee_id, {
+                user_id: editingTask.assignee_id,
+                membership_id: editingTask.assignee_id,
+                full_name: editingTask.assignee_name || 'Current assignee',
+                avatar_url: editingTask.assignee_avatar,
+                status: 'existing'
+            });
+        }
+
+        if (editingTask?.reviewer_id && !byId.has(editingTask.reviewer_id)) {
+            byId.set(editingTask.reviewer_id, {
+                user_id: editingTask.reviewer_id,
+                membership_id: editingTask.reviewer_id,
+                full_name: editingTask.reviewer_name || 'Current reviewer',
+                avatar_url: editingTask.reviewer_avatar,
+                status: 'existing'
+            });
+        }
+
+        return Array.from(byId.values());
+    }, [availableMembers, editingTask]);
+
+    useEffect(() => {
+        if (!isComposerOpen || !activeTaskSpaceId) {
+            setAvailableMembers([]);
+            setMembersError(null);
+            setMembersLoading(false);
+            return;
+        }
+
+        let isCurrent = true;
+        setMembersLoading(true);
+        setMembersError(null);
+
+        apiService.listTaskAssignees(activeTaskSpaceId)
+            .then(({ data, error }) => {
+                if (!isCurrent) return;
+                if (error) {
+                setAvailableMembers([]);
+                setMembersError(error.message || 'Could not load members');
+                return;
+            }
+                setAvailableMembers(data || []);
+            })
+            .catch((error) => {
+                if (!isCurrent) return;
+                setAvailableMembers([]);
+                setMembersError(error?.message || 'Could not load members');
+            })
+            .finally(() => {
+                if (isCurrent) setMembersLoading(false);
+            });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [activeTaskSpaceId, isComposerOpen]);
+
+    useEffect(() => {
+        if (!isFilterOpen) return;
+
+        const handlePointerDown = (event: PointerEvent) => {
+            if (!filterMenuRef.current?.contains(event.target as Node)) {
+                setIsFilterOpen(false);
+            }
+        };
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setIsFilterOpen(false);
+        };
+
+        document.addEventListener('pointerdown', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isFilterOpen]);
+
+    useEffect(() => {
+        if (!isComposerOpen || !editingTask?.id) {
+            setDetailLoading(false);
+            setDetailError(null);
+            return;
+        }
+
+        let isCurrent = true;
+        setDetailLoading(true);
+        setDetailError(null);
+
+        apiService.getTaskDetail(editingTask.id)
+            .then(({ data, error }) => {
+                if (!isCurrent) return;
+                if (error) {
+                    setDetailError(error.message || 'Could not load task detail');
+                    return;
+                }
+                if (data) {
+                    setEditingTask((current) => current?.id === editingTask.id ? { ...current, ...data } : current);
+                }
+            })
+            .catch((error) => {
+                if (isCurrent) setDetailError(error?.message || 'Could not load task detail');
+            })
+            .finally(() => {
+                if (isCurrent) setDetailLoading(false);
+            });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [editingTask?.id, isComposerOpen]);
 
     const openCreate = () => {
         setEditingTask(null);
-        setDraft(makeDraft(undefined, scopeSpaceId, availableGroups[0]));
+        setDraft(makeDraft(undefined, scopeSpaceId));
+        setReviewComment('');
+        setCommentDraft('');
+        setDetailError(null);
+        setDetailLoading(false);
         setIsComposerOpen(true);
     };
 
     const openEdit = (task: Task) => {
         setEditingTask(task);
-        setDraft(makeDraft(task, scopeSpaceId, availableGroups[0]));
+        setDraft(makeDraft(task, scopeSpaceId));
+        setReviewComment('');
+        setCommentDraft('');
+        setDetailError(null);
         setIsComposerOpen(true);
     };
 
     const handleSave = async () => {
         if (!draft.title.trim()) return;
+        if (!scopeSpaceId && !draft.space_id) return;
+
         setIsSaving(true);
-        const payload: Partial<Task> = {
+        const payload: Partial<Task> & Record<string, unknown> = {
             title: draft.title.trim(),
-            description: draft.description.trim() || undefined,
+            description: draft.description.trim() || null,
             priority: draft.priority,
-            due_date: draft.due_date || undefined,
-            assigned_group: draft.assigned_group || undefined,
+            due_date: draft.due_date || null,
             status: draft.status,
-            space_id: scopeSpaceId || draft.space_id || undefined
+            space_id: scopeSpaceId || draft.space_id,
+            assignee_id: draft.assignee_id || null,
+            reviewer_id: draft.reviewer_id || null,
+            assigned_group: draft.assigned_group || null
         };
 
         try {
@@ -351,114 +653,426 @@ export default function TaskWorkspace({
         }
     };
 
-    const handleDrop = async (status: Task['status']) => {
-        if (!draggingTaskId || !onUpdateTask) return;
-        const task = tasks.find((item) => item.id === draggingTaskId);
-        setDraggingTaskId(null);
-        if (!task || normalizeStatus(task.status) === status) return;
-        await onUpdateTask(task.id, { status });
+    const handleArchive = async () => {
+        if (!editingTask || !onArchiveTask) return;
+
+        setIsSaving(true);
+        try {
+            await onArchiveTask(editingTask.id);
+            setIsComposerOpen(false);
+        } finally {
+            setIsSaving(false);
+        }
     };
+
+    const handleRequestReview = async () => {
+        if (!editingTask || !draft.reviewer_id || !onRequestReview) return;
+
+        setIsSaving(true);
+        try {
+            await onRequestReview(editingTask.id, draft.reviewer_id);
+            setDraft((current) => ({ ...current, status: 'review' }));
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleCompleteReview = async (approved: boolean) => {
+        if (!editingTask || !onCompleteReview) return;
+
+        setIsSaving(true);
+        try {
+            await onCompleteReview(editingTask.id, approved, reviewComment.trim() || undefined);
+            setIsComposerOpen(false);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleAddComment = async () => {
+        if (!editingTask || !onAddTaskComment || !commentDraft.trim()) return;
+
+        setIsCommentSaving(true);
+        try {
+            const updatedTask = await onAddTaskComment(editingTask.id, commentDraft.trim());
+            if (updatedTask) {
+                setEditingTask(updatedTask);
+                setDraft(makeDraft(updatedTask, scopeSpaceId));
+            }
+            setCommentDraft('');
+        } finally {
+            setIsCommentSaving(false);
+        }
+    };
+
+    const canSave = Boolean(draft.title.trim()) && Boolean(scopeSpaceId || draft.space_id);
+    const memberSelectDisabled = !activeTaskSpaceId || membersLoading;
+    const canRequestReview = Boolean(editingTask && onRequestReview && draft.reviewer_id && draft.status !== 'review');
+    const canCompleteReview = Boolean(editingTask && onCompleteReview && normalizeStatus(draft.status) === 'review');
+    const activeFilterCount = (spaceFilter !== 'all' && !scopeSpaceId ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0);
 
     return (
         <>
             <div className="space-y-5">
                 <div className={`flex flex-col gap-4 ${compact ? '' : 'xl:flex-row xl:items-end xl:justify-between'}`}>
                     <div className="space-y-2">
-                        <div className="surface-chip px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em]">
-                            <Flag size={12} />
+                        <div className="surface-chip px-3.5 py-1.5 text-xs font-medium uppercase tracking-[0.14em]">
+                            <Flag size={14} />
                             Task System
                         </div>
                         <div>
-                            <Heading level={compact ? 4 : 2} className={compact ? 'text-xl md:text-2xl' : ''}>{title}</Heading>
+                            <Heading level={compact ? 4 : 2} className={compact ? 'text-2xl md:text-3xl' : ''}>{title}</Heading>
                             <Text variant="secondary" size="sm" className="mt-1 max-w-2xl">{subtitle}</Text>
                         </div>
                     </div>
-                    {showSummary && (
-                        <div className="flex flex-wrap gap-3">
-                            <GlassCard className="min-w-[96px] px-3 py-2.5"><p className="text-[10px] uppercase tracking-[0.18em] text-[#6E6E80]">Open</p><p className="mt-1 text-xl font-semibold text-[#0D0D0D]">{counts.open}</p></GlassCard>
-                            <GlassCard className="min-w-[96px] px-3 py-2.5"><p className="text-[10px] uppercase tracking-[0.18em] text-[#6E6E80]">Due Soon</p><p className="mt-1 text-xl font-semibold text-[#0D0D0D]">{counts.dueSoon}</p></GlassCard>
-                            <GlassCard className="min-w-[96px] px-3 py-2.5"><p className="text-[10px] uppercase tracking-[0.18em] text-[#6E6E80]">Done</p><p className="mt-1 text-xl font-semibold text-[#0D0D0D]">{counts.done}</p></GlassCard>
-                            {allowCreate && <Button className="h-auto rounded-[8px] px-4 py-2.5 text-sm" onClick={openCreate}><Plus size={14} className="mr-2" />Add Task</Button>}
-                        </div>
+                    {allowCreate && (
+                        <Button className="h-auto rounded-full px-4 py-2.5 text-[13px]" onClick={openCreate}>
+                            <Plus size={14} className="mr-2" />
+                            Add Task
+                        </Button>
                     )}
                 </div>
 
-                <GlassCard className="rounded-[8px] p-4 md:p-5">
+                <GlassCard className="rounded-[8px] p-5 md:p-7">
                     <div className="flex flex-col gap-4">
                         {showToolbar && (
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                                 <div className="flex flex-wrap gap-2">
-                                    {VIEW_OPTIONS.map((view) => (
-                                        <button key={view.id} type="button" onClick={() => setActiveView(view.id)} className={`surface-chip px-3 py-2 text-xs font-medium transition-all ${activeView === view.id ? 'surface-chip-active' : ''}`}>{view.icon}{view.label}</button>
+                                    {SCOPE_OPTIONS.map((option) => (
+                                        <button
+                                            key={option.id}
+                                            type="button"
+                                            onClick={() => setScopeFilter(option.id)}
+                                            className={`surface-chip px-3 py-1.5 text-[13px] font-semibold transition-all ${scopeFilter === option.id ? 'surface-chip-active' : ''}`}
+                                        >
+                                            {option.icon}
+                                            {option.label}
+                                        </button>
                                     ))}
                                 </div>
-                                <div className="flex flex-col gap-3 md:flex-row">
-                                    <div className="relative min-w-[240px]">
-                                        <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#6E6E80]" />
-                                        <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search task title or group" className="rounded-[8px] pl-10 pr-4" />
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <select title="Filter by priority" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)} className="rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-2 text-sm text-[#0D0D0D] outline-none">
-                                            <option value="all">All priorities</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
-                                        </select>
-                                        <select title="Filter by group" value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)} className="rounded-[8px] border border-[#E5E5E5] bg-white px-4 py-2 text-sm text-[#0D0D0D] outline-none">
-                                            <option value="all">All groups</option>
-                                            {availableGroups.map((group) => <option key={group} value={group}>{group}</option>)}
-                                        </select>
+
+                                <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                                    <div ref={filterMenuRef} className="relative flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsFilterOpen((current) => !current)}
+                                            className={`group flex h-9 items-center overflow-hidden rounded-full border border-[#E5E5E5] bg-white text-[13px] font-semibold text-[#0D0D0D] shadow-sm transition-all duration-300 ease-out hover:w-[92px] hover:px-3 ${isFilterOpen ? 'w-[92px] px-3' : 'w-9 px-0'}`}
+                                            aria-expanded={isFilterOpen}
+                                            aria-label="Filter tasks"
+                                        >
+                                            <span className="flex w-9 shrink-0 items-center justify-center">
+                                                <ListFilter size={15} strokeWidth={2.4} />
+                                            </span>
+                                            <span className={`whitespace-nowrap transition-all duration-200 ${isFilterOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                                Filter{activeFilterCount > 0 ? ` ${activeFilterCount}` : ''}
+                                            </span>
+                                        </button>
+
+                                        {isFilterOpen && (
+                                            <div className="absolute right-0 top-11 z-20 w-[300px] overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white shadow-[0_18px_48px_rgba(15,15,20,0.14)] transition-all duration-300">
+                                                <div className="flex items-center justify-between border-b border-[#EFEFEF] px-3 py-2">
+                                                    <div className="flex items-center gap-2 text-[13px] font-semibold text-[#0D0D0D]">
+                                                        <ListFilter size={14} strokeWidth={2.4} />
+                                                        Filter
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsFilterOpen(false)}
+                                                        className="rounded-[8px] p-1.5 text-[#6E6E80] transition hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                                                        aria-label="Close filters"
+                                                        title="Close filters"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                                {!scopeSpaceId && (
+                                                    <div className="border-b border-[#EFEFEF] p-2">
+                                                        <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A8A93]">Space</p>
+                                                        <button type="button" onClick={() => setSpaceFilter('all')} className={`flex w-full rounded-[8px] px-2 py-1.5 text-left text-[13px] ${spaceFilter === 'all' ? 'bg-[#F7F7F8] font-semibold text-[#0D0D0D]' : 'text-[#4B4B55] hover:bg-[#FAFAFA]'}`}>
+                                                            All spaces
+                                                        </button>
+                                                        {clients.map((client) => (
+                                                            <button
+                                                                key={client.id}
+                                                                type="button"
+                                                                onClick={() => setSpaceFilter(client.id)}
+                                                                className={`flex w-full rounded-[8px] px-2 py-1.5 text-left text-[13px] ${spaceFilter === client.id ? 'bg-[#F7F7F8] font-semibold text-[#0D0D0D]' : 'text-[#4B4B55] hover:bg-[#FAFAFA]'}`}
+                                                            >
+                                                                <span className="truncate">{client.name}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className="p-2">
+                                                    <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A8A93]">Status</p>
+                                                    <button type="button" onClick={() => setStatusFilter('all')} className={`flex w-full rounded-[8px] px-2 py-1.5 text-left text-[13px] ${statusFilter === 'all' ? 'bg-[#F7F7F8] font-semibold text-[#0D0D0D]' : 'text-[#4B4B55] hover:bg-[#FAFAFA]'}`}>
+                                                        All statuses
+                                                    </button>
+                                                    {statusGroups.map((group) => (
+                                                        <button
+                                                            key={group.id}
+                                                            type="button"
+                                                            onClick={() => setStatusFilter(group.id)}
+                                                            className={`flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left text-[13px] ${statusFilter === group.id ? 'bg-[#F7F7F8] font-semibold text-[#0D0D0D]' : 'text-[#4B4B55] hover:bg-[#FAFAFA]'}`}
+                                                        >
+                                                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: group.color || '#A1A1AA' }} />
+                                                            <span>{group.label}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                         )}
 
                         {loading ? (
-                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-40 animate-pulse rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8]" />)}</div>
-                        ) : sortedTasks.length === 0 ? (
-                            <div className="flex min-h-[280px] flex-col items-center justify-center rounded-[8px] border border-dashed border-[#E5E5E5] bg-[#f7f7f8] px-6 py-12 text-center">
-                                <SlidersHorizontal size={28} className="mb-4 text-[#D4D4D8]" />
+                            <div className="space-y-3">
+                                {Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-12 animate-pulse rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8]" />)}
+                            </div>
+                        ) : visibleTasks.length === 0 ? (
+                            <div className="flex min-h-[240px] flex-col items-center justify-center rounded-[8px] border border-dashed border-[#E5E5E5] bg-[#f7f7f8] px-6 py-12 text-center">
+                                <CheckCircle2 size={28} className="mb-4 text-[#D4D4D8]" />
                                 <p className="text-base font-medium text-[#0D0D0D]">{emptyTitle}</p>
                                 <p className="mt-2 max-w-sm text-sm text-[#6E6E80]">{emptyDescription}</p>
                             </div>
-                        ) : activeView === 'board' ? (
-                            <TaskBoard
-                                tasks={sortedTasks}
-                                clients={clients}
-                                compact={compact}
-                                previewLimitPerColumn={compact ? 1 : undefined}
-                                onCardClick={openEdit}
-                                onDragStart={setDraggingTaskId}
-                                onDropTask={(status) => void handleDrop(status)}
-                            />
-                        ) : activeView === 'list' ? (
-                            <div className="space-y-3">{sortedTasks.map((task) => <button key={task.id} type="button" onClick={() => openEdit(task)} className="grid w-full gap-4 rounded-[24px] border border-zinc-200 bg-white px-4 py-4 text-left transition hover:border-zinc-300 md:grid-cols-[minmax(0,1.5fr)_150px_160px_160px]"><div><p className="text-sm font-medium text-zinc-950">{task.title}</p>{task.description && <p className="mt-1 line-clamp-1 text-xs text-zinc-500">{task.description}</p>}</div><div><p className="mb-1 text-xs uppercase tracking-[0.14em] text-zinc-400">Status</p><p className="text-sm text-zinc-800">{STATUS_LABELS[normalizeStatus(task.status)]}</p></div><div><p className="mb-1 text-xs uppercase tracking-[0.14em] text-zinc-400">Due</p><p className="text-sm text-zinc-800">{formatDateLabel(task.due_date)}</p></div><div className="flex items-center justify-between gap-3"><TaskBadge priority={normalizePriority(task.priority)} /><span className="text-xs text-zinc-500">{getTaskGroupLabel(task, clients)}</span></div></button>)}</div>
-                        ) : activeView === 'timeline' ? (
-                            <div className="space-y-5">{sortedTasks.map((task) => <button key={task.id} type="button" onClick={() => openEdit(task)} className="flex w-full items-center justify-between rounded-[24px] border border-zinc-200 bg-white px-5 py-4 text-left transition hover:border-zinc-300"><div><p className="text-sm font-medium text-zinc-950">{task.title}</p><p className="mt-1 text-xs text-zinc-500">{formatDateLabel(task.due_date)} · {STATUS_LABELS[normalizeStatus(task.status)]} · {getTaskGroupLabel(task, clients)}</p></div><TaskBadge priority={normalizePriority(task.priority)} /></button>)}</div>
-                        ) : activeView === 'calendar' ? (
-                            <div className="space-y-3">{calendarGroups.map(([label, groupTasks]) => <GlassCard key={label} className="rounded-[24px] p-4"><div className="mb-3 flex items-center justify-between"><p className="text-sm font-medium text-zinc-950">{label === 'No due date' ? label : formatDateLabel(label)}</p><p className="text-xs text-zinc-500">{groupTasks.length} tasks</p></div><div className="space-y-2">{groupTasks.map((task) => <button key={task.id} type="button" onClick={() => openEdit(task)} className="flex w-full items-center justify-between rounded-2xl bg-[#f7f7f8] px-4 py-3 text-left transition hover:bg-zinc-100"><div><p className="text-sm font-medium text-zinc-950">{task.title}</p><p className="mt-1 text-xs text-zinc-500">{STATUS_LABELS[normalizeStatus(task.status)]} · {getTaskGroupLabel(task, clients)}</p></div><TaskBadge priority={normalizePriority(task.priority)} /></button>)}</div></GlassCard>)}</div>
                         ) : (
-                            <div className="grid gap-4 xl:grid-cols-2">{tasksBySpace.map(({ client, tasks: clientTasks }) => <GlassCard key={client.id} className="rounded-[28px] p-5"><div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-lg font-medium text-zinc-950">{client.name}</p><p className="text-sm text-zinc-500">{clientTasks.length} tasks across all stages</p></div>{onOpenSpace && <Button variant="ghost" size="sm" onClick={() => onOpenSpace(client.id)}>Open Space</Button>}</div><div className="space-y-3">{clientTasks.slice(0, 4).map((task) => <button key={task.id} type="button" onClick={() => openEdit(task)} className="flex w-full items-center justify-between rounded-2xl bg-[#f7f7f8] px-4 py-3 text-left transition hover:bg-zinc-100"><div><p className="text-sm font-medium text-zinc-950">{task.title}</p><p className="mt-1 text-xs text-zinc-500">{STATUS_LABELS[normalizeStatus(task.status)]} · {formatDateLabel(task.due_date)}</p></div><TaskBadge priority={normalizePriority(task.priority)} /></button>)}</div></GlassCard>)}</div>
+                            <div className="task-list-shell overflow-hidden rounded-[8px] border bg-white">
+                                {groupedTasks.map((group) => {
+                                    const isCollapsed = collapsedGroups[group.id];
+                                    return (
+                                        <section key={group.id} className="task-list-section border-b last:border-b-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCollapsedGroups((current) => ({ ...current, [group.id]: !current[group.id] }))}
+                                                className="flex w-full items-center justify-between gap-4 bg-[#F7F7F8] px-4 py-2 text-left"
+                                            >
+                                                <div className="flex min-w-0 items-center gap-2">
+                                                    <ChevronDown size={13} className={`text-[#6E6E80] transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                                                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: group.color || '#A1A1AA' }} />
+                                                    <p className="truncate text-[13px] font-semibold text-[#0D0D0D]">{group.label}</p>
+                                                    <p className="hidden truncate text-[12px] text-[#8A8A93] sm:block">{group.caption}</p>
+                                                </div>
+                                                <span className="surface-chip px-2 py-0.5 text-[11px]">{group.tasks.length}</span>
+                                            </button>
+
+                                            {!isCollapsed && (
+                                                <div className="task-list-rows divide-y">
+                                                    {group.tasks.map((task) => (
+                                                        <button
+                                                            key={task.id}
+                                                            type="button"
+                                                            onClick={() => openEdit(task)}
+                                                            className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-1.5 pl-[54px] pr-4 text-left transition hover:bg-[#FAFAFA]"
+                                                        >
+                                                            <div className="min-w-0">
+                                                                <span className="block truncate text-[13px] font-normal leading-5 text-[#0D0D0D]">{task.title || 'Untitled task'}</span>
+                                                            </div>
+                                                            <span className={`task-date-pill inline-flex shrink-0 items-center justify-center rounded-full border-2 bg-transparent px-2.5 py-0.5 text-[12px] leading-4 ${isOverdue(task) ? 'text-rose-700' : task.due_date ? 'text-[#4B4B55]' : 'text-[#8A8A93]'}`}>
+                                                                {formatDateLabel(task.due_date)}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </section>
+                                    );
+                                })}
+                            </div>
                         )}
                     </div>
                 </GlassCard>
             </div>
 
-            <Modal isOpen={isComposerOpen} onClose={() => !isSaving && setIsComposerOpen(false)} title={editingTask ? 'Edit Task' : 'Add Task'}>
-                <div className="space-y-4">
-                    <Input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Task title" />
-                    <textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} placeholder="Description" className="min-h-[120px] w-full rounded-2xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none" />
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <select title="Task priority" value={draft.priority} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as TaskDraft['priority'] }))} className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 outline-none"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option></select>
-                        <Input type="date" value={draft.due_date} onChange={(event) => setDraft((current) => ({ ...current, due_date: event.target.value }))} />
-                        <select title="Assigned group" value={draft.assigned_group} onChange={(event) => setDraft((current) => ({ ...current, assigned_group: event.target.value }))} className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 outline-none"><option value="">Assigned group</option>{availableGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select>
-                        <select title="Task status" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as Task['status'] }))} className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 outline-none">{BOARD_COLUMNS.map((column) => <option key={column.id} value={column.id}>{column.label}</option>)}</select>
-                    </div>
-                    {!scopeSpaceId && <select title="Linked space" value={draft.space_id} onChange={(event) => setDraft((current) => ({ ...current, space_id: event.target.value }))} className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 outline-none"><option value="">Linked space</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>}
-                    <div className="flex items-center justify-between rounded-2xl bg-[#f7f7f8] px-4 py-3"><div><p className="text-sm font-medium text-zinc-900">Views available</p><p className="text-xs text-zinc-500">Board, List, Timeline, Calendar, and Space grouping.</p></div><CheckCircle2 size={18} className="text-zinc-400" /></div>
-                    <div className="flex gap-3">
-                        <Button variant="secondary" className="flex-1 rounded-2xl" onClick={() => setIsComposerOpen(false)} disabled={isSaving}>Cancel</Button>
-                        <Button className="flex-1 rounded-2xl" onClick={() => void handleSave()} disabled={isSaving || !draft.title.trim()}>{isSaving ? 'Saving...' : editingTask ? 'Save Changes' : 'Create Task'}</Button>
+            {isComposerOpen && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/25 px-4 py-6">
+                    <div className="task-composer-light flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white text-[#0D0D0D] shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
+                        <div className="flex items-center justify-between gap-4 border-b border-[#EFEFEF] px-4 py-3">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <span className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-2.5 py-1 text-xs font-medium text-[#4B4B55]">
+                                    {editingTask ? STATUS_LABELS[normalizeStatus(editingTask.status)] : 'New task'}
+                                </span>
+                                {editingTask?.archived_at && <span className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-2.5 py-1 text-xs text-[#6E6E80]">Archived</span>}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => !isSaving && setIsComposerOpen(false)}
+                                className="rounded-[8px] p-2 text-[#6E6E80] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                                title="Close task"
+                                aria-label="Close task"
+                            >
+                                <X size={17} />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto px-5 py-5 md:px-6">
+                            <div className="space-y-5">
+                                <input
+                                    value={draft.title}
+                                    onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                                    placeholder="Task title"
+                                    className="task-page-title w-full border-0 bg-transparent text-[22px] font-semibold leading-8 text-[#0D0D0D] outline-none placeholder:text-[#8A8A93]"
+                                />
+                                <textarea
+                                    value={draft.description}
+                                    onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+                                    placeholder="Add description..."
+                                    className="task-page-description min-h-[112px] w-full resize-none border-0 bg-transparent text-[14px] leading-6 text-[#4B4B55] outline-none placeholder:text-[#8A8A93]"
+                                />
+
+                                <div className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+                                    <select title="Task status" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as Task['status'] }))} className="task-composer-pill h-9 shrink-0 rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 text-[12px] text-[#0D0D0D] outline-none">
+                                        {editableStatusGroups.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
+                                    </select>
+                                    <select title="Task priority" value={draft.priority} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as TaskDraft['priority'] }))} className="task-composer-pill h-9 shrink-0 rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 text-[12px] text-[#0D0D0D] outline-none">
+                                        <option value="none">No priority</option>
+                                        <option value="low">Low</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                        <option value="urgent">Urgent</option>
+                                    </select>
+                                    <WheelDatePicker value={draft.due_date} onChange={(dueDate) => setDraft((current) => ({ ...current, due_date: dueDate }))} />
+                                    <Input value={draft.assigned_group} onChange={(event) => setDraft((current) => ({ ...current, assigned_group: event.target.value }))} placeholder="Group" className="task-composer-pill h-9 w-[150px] shrink-0 rounded-full border-[#E5E5E5] bg-[#F7F7F8] px-3 text-[12px] text-[#0D0D0D] placeholder:text-[#8A8A93]" />
+                                </div>
+
+                                <div className="task-page-properties grid gap-x-6 gap-y-1 md:grid-cols-2">
+                                    {!scopeSpaceId && (
+                                        <label className="task-property-row">
+                                            <span className="task-property-label">Space</span>
+                                            <select
+                                                title="Linked space"
+                                                value={draft.space_id}
+                                                onChange={(event) => setDraft((current) => ({
+                                                    ...current,
+                                                    space_id: event.target.value,
+                                                    assignee_id: '',
+                                                    reviewer_id: ''
+                                                }))}
+                                                className="task-property-control"
+                                            >
+                                                <option value="">Linked space required</option>
+                                                {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+                                            </select>
+                                        </label>
+                                    )}
+                                    <label className="task-property-row">
+                                        <span className="task-property-label">Assignee</span>
+                                        <select
+                                            title="Assignee"
+                                            value={draft.assignee_id}
+                                            onChange={(event) => setDraft((current) => ({ ...current, assignee_id: event.target.value }))}
+                                            disabled={memberSelectDisabled}
+                                            className="task-property-control disabled:text-zinc-500"
+                                        >
+                                            <option value="">{membersLoading ? 'Loading members...' : 'Unassigned'}</option>
+                                            {selectableMembers.map((member) => (
+                                                <option key={member.user_id} value={member.user_id}>{getMemberLabel(member)}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <label className="task-property-row">
+                                        <span className="task-property-label">Reviewer</span>
+                                        <select
+                                            title="Reviewer"
+                                            value={draft.reviewer_id}
+                                            onChange={(event) => setDraft((current) => ({ ...current, reviewer_id: event.target.value }))}
+                                            disabled={memberSelectDisabled}
+                                            className="task-property-control disabled:text-zinc-500"
+                                        >
+                                            <option value="">{membersLoading ? 'Loading members...' : 'No reviewer'}</option>
+                                            {selectableMembers.map((member) => (
+                                                <option key={member.user_id} value={member.user_id}>{getMemberLabel(member)}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <div className="task-property-row">
+                                        <span className="task-property-label">Details</span>
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-[#0D0D0D]">
+                                            <span>{getSpaceName(clients, draft.space_id || editingTask?.space_id)}</span>
+                                            <TaskBadge priority={draft.priority} />
+                                            {(editingTask?.comment_count || editingTask?.comments?.length || 0) > 0 && (
+                                                <span className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-2.5 py-1.5">
+                                                    <MessageSquare size={13} />
+                                                    {editingTask?.comment_count || editingTask?.comments?.length}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {membersError && <p className="rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{membersError}</p>}
+                                {detailError && <p className="rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{detailError}</p>}
+
+                                {editingTask && (canRequestReview || canCompleteReview) && (
+                                    <div className="space-y-3 rounded-[8px] border border-[#E5E5E5] bg-[#FAFAFA] p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="text-sm font-medium text-[#0D0D0D]">{canCompleteReview ? 'Finish review' : 'Review handoff'}</p>
+                                            {canRequestReview && (
+                                                <Button variant="secondary" className="rounded-full" onClick={() => void handleRequestReview()} disabled={isSaving || !draft.reviewer_id}>
+                                                    Request
+                                                </Button>
+                                            )}
+                                        </div>
+                                        {canCompleteReview && (
+                                            <>
+                                                <textarea value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} placeholder="Review note" className="min-h-[88px] w-full rounded-[8px] border border-[#E5E5E5] bg-white px-3 py-2.5 text-sm text-[#0D0D0D] outline-none placeholder:text-[#8A8A93]" />
+                                                <div className="grid gap-2 sm:grid-cols-2">
+                                                    <Button variant="secondary" className="rounded-full" onClick={() => void handleCompleteReview(false)} disabled={isSaving}>Send Back</Button>
+                                                    <Button className="rounded-full" onClick={() => void handleCompleteReview(true)} disabled={isSaving}><CheckCircle2 size={14} className="mr-2" />Approve</Button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+
+                                {editingTask && (
+                                    <div className="space-y-3 rounded-[8px] border border-[#E5E5E5] bg-[#FAFAFA] p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="text-sm font-medium text-[#0D0D0D]">Comments</p>
+                                            <span className="text-xs text-[#6E6E80]">{editingTask.comment_count || editingTask.comments?.length || 0}</span>
+                                        </div>
+                                        {detailLoading && <div className="h-10 animate-pulse rounded-[8px] bg-[#EFEFEF]" />}
+                                        {!detailLoading && (editingTask.comments || []).slice(-3).map((comment) => (
+                                            <div key={comment.id} className="rounded-[8px] bg-white p-3">
+                                                <div className="mb-1 flex items-center justify-between gap-3">
+                                                    <p className="truncate text-xs font-medium text-[#4B4B55]">{comment.author_name || 'Member'}</p>
+                                                    <p className="shrink-0 text-xs text-[#6E6E80]">{comment.created_at ? formatDateLabel(comment.created_at) : ''}</p>
+                                                </div>
+                                                <p className="whitespace-pre-wrap text-sm text-[#0D0D0D]">{comment.content}</p>
+                                            </div>
+                                        ))}
+                                        {!detailLoading && (editingTask.comments || []).length === 0 && <p className="text-sm text-[#6E6E80]">No comments yet.</p>}
+                                        {onAddTaskComment && (
+                                            <div className="flex gap-2">
+                                                <input value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} placeholder="Add a comment" className="task-composer-input min-w-0 flex-1 rounded-[8px] border border-[#E5E5E5] bg-white px-3 py-2.5 text-sm text-[#0D0D0D] outline-none placeholder:text-[#8A8A93]" />
+                                                <Button className="rounded-full" onClick={() => void handleAddComment()} disabled={isCommentSaving || !commentDraft.trim()}>
+                                                    <Send size={14} />
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFEFEF] px-4 py-3">
+                            <div className="flex gap-2">
+                                {editingTask && onArchiveTask && !editingTask.archived_at && (
+                                    <Button variant="secondary" className="rounded-full" onClick={() => void handleArchive()} disabled={isSaving}>
+                                        <Archive size={14} className="mr-2" />
+                                        Archive
+                                    </Button>
+                                )}
+                            </div>
+                            <div className="flex gap-2">
+                                <Button variant="secondary" className="rounded-full px-5" onClick={() => setIsComposerOpen(false)} disabled={isSaving}>Cancel</Button>
+                                <Button className="rounded-full px-5" onClick={() => void handleSave()} disabled={isSaving || !canSave}>{isSaving ? 'Saving...' : editingTask ? 'Save' : 'Create Task'}</Button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </Modal>
+            )}
         </>
     );
 }

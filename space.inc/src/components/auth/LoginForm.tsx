@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button, Input } from '../UI';
-import { apiService } from '../../services/apiService';
-
 export const LoginForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) => {
     const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
     const [email, setEmail] = useState('');
@@ -22,12 +20,6 @@ export const LoginForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) =
             if (authMode === 'login') {
                 const { error } = await signIn(email, password);
                 if (error) throw error;
-                // Accept invitation after login if invite_token is in URL
-                const params = new URLSearchParams(window.location.search);
-                const inviteToken = params.get('invite_token');
-                if (inviteToken) {
-                    await apiService.acceptInvitation(inviteToken);
-                }
             } else {
                 const { error } = await signUp(email, password, {
                     full_name: fullName,

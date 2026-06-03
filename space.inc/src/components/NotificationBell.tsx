@@ -59,7 +59,7 @@ export const NotificationBell: React.FC = () => {
     const userId = user?.id;
     const unreadFilter = useMemo(() => {
         if (!userId) return '';
-        return `or(recipient_id.eq.${userId},user_id.eq.${userId})`;
+        return `recipient_id.eq.${userId},user_id.eq.${userId}`;
     }, [userId]);
 
     const fetchUnreadCount = useCallback(async () => {
@@ -280,7 +280,7 @@ export const NotificationBell: React.FC = () => {
                                                         {title}
                                                     </p>
                                                     <p className="mt-1 line-clamp-2 text-[12px] text-[#6E6E80]">
-                                                        {excerpt || '—'}
+                                                        {excerpt || '-'}
                                                     </p>
                                                 </div>
                                                 <span className="ml-2 whitespace-nowrap text-[10px] text-[#6E6E80]">

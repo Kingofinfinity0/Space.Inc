@@ -10,20 +10,7 @@ export enum ViewState {
   STAFF = 'STAFF',
   SETTINGS = 'SETTINGS',
   ACTIVITY_LEDGER = 'ACTIVITY_LEDGER',
-  CLIENTS = 'CLIENTS',
-  INVITATIONS = 'INVITATIONS'
-}
-
-export interface Invitation {
-  id: string;
-  email: string;
-  role: string;
-  status: 'pending' | 'accepted' | 'expired' | 'revoked';
-  expires_at: string;
-  created_at: string;
-  invited_by: string;
-  token?: string;
-  type: 'staff' | 'client';
+  CLIENTS = 'CLIENTS'
 }
 
 export interface ClientSpace {
@@ -43,10 +30,25 @@ export interface ClientSpace {
   version?: number;
   onboarding_state?: any;
   archive_reason?: string;
+  closed_at?: string | null;
+  closed_by?: string | null;
+  closure_reason?: string | null;
   organization_id: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
+}
+
+export interface OrgTeamPolicies {
+  organization_id?: string;
+  max_spaces_per_member?: number | null;
+  messaging_enabled: boolean;
+  meetings_enabled: boolean;
+  file_uploads_enabled: boolean;
+  max_file_size_mb: number;
+  custom_roles_enabled: boolean;
+  updated_by?: string | null;
+  updated_at?: string | null;
 }
 
 export interface Meeting {
@@ -92,13 +94,24 @@ export interface Recording {
   meeting_id: string;
   daily_recording_id: string;
   file_path?: string;
+  storage_path?: string;
   file_size?: number;
+  file_size_bytes?: number;
   duration_seconds?: number;
   status: 'processing' | 'ready' | 'error';
   download_url?: string;
+  signed_url?: string;
   thumbnail_url?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  user_ids?: string[];
+  names?: string[];
+  reacted_by_me?: boolean;
 }
 
 export interface Message {
@@ -110,12 +123,17 @@ export interface Message {
   senderName?: string;
   senderAvatar?: string;
   content: string;
-  channel?: 'general' | 'internal';
-  extension?: 'text' | 'file' | 'system' | 'chat';
+  channel?: string;
+  channelId?: string | null;
+  extension?: 'text' | 'file' | 'image' | 'system' | 'chat';
   payload?: any;
   parentId?: string;
   threadRootId?: string;
   replyCount?: number;
+  reactions?: MessageReaction[];
+  readByMe?: boolean;
+  isMentioned?: boolean;
+  mentionedUserIds?: string[];
   editedAt?: string | null;
   deletedAt?: string | null;
   createdAt: string;
@@ -142,19 +160,72 @@ export interface StaffSpaceCapability {
   allowed: boolean;
 }
 
+export interface SpaceTaskMember {
+  user_id: string;
+  membership_id: string;
+  full_name: string;
+  email?: string;
+  avatar_url?: string;
+  role?: string;
+  context_role?: string;
+  member_type?: 'staff' | 'client' | string;
+  status?: string;
+  is_active?: boolean;
+}
+
+export interface TaskStatusDefinition {
+  id: string;
+  space_id: string;
+  status_key: Task['status'];
+  name: string;
+  category: 'triage' | 'backlog' | 'unstarted' | 'started' | 'review' | 'completed' | 'canceled';
+  color: string;
+  position: number;
+  is_default: boolean;
+  is_terminal: boolean;
+  is_actionable: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ClientLifecycle {
   id: string;
   org_id: string;
+  organization_id?: string;
   client_id: string;
   full_name: string;
   avatar_url?: string;
   lifecycle_stage: 'invited' | 'activated' | 'engaged' | 'at_risk' | 'churned';
   onboarding_score: number;
+  health_score?: number;
+  health_label?: 'healthy' | 'warning' | 'at-risk' | 'critical' | 'unknown' | string;
   last_activity_at: string;
   message_count: number;
   file_count: number;
   meeting_count: number;
   is_active: boolean;
+  created_at?: string;
+  joined_at?: string;
+  company_name?: string;
+  contact_email?: string;
+  lead_consultant_name?: string;
+  lead_consultant_email?: string;
+  model_type?: 'retainer' | 'project' | 'paused' | 'offboarded' | string;
+  active_spaces?: number;
+  contract_started_at?: string;
+  health_factors?: Array<{
+    key?: string;
+    label: string;
+    weight: number;
+    value: number;
+  }>;
+  audit_events?: Array<{
+    title: string;
+    body: string;
+    category: string;
+    created_at?: string;
+    actor_name?: string;
+  }>;
 }
 
 export interface DataExport {
@@ -171,11 +242,39 @@ export interface Task {
   title: string;
   description?: string;
   due_date?: string;
-  status: 'todo' | 'pending' | 'in_progress' | 'review' | 'done';
+  start_date?: string;
+  status: 'todo' | 'pending' | 'in_progress' | 'review' | 'done' | 'canceled';
   space_id?: string;
   assignee_id?: string;
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  assignee_name?: string;
+  assignee_avatar?: string;
+  reviewer_id?: string;
+  reviewer_name?: string;
+  reviewer_avatar?: string;
+  creator_name?: string;
+  priority?: 'none' | 'low' | 'medium' | 'high' | 'urgent';
   assigned_group?: string;
+  task_number?: number;
+  task_key?: string;
+  parent_task_id?: string | null;
+  estimate_points?: number | null;
+  estimate_hours?: number | null;
+  archived_at?: string | null;
+  archived_by?: string | null;
+  deleted_at?: string | null;
+  sort_order?: number | null;
+  labels?: Array<{ id: string; name: string; color: string }>;
+  subtask_count?: number;
+  comment_count?: number;
+  watcher_count?: number;
+  relation_count?: number;
+  comments?: any[];
+  activity?: any[];
+  relations?: any[];
+  subtasks?: Task[];
+  attachments?: any[];
+  watchers?: any[];
+  created_by?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -211,6 +310,15 @@ export type PermissionMap = {
   view_files?: boolean;
   upload_files?: boolean;
   manage_tasks?: boolean;
+  view_task?: boolean;
+  create_task?: boolean;
+  update_task?: boolean;
+  assign_task?: boolean;
+  comment_task?: boolean;
+  manage_labels?: boolean;
+  manage_workflow?: boolean;
+  archive_task?: boolean;
+  delete_task?: boolean;
   message_clients?: boolean;
   schedule_meetings?: boolean;
   delete_own_files?: boolean;

@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
 import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
 import { Calendar, Activity, FileText, MessageSquare, Sparkles } from 'lucide-react';
-import { ClientSpace, Meeting, Message, Task } from '../../types';
+import { ClientLifecycle, ClientSpace, Meeting, Message, SpaceFile, StaffMember, Task } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/apiService';
 import TaskWorkspace from '../tasks/TaskWorkspace';
@@ -13,15 +13,30 @@ import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'rec
 
 type OwnerDashboardProps = {
     clients: ClientSpace[];
+    staff?: StaffMember[];
+    clientLifecycle?: ClientLifecycle[];
     messages: Message[];
     meetings: Meeting[];
     tasks: Task[];
+    files?: SpaceFile[];
     profile: any;
     onJoin: (id: string) => void;
     onInstantMeet?: () => void;
+    onCreateSpace?: (data: any) => Promise<void> | void;
+    onScheduleMeeting?: (data: any) => Promise<void> | void;
     onCreateTask: (task: Partial<Task>) => Promise<void> | void;
     onUpdateTask: (id: string, updates: Partial<Task>) => Promise<void> | void;
+    onRequestReview?: (taskId: string, reviewerId: string) => Promise<void> | void;
+    onCompleteReview?: (taskId: string, approved: boolean, comment?: string) => Promise<void> | void;
+    onAddTaskComment?: (taskId: string, content: string) => Promise<Task | void> | Task | void;
     onGoToSpace?: (spaceId: string) => void;
+    onGoToSpaces?: () => void;
+    onGoToClients?: () => void;
+    onGoToStaff?: () => void;
+    onGoToMeetings?: () => void;
+    onGoToFiles?: () => void;
+    onGoToTasks?: () => void;
+    onRefreshData?: () => Promise<void> | void;
 };
 
 function timeAgo(dateStr?: string) {
@@ -44,6 +59,9 @@ export default function OwnerDashboardView({
     onJoin,
     onCreateTask,
     onUpdateTask,
+    onRequestReview,
+    onCompleteReview,
+    onAddTaskComment,
     onGoToSpace
 }: OwnerDashboardProps) {
     const { user, organizationId } = useAuth();
@@ -131,6 +149,18 @@ export default function OwnerDashboardView({
         load();
     }, [organizationId, showToast, user]);
 
+    const markAllNotificationsRead = async () => {
+        if (!user?.id || !organizationId) return;
+
+        await supabase
+            .from('notifications')
+            .update({ read: true, read_at: new Date().toISOString() })
+            .eq('organization_id', organizationId)
+            .or(`recipient_id.eq.${user.id},user_id.eq.${user.id}`);
+
+        setNotifications([]);
+    };
+
     return (
         <div className="space-y-5 page-enter">
             <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -153,7 +183,7 @@ export default function OwnerDashboardView({
                             <Text variant="secondary" className="text-[9px] font-semibold uppercase tracking-[0.18em]">{metric.label}</Text>
                             <span className="indicator-dot" data-tone={metric.tone} />
                         </div>
-                        <div className="mt-2 text-[28px] font-semibold leading-none text-[#0D0D0D]">
+                        <div className="dashboard-number mt-2 text-[28px] leading-none text-[#0D0D0D]">
                             {loading ? <SkeletonLoader width="40px" height="24px" /> : metric.value}
                         </div>
                     </GlassCard>
@@ -217,11 +247,11 @@ export default function OwnerDashboardView({
                                                 <div className="flex items-center gap-3">
                                                     <div className="min-w-[44px] text-center">
                                                         <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">{startTime.toLocaleString('en-US', { month: 'short' })}</p>
-                                                        <p className="text-lg font-semibold text-[#0D0D0D]">{startTime.getDate()}</p>
+                                                        <p className="dashboard-number text-lg text-[#0D0D0D]">{startTime.getDate()}</p>
                                                     </div>
                                                     <div>
                                                         <p className="text-sm font-semibold text-[#0D0D0D]">{meeting.title}</p>
-                                                        <p className="text-xs text-[#6E6E80]">{meeting.space_name} · {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                        <p className="text-xs text-[#6E6E80]">{meeting.space_name} - {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                                     </div>
                                                 </div>
                                                 {canJoin && <Button variant="primary" size="sm" className="h-8 px-3 text-xs" onClick={() => onJoin(meeting.id)}>Join</Button>}
@@ -240,11 +270,14 @@ export default function OwnerDashboardView({
                         compact
                         showToolbar={false}
                         showSummary={false}
-                        title="Task Management"
+                        title="Tasks"
                         subtitle="Weekly command view for active work."
                         groupOptions={['Design', 'Engineering', 'Marketing']}
                         onCreateTask={onCreateTask}
                         onUpdateTask={onUpdateTask}
+                        onRequestReview={onRequestReview}
+                        onCompleteReview={onCompleteReview}
+                        onAddTaskComment={onAddTaskComment}
                         onOpenSpace={goToSpace}
                         emptyTitle="No tasks in motion"
                         emptyDescription="Create the first task from the overview and it will show up across every connected space."
@@ -255,10 +288,7 @@ export default function OwnerDashboardView({
                     <GlassCard className="p-4">
                         <div className="mb-3 flex items-center justify-between">
                             <Heading level={3} className="text-lg">Inbox</Heading>
-                            <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={async () => {
-                                await supabase.from('notifications').update({ is_read: true }).eq('user_id', user?.id);
-                                setNotifications([]);
-                            }}>
+                            <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={markAllNotificationsRead}>
                                 Mark all read
                             </Button>
                         </div>

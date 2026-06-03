@@ -78,7 +78,7 @@ export const MeetingDetailsPanel: React.FC<{ meetingId: string; onClose?: () => 
             try {
                 let loadedMeeting: MeetingDetails | null = null;
 
-                const { data: rpcData, error: rpcError } = await supabase.rpc('get_meeting_details', {
+                const { data: rpcData, error: rpcError } = await supabase.rpc('get_meeting_detail', {
                     p_meeting_id: meetingId
                 });
 
