@@ -9,7 +9,7 @@ const corsHeaders = {
 const BATCH_LIMIT = 50;
 const MAX_RETRY_COUNT = 5;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const FRONTEND_URL = Deno.env.get("FRONTEND_URL") ?? "https://nexus-portal.inc";
+const FRONTEND_URL = Deno.env.get("FRONTEND_URL") ?? "https://vero.inc";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -295,7 +295,7 @@ async function sendInvitationEmail(event: NotificationEvent) {
             "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            from: "SpaceInc <noreply@nexus-portal.inc>",
+            from: "Vero <noreply@vero.inc>",
             to: [email],
             subject: `You've been invited to join as ${role}`,
             html: `

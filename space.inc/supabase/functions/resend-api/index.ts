@@ -19,8 +19,8 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FRONTEND_URL   = Deno.env.get("FRONTEND_URL") ?? "https://space-inc.vercel.app";
 
 // From address — update once you verify a domain in Resend dashboard.
-// e.g. "Space.inc <invites@yourdomain.com>"
-const FROM_ADDRESS = "Space.inc <onboarding@resend.dev>";
+// e.g. "Vero <invites@yourdomain.com>"
+const FROM_ADDRESS = "Vero <onboarding@resend.dev>";
 
 // ── Template variable renderer ────────────────────────────────────────────────
 function render(template: string, vars: Record<string, string>): string {
@@ -98,7 +98,7 @@ serve(async (req: Request) => {
     const allVars: Record<string, string> = {
       invite_link:  inviteLink,
       inviter_name: vars.inviter_name ?? "Your team",
-      org_name:     vars.org_name ?? "Space.inc",
+      org_name:     vars.org_name ?? "Vero",
       role:         vars.role ?? "member",
       ...vars,
     };

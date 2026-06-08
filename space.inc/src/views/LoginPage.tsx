@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Heading, Text, GlassCard } from '@/components/UI/index';
-import { Rocket, Shield, ArrowRight, UserPlus } from 'lucide-react';
+import { Shield, ArrowRight, UserPlus } from 'lucide-react';
+import { VeroMark } from '@/components/brand/VeroLogo';
 import { getSafeInviteRedirect } from '@/lib/inviteRedirect';
 import InviteAuthSwitcher from './InviteAuthSwitcher';
 
@@ -54,9 +55,9 @@ export default function LoginPage() {
                 <GlassCard className="p-8 md:p-10">
                     <div className="mb-10 flex items-center justify-center gap-3">
                         <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-black text-white">
-                            <Rocket size={18} />
+                            <VeroMark tone="light" className="h-6 w-6" />
                         </div>
-                        <span className="text-lg font-semibold tracking-[-0.03em] text-[#0D0D0D]">Space.inc</span>
+                        <span className="text-lg font-semibold tracking-[-0.03em] text-[#0D0D0D]">Vero</span>
                     </div>
 
                     <div className="mb-8 text-center">

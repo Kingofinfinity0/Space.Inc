@@ -1,6 +1,7 @@
 import React from 'react';
-import { ArrowRight, MailCheck } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Button, Heading, Text } from '@/components/UI';
+import { VeroMark } from '@/components/brand/VeroLogo';
 
 export type InvitationDetails = {
   id: string;
@@ -28,9 +29,9 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ invitation, onJo
       <div className="mb-8 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-[#0D0D0D] text-white">
-            <MailCheck size={20} />
+            <VeroMark tone="light" className="h-7 w-7" />
           </div>
-          <span className="text-sm font-semibold text-[#0D0D0D]">Space.inc</span>
+          <span className="text-sm font-semibold text-[#0D0D0D]">Vero</span>
         </div>
         <span className="rounded-full border border-[#E6E6EB] bg-[#F7F7F8] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6E6E80]">
           Invite

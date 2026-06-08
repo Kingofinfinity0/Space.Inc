@@ -15,8 +15,7 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
-    GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
-    SkeletonLoader, SkeletonCard, SkeletonText, SkeletonImage
+    GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle
 } from '../UI/index';
 import { FileViewerModal } from '../FileViewerModal';
 import { FileUploadModal } from '../FileUploadModal';

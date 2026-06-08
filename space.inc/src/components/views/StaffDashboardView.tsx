@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
-import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
+import { GlassCard, Button, Heading, Text, LoadingScreen, useLoadingScreenGate } from '../UI/index';
 import { Calendar, Activity, FileText, MessageSquare, ListTodo, Video } from 'lucide-react';
 import { ClientSpace, Meeting, Message, Task } from '../../types';
 import { apiService } from '../../services/apiService';
@@ -119,6 +119,19 @@ export default function StaffDashboardView({
         loadData();
     }, [organizationId, showToast, user]);
 
+    const loadingGate = useLoadingScreenGate(loading);
+
+    if (loadingGate.isVisible) {
+        return (
+            <LoadingScreen
+                key={loadingGate.cycleKey}
+                message="Loading overview..."
+                isComplete={loadingGate.isComplete}
+                onExitComplete={loadingGate.handleExitComplete}
+            />
+        );
+    }
+
     return (
         <div className="space-y-6">
             <header className="mb-8 flex items-end justify-between">
@@ -131,23 +144,23 @@ export default function StaffDashboardView({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">My Spaces</Text>
-                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.activeSpaces}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{displayAnalytics.activeSpaces}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Clients Active (7d)</Text>
-                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.activeClients}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{displayAnalytics.activeClients}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Messages (7d)</Text>
-                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.totalMessagesWeek}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{displayAnalytics.totalMessagesWeek}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Meetings (Month)</Text>
-                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.meetingsMonth}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{displayAnalytics.meetingsMonth}</div>
                 </GlassCard>
                 <GlassCard className="p-4">
                     <Text variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Files (Month)</Text>
-                    <div className="dashboard-number mt-1 text-2xl">{loading ? <SkeletonLoader width="40px" height="24px" /> : displayAnalytics.filesMonth}</div>
+                    <div className="dashboard-number mt-1 text-2xl">{displayAnalytics.filesMonth}</div>
                 </GlassCard>
             </div>
 
@@ -173,9 +186,7 @@ export default function StaffDashboardView({
 
                     <GlassCard className="p-6">
                         <Heading level={3} className="mb-6">Upcoming Schedule</Heading>
-                        {loading ? (
-                            <div className="space-y-3"><SkeletonLoader height="60px" borderRadius="12px" /></div>
-                        ) : upcomingMeetings.length === 0 ? (
+                        {upcomingMeetings.length === 0 ? (
                             <div className="py-4 text-sm italic text-zinc-400">No upcoming meetings.</div>
                         ) : (
                             <div className="space-y-4">
@@ -218,9 +229,7 @@ export default function StaffDashboardView({
                                 Mark all read
                             </Button>
                         </div>
-                        {loading ? (
-                            <div className="space-y-3"><SkeletonLoader height="50px" borderRadius="10px" /></div>
-                        ) : notifications.length === 0 ? (
+                        {notifications.length === 0 ? (
                             <div className="py-10 text-center">
                                 <Activity className="mx-auto mb-2 text-zinc-200" size={32} />
                                 <p className="text-xs italic text-zinc-400">Inbox is clear.</p>

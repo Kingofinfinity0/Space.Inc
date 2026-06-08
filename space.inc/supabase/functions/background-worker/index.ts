@@ -14,7 +14,7 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const DAILY_API_KEY = Deno.env.get("DAILY_API_KEY") ?? "";
 const FRONTEND_URL = Deno.env.get("FRONTEND_URL") ?? "https://space-inc.vercel.app";
 const BATCH_SIZE = 10;
-const FROM_ADDRESS = "Space.inc <onboarding@resend.dev>";
+const FROM_ADDRESS = "Vero <onboarding@resend.dev>";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function renderTemplate(template: string, vars: Record<string, string>): string {
@@ -74,7 +74,7 @@ serve(async (req: Request) => {
                     const vars = {
                         invite_link: `${FRONTEND_URL}/invite/${p.token}`,
                         inviter_name: inviter?.full_name ?? "Your team",
-                        org_name: org?.name ?? "Space.inc",
+                        org_name: org?.name ?? "Vero",
                         role: p.role ?? "member",
                     };
 

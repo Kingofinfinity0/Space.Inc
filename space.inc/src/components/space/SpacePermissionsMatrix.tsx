@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Save, Settings, SlidersHorizontal, X } from 'lucide-react';
 import { apiService } from '../../services/apiService';
-import { Button } from '../UI';
+import { Button, LoadingScreen, useLoadingScreenGate } from '../UI';
 
 const PERMISSION_COLUMNS = [
     { key: 'Chat messaging', label: 'Chat' },
@@ -29,6 +29,7 @@ export function SpacePermissionsMatrix({ spaceId, compact = false, className = '
     const [error, setError] = useState<string | null>(null);
     const [editorUserId, setEditorUserId] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const loadingGate = useLoadingScreenGate(loading);
 
     const loadMatrix = async () => {
         setLoading(true);
@@ -115,6 +116,17 @@ export function SpacePermissionsMatrix({ spaceId, compact = false, className = '
         }));
     };
 
+    if (loadingGate.isVisible) {
+        return (
+            <LoadingScreen
+                key={loadingGate.cycleKey}
+                message="Loading permissions..."
+                isComplete={loadingGate.isComplete}
+                onExitComplete={loadingGate.handleExitComplete}
+            />
+        );
+    }
+
     return (
         <>
         <section className={`flex flex-col overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white ${className}`}>
@@ -150,13 +162,7 @@ export function SpacePermissionsMatrix({ spaceId, compact = false, className = '
 
             {compact ? (
                 <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                    {loading ? (
-                        <div className="space-y-2">
-                            {[0, 1, 2].map((item) => (
-                                <div key={item} className="h-14 animate-pulse rounded-[8px] bg-[#F7F7F8]" />
-                            ))}
-                        </div>
-                    ) : members.length === 0 ? (
+                    {members.length === 0 ? (
                         <p className="rounded-[8px] border border-dashed border-[#E5E5E5] p-4 text-sm text-[#6E6E80]">No client members to configure.</p>
                     ) : (
                         <div>

@@ -3,6 +3,7 @@ import { User, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { apiService } from '../../services/apiService';
 import { useAuth } from '../../contexts/AuthContext';
+import { LoadingScreen, useLoadingScreenGate } from '../UI';
 
 type PresenceMember = {
     member_id: string;
@@ -50,6 +51,7 @@ export function SpaceMemberPanel({ spaceId, compact = false, className = '' }: {
     const { user } = useAuth();
     const [members, setMembers] = useState<PresenceMember[]>([]);
     const [loading, setLoading] = useState(true);
+    const loadingGate = useLoadingScreenGate(loading);
 
     useEffect(() => {
         let cancelled = false;
@@ -122,12 +124,13 @@ export function SpaceMemberPanel({ spaceId, compact = false, className = '' }: {
             </div>
 
             <div className={`min-h-0 flex-1 px-4 py-1.5 ${compact ? 'overflow-y-auto' : ''}`}>
-                {loading ? (
-                    <div className="space-y-2 py-2">
-                        {[0, 1, 2].map((item) => (
-                            <div key={item} className="h-10 animate-pulse rounded-[8px] bg-[#F7F7F8]" />
-                        ))}
-                    </div>
+                {loadingGate.isVisible ? (
+                    <LoadingScreen
+                        key={loadingGate.cycleKey}
+                        message="Loading members..."
+                        isComplete={loadingGate.isComplete}
+                        onExitComplete={loadingGate.handleExitComplete}
+                    />
                 ) : visibleMembers.length > 0 ? (
                     <div className="divide-y divide-[#F0F0F1]">
                         {visibleMembers.map((member) => {

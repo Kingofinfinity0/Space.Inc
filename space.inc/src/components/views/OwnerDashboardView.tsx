@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { friendlyError } from '../../utils/errors';
-import { GlassCard, Button, Heading, Text, SkeletonLoader } from '../UI/index';
+import { GlassCard, Button, Heading, Text, LoadingScreen, useLoadingScreenGate } from '../UI/index';
 import { Calendar, Activity, FileText, MessageSquare, Sparkles } from 'lucide-react';
 import { ClientLifecycle, ClientSpace, Meeting, Message, SpaceFile, StaffMember, Task } from '../../types';
 import { useNavigate } from 'react-router-dom';
@@ -161,6 +161,19 @@ export default function OwnerDashboardView({
         setNotifications([]);
     };
 
+    const loadingGate = useLoadingScreenGate(loading);
+
+    if (loadingGate.isVisible) {
+        return (
+            <LoadingScreen
+                key={loadingGate.cycleKey}
+                message="Loading overview..."
+                isComplete={loadingGate.isComplete}
+                onExitComplete={loadingGate.handleExitComplete}
+            />
+        );
+    }
+
     return (
         <div className="space-y-5 page-enter">
             <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -184,7 +197,7 @@ export default function OwnerDashboardView({
                             <span className="indicator-dot" data-tone={metric.tone} />
                         </div>
                         <div className="dashboard-number mt-2 text-[28px] leading-none text-[#0D0D0D]">
-                            {loading ? <SkeletonLoader width="40px" height="24px" /> : metric.value}
+                            {metric.value}
                         </div>
                     </GlassCard>
                 ))}
@@ -233,9 +246,7 @@ export default function OwnerDashboardView({
                                     Live view
                                 </span>
                             </div>
-                            {loading ? (
-                                <div className="space-y-2"><SkeletonLoader height="52px" borderRadius="10px" /></div>
-                            ) : upcomingMeetings.length === 0 ? (
+                            {upcomingMeetings.length === 0 ? (
                                 <div className="py-4 text-sm italic text-[#6E6E80]">No upcoming meetings scheduled.</div>
                             ) : (
                                 <div className="space-y-2">
@@ -292,9 +303,7 @@ export default function OwnerDashboardView({
                                 Mark all read
                             </Button>
                         </div>
-                        {loading ? (
-                            <div className="space-y-2"><SkeletonLoader height="48px" borderRadius="10px" /></div>
-                        ) : notifications.length === 0 ? (
+                        {notifications.length === 0 ? (
                             <div className="py-8 text-center">
                                 <Activity className="mx-auto mb-2 text-[#D4D4D8]" size={24} />
                                 <p className="text-xs italic text-[#6E6E80]">Inbox is clear.</p>

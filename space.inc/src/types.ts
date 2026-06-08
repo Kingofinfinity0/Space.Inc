@@ -17,6 +17,12 @@ export interface ClientSpace {
   id: string;
   name: string;
   description?: string;
+  metadata?: {
+    space_type?: 'retainer' | 'project' | string;
+    work_model?: 'retainer' | 'project' | string;
+    lead_consultant_name?: string;
+    [key: string]: any;
+  };
   invitation_token?: string;
   status: 'active' | 'onboarding' | 'archived' | 'closed';
   visibility: 'organization' | 'private';

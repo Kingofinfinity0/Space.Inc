@@ -48,7 +48,7 @@ export const LoginForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) =
                         {authMode === 'login' ? 'Welcome back' : 'Create your account'}
                     </h2>
                     <p className="text-[#565869] mt-2 text-sm">
-                        {authMode === 'login' ? 'Sign in to your Space.inc workspace' : 'Join the most minimalist workspace today'}
+                        {authMode === 'login' ? 'Sign in to your Vero workspace' : 'Join the most minimalist workspace today'}
                     </p>
                 </div>
 

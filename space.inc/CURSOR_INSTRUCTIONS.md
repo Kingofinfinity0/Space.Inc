@@ -1,6 +1,6 @@
-# Nexus Client Portal - Integration Guide for Cursor
+# Vero - Integration Guide for Cursor
 
-This document serves as the master instruction list for integrating the Nexus Client Portal with backend services.
+This document serves as the master instruction list for integrating Vero with backend services.
 
 ## Tech Stack Overview
 - **Frontend**: React (Vite), TailwindCSS, Lucide React
@@ -25,7 +25,7 @@ This document serves as the master instruction list for integrating the Nexus Cl
 - Implement "Sign In" for Staff.
 - **Invite Logic**: In `StaffView`, the "Generate Link" button should call a Supabase Edge Function (`invite-staff`) that:
   1. Creates a record in the `invitations` table.
-  2. Returns a URL like `app.nexus.com/join?token={token}`.
+  2. Returns a URL like `app.vero.inc/join?token={token}`.
   3. When the user visits this link, they sign up and are automatically added to the `profiles` table with the correct `role` and `organization_id`.
 
 **Task - Client Auth**:
@@ -78,7 +78,7 @@ This document serves as the master instruction list for integrating the Nexus Cl
 ## Phase 4: Files & Storage
 
 ### 1. Storage Bucket
-**Action**: Create a bucket named `nexus-assets` in Supabase Storage.
+**Action**: Create a bucket named `vero-assets` in Supabase Storage.
 **Policy**: Allow authenticated users to upload; allow public (or signed URL) read access.
 
 ### 2. Global vs Specific Logic

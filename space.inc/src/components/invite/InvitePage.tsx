@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, LogOut, MailCheck, ShieldAlert } from 'lucide-react';
-import { Button, Heading, Text } from '@/components/UI';
+import { ArrowRight, LogOut, ShieldAlert } from 'lucide-react';
+import { Button, Heading, LoadingScreen, Text, useLoadingScreenGate } from '@/components/UI';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAcceptInvitation, useInvitationByToken } from '@/hooks/useInvitationQueries';
+import { VeroMark } from '@/components/brand/VeroLogo';
 import {
   getInviteErrorCode,
   getInviteStatusErrorCode,
@@ -44,23 +45,6 @@ const getInviteRoleLabel = (invitation: InvitationDetails) => {
   return 'member';
 };
 
-const InviteLoading = () => (
-  <InviteShell>
-    <InviteCard>
-      <div className="mb-8 flex items-center justify-between gap-4">
-        <div className="h-10 w-10 animate-pulse rounded-[8px] bg-[#ECECF1]" />
-        <div className="h-6 w-20 animate-pulse rounded-full bg-[#ECECF1]" />
-      </div>
-      <div className="space-y-4">
-        <div className="h-4 w-36 animate-pulse rounded bg-[#ECECF1]" />
-        <div className="h-10 w-4/5 animate-pulse rounded bg-[#ECECF1]" />
-        <div className="h-6 w-2/3 animate-pulse rounded bg-[#ECECF1]" />
-      </div>
-      <div className="mt-8 h-11 w-full animate-pulse rounded-[8px] bg-[#ECECF1]" />
-    </InviteCard>
-  </InviteShell>
-);
-
 const InvalidInviteState: React.FC<{ message: string; accepted?: boolean }> = ({ message, accepted }) => (
   <InviteShell>
     <InviteCard>
@@ -93,9 +77,9 @@ const InviteHeader: React.FC = () => (
   <div className="mb-8 flex items-center justify-between gap-4">
     <div className="flex items-center gap-3">
       <div className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-[#0D0D0D] text-white">
-        <MailCheck size={20} />
+        <VeroMark tone="light" className="h-7 w-7" />
       </div>
-      <span className="text-sm font-semibold text-[#0D0D0D]">Space.inc</span>
+      <span className="text-sm font-semibold text-[#0D0D0D]">Vero</span>
     </div>
     <span className="rounded-full border border-[#E6E6EB] bg-[#F7F7F8] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6E6E80]">
       Invite
@@ -231,12 +215,22 @@ export const InvitePage: React.FC = () => {
   const { user, loading } = useAuth();
   const inviteQuery = useInvitationByToken(token);
   const returnPath = useMemo(() => `/invite/${encodeURIComponent(token)}`, [token]);
+  const loadingGate = useLoadingScreenGate(inviteQuery.isLoading || loading);
 
   if (!token) {
     return <InvalidInviteState message={inviteErrorMessages.INVITE_NOT_FOUND} />;
   }
 
-  if (inviteQuery.isLoading || loading) return <InviteLoading />;
+  if (loadingGate.isVisible) {
+    return (
+      <LoadingScreen
+        key={loadingGate.cycleKey}
+        message="Loading invitation..."
+        isComplete={loadingGate.isComplete}
+        onExitComplete={loadingGate.handleExitComplete}
+      />
+    );
+  }
 
   const queryErrorCode = getInviteErrorCode(inviteQuery.error);
   if (queryErrorCode) {

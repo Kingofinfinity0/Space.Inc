@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Link as LinkIcon, Search, UserPlus, Users, X } from 'lucide-react';
-import { Button, Text } from '@/components/UI';
+import { Button, LoadingScreen, Text, useLoadingScreenGate } from '@/components/UI';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiService } from '@/services/apiService';
 import type { StaffMember } from '@/types';
@@ -72,6 +72,7 @@ export const InviteMemberCard: React.FC<InviteMemberCardProps> = ({
   const [roleByEmail, setRoleByEmail] = useState<Record<string, 'member' | 'admin'>>({});
   const [rawToken, setRawToken] = useState(initialClientToken || '');
   const [teamNotice, setTeamNotice] = useState('');
+  const teamLoadingGate = useLoadingScreenGate(teamLoading);
   const [error, setError] = useState('');
   const attemptedAutoLink = useRef(false);
 
@@ -300,12 +301,13 @@ export const InviteMemberCard: React.FC<InviteMemberCardProps> = ({
             <div>
               <p className="mb-2 px-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8A8A98]">Team members</p>
               <div>
-                {teamLoading ? (
-                  <div className="space-y-2">
-                    {[0, 1, 2].map((item) => (
-                      <div key={item} className="h-12 animate-pulse rounded-[12px] bg-[#F7F7F8]" />
-                    ))}
-                  </div>
+                {teamLoadingGate.isVisible ? (
+                  <LoadingScreen
+                    key={teamLoadingGate.cycleKey}
+                    message="Loading team..."
+                    isComplete={teamLoadingGate.isComplete}
+                    onExitComplete={teamLoadingGate.handleExitComplete}
+                  />
                 ) : filteredTeamMembers.length === 0 ? (
                   <div className="rounded-[12px] border border-dashed border-[#E5E5E5] p-4 text-xs text-[#6E6E80]">
                     No organization team members found.

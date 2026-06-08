@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import {
     GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
-    SkeletonLoader, SkeletonCard, SkeletonText, SkeletonImage
+    LoadingScreen, useLoadingScreenGate
 } from '../UI/index';
 import { FileViewerModal } from '../FileViewerModal';
 import { FileUploadModal } from '../FileUploadModal';
@@ -588,6 +588,8 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
 
     const effectiveOrgId = organizationId || profile?.organization_id || '';
     const { files, loading: filesLoading, refreshFiles, upsertFile, removeFile } = useRealtimeFiles(space.id, organizationId || '', showTrash);
+    const tasksLoadingGate = useLoadingScreenGate(tasksLoading);
+    const filesLoadingGate = useLoadingScreenGate(filesLoading);
     const {
         messages: dashboardMessages,
         loading: messagingLoading,
@@ -684,7 +686,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
     ];
 
     return (
-        <div className="animate-[fadeIn_0.5s_ease-out] flex w-full min-w-0 flex-col gap-5 pb-20">
+        <div className={`animate-[fadeIn_0.5s_ease-out] flex w-full min-w-0 flex-col ${activeTab === 'Chat' ? 'h-full min-h-0 gap-2 pb-0' : 'gap-5 pb-20'}`}>
             {/* Navigation Header */}
             <div className="sticky top-3 z-30">
                 <div className="mx-auto grid w-fit max-w-[calc(100vw-1rem)] min-w-0 grid-cols-[auto_minmax(0,180px)_auto] items-center gap-2 rounded-[999px] border border-[#E5E5E5] bg-white/95 px-2.5 py-2 shadow-[0_1px_3px_rgba(0,0,0,0.06)] backdrop-blur sm:max-w-[calc(100vw-1.5rem)] sm:grid-cols-[auto_minmax(0,260px)_auto] md:max-w-[min(920px,calc(100vw-2rem))] md:grid-cols-[auto_minmax(0,360px)_auto] md:px-3">
@@ -836,6 +838,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             </div>
 
             {/* Activity Indicators (Task 7) */}
+            {activeTab !== 'Chat' && (
             <div className="flex gap-2 flex-wrap mb-6">
                 {spaceStatsLoading ? (
                     <span className="px-3 py-1 text-[10px] rounded-full bg-[#F7F7F8] text-[#6E6E80] border border-[#E5E5E5]">Loading indicators...</span>
@@ -871,6 +874,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     </>
                 )}
             </div>
+            )}
 
             {isSpaceClosed && (
                 <div className="rounded-[8px] border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -886,7 +890,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
             )}
 
             {/* Content Area */}
-            <div className="space-y-6">
+            <div className={activeTab === 'Chat' ? 'h-[calc(100vh-166px)] min-h-0' : 'space-y-6'}>
                 {activeTab === 'Dashboard' && (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                         {!isClient && (
@@ -937,7 +941,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             <SpaceMemberPanel spaceId={space.id} compact className="h-full" />
                         </div>
 
-                        <GlassCard className="h-[340px] overflow-hidden border border-[#E5E5E5] bg-white/95 p-0 md:col-span-1 xl:col-span-2">
+                        <GlassCard className="h-[340px] overflow-hidden border border-[#E5E5E5] bg-white/95 p-0 md:col-span-1 xl:col-span-1">
                             <div className="space-dashboard-panel-header flex items-center justify-between gap-4 border-b border-[#E5E5E5] px-4 py-3">
                                 <div>
                                     <p className="space-dashboard-panel-subtitle uppercase tracking-[0.14em] text-[#6E6E80]">Task flow</p>
@@ -948,8 +952,13 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                 </span>
                             </div>
                             <div className="h-[265px] overflow-y-auto p-4">
-                                {tasksLoading ? (
-                                    <SkeletonText lines={4} />
+                                {tasksLoadingGate.isVisible ? (
+                                    <LoadingScreen
+                                        key={tasksLoadingGate.cycleKey}
+                                        message="Loading tasks..."
+                                        isComplete={tasksLoadingGate.isComplete}
+                                        onExitComplete={tasksLoadingGate.handleExitComplete}
+                                    />
                                 ) : tasks.length > 0 ? (
                                     <div className="grid gap-2">
                                         {tasks.slice(0, 5).map((task) => (
@@ -1020,7 +1029,9 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                     </div>
                 )}
                 {activeTab === 'Chat' && (
-                    <SpaceChatPanel spaceId={space.id} spaceName={space.name} />
+                    <div className="h-full min-h-0">
+                        <SpaceChatPanel spaceId={space.id} spaceName={space.name} />
+                    </div>
                 )}
                 {activeTab === 'Meetings' && (
                     <div className="space-y-4">
@@ -1325,10 +1336,13 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             </div>
                         </div>
 
-                        {filesLoading ? (
-                            <div className="flex items-center justify-center py-12 text-zinc-400">
-                                <p className="animate-pulse">Loading documents...</p>
-                            </div>
+                        {filesLoadingGate.isVisible ? (
+                            <LoadingScreen
+                                key={filesLoadingGate.cycleKey}
+                                message="Loading documents..."
+                                isComplete={filesLoadingGate.isComplete}
+                                onExitComplete={filesLoadingGate.handleExitComplete}
+                            />
                         ) : files.length === 0 ? (
                             <GlassCard className="p-12 flex flex-col items-center justify-center text-center">
                                 <FileText size={48} className="text-zinc-200 mb-4" />

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, MailPlus, Users } from 'lucide-react';
-import { Button, GlassCard, Heading, SkeletonText, Text } from '@/components/UI';
+import { Button, GlassCard, Heading, LoadingScreen, Text, useLoadingScreenGate } from '@/components/UI';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSpaceMembers } from '@/hooks/useInvitationQueries';
 import { InviteListTable } from './InviteListTable';
@@ -35,6 +35,7 @@ export const SpaceMembersPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('members');
   const [filter, setFilter] = useState<Filter>('all');
   const [inviteOpen, setInviteOpen] = useState(false);
+  const loadingGate = useLoadingScreenGate(isLoading);
 
   const canManageInvites =
     userRole === 'owner' ||
@@ -127,7 +128,14 @@ export const SpaceMembersPage: React.FC = () => {
 
           {activeTab === 'members' ? (
             <div className="space-y-3">
-              {isLoading ? <SkeletonText lines={5} /> : null}
+              {loadingGate.isVisible ? (
+                <LoadingScreen
+                  key={loadingGate.cycleKey}
+                  message="Loading members..."
+                  isComplete={loadingGate.isComplete}
+                  onExitComplete={loadingGate.handleExitComplete}
+                />
+              ) : null}
               {error ? (
                 <div className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] p-4 text-sm text-[#B42318]">
                   Failed to load members.

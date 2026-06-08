@@ -1,6 +1,7 @@
 
 import React, { useEffect } from 'react';
 import { Layers, Zap, Shield, Check } from 'lucide-react';
+import { VeroMark } from './brand/VeroLogo';
 
 interface LandingPageProps {
   onStartOnboarding: () => void;
@@ -12,9 +13,9 @@ const Navbar = () => (
     <div className="max-w-7xl mx-auto flex justify-between items-center rounded-full px-6 py-3 shadow-lg bg-[#ffefcb] border border-[#0b2519]/10">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 bg-[#0b2519] rounded-lg flex items-center justify-center">
-          <span className="font-bold text-[#ffefcb]">N</span>
+          <VeroMark tone="light" className="h-6 w-6" />
         </div>
-        <span className="font-medium text-[#0b2519] tracking-tight">Nexus</span>
+        <span className="font-medium text-[#0b2519] tracking-tight">Vero</span>
       </div>
       <div className="hidden md:flex items-center gap-8 text-sm font-medium text-[#0b2519]/80">
         <a href="#features" className="hover:text-[#0b2519] transition-colors">Philosophy</a>
@@ -94,7 +95,7 @@ const AntiClickUpManifesto = () => (
           </h2>
           <p className="text-lg md:text-xl text-[#ffefcb]/80 mb-8 max-w-2xl">
             We saw ClickUp try to be "everything" and fail the mission.
-            Feature bloat kills focus. Nexus removes the noise so you can scale the human connection.
+            Feature bloat kills focus. Vero removes the noise so you can scale the human connection.
           </p>
           <div className="flex items-center text-[#ffefcb]/60">
             <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
@@ -127,7 +128,7 @@ const AntiClickUpManifesto = () => (
             </ul>
           </div>
 
-          {/* Nexus Space Card */}
+          {/* Vero Space Card */}
           <div className="bg-[#ffefcb] border border-[#0b2519]/10 rounded-2xl p-6 shadow-lg">
             <div className="flex items-center mb-4">
               <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
@@ -135,7 +136,7 @@ const AntiClickUpManifesto = () => (
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                 </svg>
               </div>
-              <h3 className="text-xl font-medium text-[#0b2519]">THE NEXUS SPACE</h3>
+              <h3 className="text-xl font-medium text-[#0b2519]">THE VERO SPACE</h3>
             </div>
             <ul className="space-y-3">
               {["Unified communication", "One link, one space", "Client-first design", "Complete history", "Single source of truth"].map((item) => (
@@ -171,7 +172,7 @@ const Features = () => (
         <h2 className="text-3xl md:text-5xl font-medium text-[#0b2519] mb-6 tracking-tight">Productivity apps became the noise.</h2>
         <p className="text-[#0b2519]/80 text-lg font-light">
           The Status Quo: Multiple tabs, fragmented history, and management overhead.
-          The Nexus Way: One space, total clarity, and meaningful connections.
+          The Vero Way: One space, total clarity, and meaningful connections.
         </p>
       </div>
 
@@ -193,7 +194,7 @@ const Features = () => (
           <FeatureCard
             icon={Zap}
             title="The Signal"
-            desc="Nexus cuts through the noise with one space for every client relationship."
+            desc="Vero cuts through the noise with one space for every client relationship."
           />
           <div className="p-6 bg-emerald-50/50 border-l-4 border-emerald-500 rounded-r-lg">
             <h4 className="font-medium text-emerald-800 mb-2">Context Cohesion</h4>
@@ -330,8 +331,10 @@ const Footer = () => (
   <footer className="bg-[#0b2519] py-12">
     <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center">
       <div className="flex items-center gap-2 mb-4 md:mb-0">
-        <div className="w-6 h-6 bg-[#ffefcb] rounded flex items-center justify-center text-xs text-[#0b2519] font-bold">N</div>
-        <span className="text-[#ffefcb]/80 text-sm">Nexus Inc. © 2024</span>
+        <div className="w-6 h-6 bg-[#ffefcb] rounded flex items-center justify-center text-xs text-[#0b2519] font-bold">
+          <VeroMark className="h-4 w-4" />
+        </div>
+        <span className="text-[#ffefcb]/80 text-sm">Vero Inc. © 2024</span>
       </div>
       <div className="flex gap-6 text-sm text-[#ffefcb]/60">
         <a href="#" className="hover:text-[#ffefcb] transition-colors">Privacy</a>

@@ -1,9 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { LoadingScreen, useLoadingScreenGate } from '../UI';
 
 const LoadingVerification = () => {
   const navigate = useNavigate();
+  const [isVerifying, setIsVerifying] = useState(true);
+  const [nextRoute, setNextRoute] = useState<{ path: string; state?: unknown } | null>(null);
+  const loadingGate = useLoadingScreenGate(isVerifying);
 
   useEffect(() => {
     const verifySubscription = async () => {
@@ -13,7 +17,8 @@ const LoadingVerification = () => {
         
         if (sessionError) throw sessionError;
         if (!session) {
-          navigate('/login');
+          setNextRoute({ path: '/login' });
+          setIsVerifying(false);
           return;
         }
 
@@ -33,18 +38,21 @@ const LoadingVerification = () => {
 
         if (data.status === 'active') {
           // If subscription is active, navigate to dashboard
-          navigate('/dashboard');
+          setNextRoute({ path: '/dashboard' });
+          setIsVerifying(false);
         } else {
           // If subscription is not active, show error
           throw new Error('Subscription not active');
         }
       } catch (error) {
         console.error('Verification error:', error);
-        navigate('/onboarding/error', { 
+        setNextRoute({
+          path: '/onboarding/error',
           state: { 
             error: error.message || 'Failed to verify your subscription. Please contact support.' 
           } 
         });
+        setIsVerifying(false);
       }
     };
 
@@ -53,37 +61,28 @@ const LoadingVerification = () => {
 
     // Set up a timeout to handle cases where verification takes too long
     const timeout = setTimeout(() => {
-      navigate('/onboarding/error', { 
+      setNextRoute({
+        path: '/onboarding/error',
         state: { 
           error: 'Verification is taking longer than expected. You will be redirected to the dashboard shortly.' 
         } 
       });
+      setIsVerifying(false);
     }, 30000); // 30 seconds timeout
 
     return () => clearTimeout(timeout);
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="flex justify-center mb-4">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div>
-        </div>
-        <h2 className="text-2xl font-semibold text-gray-900 mb-2">Setting up your workspace</h2>
-        <p className="text-gray-600">This may take a moment. Please don't close this page.</p>
-        <div className="mt-6">
-          <div className="h-1 w-64 bg-gray-200 rounded-full overflow-hidden mx-auto">
-            <div 
-              className="h-full bg-indigo-600 rounded-full animate-pulse"
-              style={{
-                width: '100%',
-                animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-              }}
-            ></div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <LoadingScreen
+      key={loadingGate.cycleKey}
+      message="Setting up your workspace..."
+      isComplete={loadingGate.isComplete}
+      onExitComplete={() => {
+        loadingGate.handleExitComplete();
+        if (nextRoute) navigate(nextRoute.path, { state: nextRoute.state });
+      }}
+    />
   );
 };
 

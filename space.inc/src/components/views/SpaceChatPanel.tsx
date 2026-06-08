@@ -1,12 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AtSign, Hash, Lock, MessageCircle, Paperclip, Plus, Search, Send, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Hash, Image as ImageIcon, Lock, MessageCircle, Paperclip, Plus, Search, Send, Smile, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
-import { FileUploadModal } from '../FileUploadModal';
 import { Message } from '../../types';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { MessageItem } from './MessageItem';
+import { LoadingScreen, useLoadingScreenGate } from '../UI';
 
 type SpaceChannel = {
     id: string | null;
@@ -19,22 +19,49 @@ const DEFAULT_CHANNELS: SpaceChannel[] = [
     { id: null, name: 'general', description: 'Client-facing channel', is_private: false }
 ];
 
-function sameMessageGroup(previous: Message | undefined, current: Message) {
-    if (!previous) return false;
-    if (previous.senderId !== current.senderId) return false;
+const COMPOSER_EMOJIS = [
+    0x1F44D,
+    0x2764,
+    0x1F602,
+    0x1F60D,
+    0x1F64C,
+    0x1F44F,
+    0x1F525,
+    0x1F680,
+    0x1F4A1,
+    0x1F440,
+    0x2705,
+    0x1F3AF
+].map((codePoint) => String.fromCodePoint(codePoint));
+
+const IMAGE_FILE_EXTENSIONS = new Set(['avif', 'bmp', 'gif', 'heic', 'heif', 'jfif', 'jpeg', 'jpg', 'pjp', 'pjpeg', 'png', 'svg', 'webp']);
+
+const isImageFile = (file: File) => {
+    if (file.type.startsWith('image/')) return true;
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    return !!extension && IMAGE_FILE_EXTENSIONS.has(extension);
+};
+
+function sameMessageGroup(previous: Message | undefined, current: Message | undefined) {
+    if (!previous || !current) return false;
+    const previousSenderKey = previous.senderId || `${previous.senderType}:${previous.senderName || ''}`;
+    const currentSenderKey = current.senderId || `${current.senderType}:${current.senderName || ''}`;
+    if (previousSenderKey !== currentSenderKey) return false;
     const previousTime = new Date(previous.createdAt).getTime();
     const currentTime = new Date(current.createdAt).getTime();
-    return Math.abs(currentTime - previousTime) <= 5 * 60 * 1000;
+    return Math.abs(currentTime - previousTime) <= 60 * 1000;
 }
 
-function formatDateDivider(value: string) {
-    const date = new Date(value);
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(today.getDate() - 1);
-    if (date.toDateString() === today.toDateString()) return 'Today';
-    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+function shouldShowTimeMarker(previous: Message | undefined, current: Message) {
+    if (!previous) return true;
+    const previousDate = new Date(previous.createdAt);
+    const currentDate = new Date(current.createdAt);
+    if (previousDate.toDateString() !== currentDate.toDateString()) return true;
+    return currentDate.getTime() - previousDate.getTime() > 60 * 60 * 1000;
+}
+
+function formatTimeMarker(value: string) {
+    return new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 function memberInitials(member: any) {
@@ -60,23 +87,31 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
     const { user, profile, organizationId, userRole } = useAuth();
     const { showToast } = useToast();
     const orgId = organizationId || profile?.organization_id || '';
-    const { messages, loading, sendMessage, sendFile, messagesEndRef } = useRealtimeMessages(spaceId, orgId, 50);
+    const { messages, loading, sendMessage, sendFile, messagesEndRef } = useRealtimeMessages(spaceId, orgId, 30);
+    const loadingGate = useLoadingScreenGate(loading);
+    const documentInputRef = useRef<HTMLInputElement>(null);
+    const imageInputRef = useRef<HTMLInputElement>(null);
 
     const [channels, setChannels] = useState<SpaceChannel[]>(DEFAULT_CHANNELS);
     const [activeChannelName, setActiveChannelName] = useState('general');
     const [messageInput, setMessageInput] = useState('');
+    const [channelSearch, setChannelSearch] = useState('');
     const [sending, setSending] = useState(false);
-    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [draggingFile, setDraggingFile] = useState(false);
     const [unreadCounts, setUnreadCounts] = useState<any>({});
     const [members, setMembers] = useState<any[]>([]);
     const [mentionOpen, setMentionOpen] = useState(false);
+    const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     const [replyTarget, setReplyTarget] = useState<Message | null>(null);
-    const [dmThreads, setDmThreads] = useState<any[]>([]);
 
     const isStaff = ['owner', 'admin', 'staff'].includes(userRole || '');
     const activeChannel = channels.find((channel) => channel.name === activeChannelName) || channels[0];
     const activeDraftKey = activeChannel?.id || activeChannel?.name || 'general';
+    const filteredChannels = channels.filter((channel) => {
+        const query = channelSearch.trim().toLowerCase();
+        if (!query) return true;
+        return [channel.name, channel.description].some((value) => String(value || '').toLowerCase().includes(query));
+    });
 
     useEffect(() => {
         let cancelled = false;
@@ -97,15 +132,13 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
         };
 
         const loadCompanions = async () => {
-            const [presenceRes, unreadRes, dmRes] = await Promise.all([
+            const [presenceRes, unreadRes] = await Promise.all([
                 apiService.getSpaceMemberPresence(spaceId),
-                apiService.getUnreadCounts(spaceId),
-                apiService.getDmThreads()
+                apiService.getUnreadCounts(spaceId)
             ]);
             if (cancelled) return;
             setMembers(Array.isArray(presenceRes.data) ? presenceRes.data : []);
             setUnreadCounts(unreadRes.data || {});
-            setDmThreads(Array.isArray(dmRes.data) ? dmRes.data : []);
         };
 
         loadChannels();
@@ -187,6 +220,7 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
         if (success) {
             setMessageInput('');
             setReplyTarget(null);
+            setEmojiPickerOpen(false);
             const latest = activeMessages[activeMessages.length - 1];
             if (activeChannel?.id && latest?.id) apiService.markMessagesRead(activeChannel.id, latest.id).catch(console.warn);
         }
@@ -237,8 +271,19 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
     const handleFileDrop = async (file: File) => {
         if (!orgId) return;
         const result = await sendFile(orgId, file, activeChannelName);
-        const kind = file.type.startsWith('image/') ? 'Image' : 'File';
-        showToast(result.success ? `${kind} uploaded` : 'Upload failed', result.success ? 'success' : 'error');
+        const kind = isImageFile(file) ? 'Image' : 'File';
+        showToast(result.success ? `${kind} shared` : 'Upload failed', result.success ? 'success' : 'error');
+    };
+
+    const handlePickedFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (file) await handleFileDrop(file);
+    };
+
+    const insertEmoji = (emoji: string) => {
+        setMessageInput((current) => `${current}${emoji}`);
+        setEmojiPickerOpen(false);
     };
 
     const replyPreviewText = (message: Message | null) => {
@@ -249,69 +294,147 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
     };
 
     return (
-        <div className="flex h-[680px] overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white">
-            <aside className="hidden w-64 shrink-0 flex-col border-r border-[#E5E5E5] bg-[#F7F7F8] md:flex">
+        <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
+            <aside className="hidden min-h-0 overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] lg:flex lg:flex-col">
                 <div className="border-b border-[#E5E5E5] p-4">
-                    <p className="text-sm font-semibold text-[#0D0D0D]">{spaceName}</p>
-                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Channels</p>
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <h2 className="text-[28px] font-semibold leading-none tracking-[-0.04em] text-[#0D0D0D]">Inbox</h2>
+                            <p className="mt-2 text-xs text-[#6E6E80]">Space channels and threads.</p>
+                        </div>
+                        <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 text-xs font-medium text-[#6E6E80]">
+                            <span className="h-2 w-2 rounded-full bg-[#3B82F6]" />
+                            {channels.length} channels
+                        </span>
+                    </div>
+                    <div className="mt-4 flex h-10 items-center gap-2 rounded-[8px] border border-[#DADADA] bg-white px-3 text-[#6E6E80]">
+                        <Search size={14} />
+                        <input
+                            value={channelSearch}
+                            onChange={(event) => setChannelSearch(event.target.value)}
+                            className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-[#6E6E80]"
+                            placeholder="Search chats..."
+                            type="text"
+                        />
+                    </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-3">
-                    {channels.map((channel) => {
+                <div className="flex items-center gap-2 border-b border-[#E5E5E5] p-4">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#DADADA] bg-white px-3 py-1.5 text-sm font-medium text-[#0D0D0D]">
+                        <span className="h-2 w-2 rounded-full bg-[#22C55E]" />
+                        {channels.reduce((total, channel) => total + getUnreadFor(channel), 0)} unread
+                    </span>
+                    <span className="rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-1.5 text-sm font-medium text-[#6E6E80]">Staff + client</span>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                    {filteredChannels.map((channel, index) => {
                         const unread = getUnreadFor(channel);
                         const active = activeChannelName === channel.name;
                         const Icon = channel.name === 'internal' || channel.is_private ? Lock : Hash;
+                        const channelMessages = messages.filter((message) => {
+                            if (message.threadRootId) return false;
+                            if (channel.id && message.channelId) return message.channelId === channel.id;
+                            return (message.channel || 'general') === channel.name;
+                        });
+                        const latest = channelMessages[channelMessages.length - 1];
                         return (
                             <button
                                 key={channel.id || channel.name}
                                 type="button"
                                 onClick={() => setActiveChannelName(channel.name)}
-                                className={`mb-1 flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm ${active ? 'bg-white text-[#0D0D0D] shadow-[0_1px_3px_rgba(0,0,0,0.06)]' : 'text-[#6E6E80] hover:bg-white/70 hover:text-[#0D0D0D]'}`}
+                                style={{ animationDelay: `${index * 20}ms` }}
+                                className={`block w-full border-b border-[#E5E5E5] px-4 py-4 text-left transition-colors ${active ? 'bg-[#F7F7F8]' : 'hover:bg-[#F7F7F8]'}`}
                             >
-                                <Icon size={14} />
-                                <span className="min-w-0 flex-1 truncate">{channel.name}</span>
-                                {unread > 0 && <span className="rounded-full bg-black px-1.5 py-0.5 text-[10px] text-white">{unread}</span>}
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`h-2 w-2 shrink-0 rounded-full ${unread > 0 ? 'bg-[#3B82F6]' : 'bg-[#F43F5E]'}`} />
+                                            <Icon size={13} className={active ? 'text-[#0D0D0D]' : 'text-[#9A9AA2]'} />
+                                            <span className={`truncate text-sm font-medium ${active ? 'text-[#0D0D0D]' : 'text-[#6E6E80]'}`}>{channel.name}</span>
+                                        </div>
+                                        <p className="mt-2 line-clamp-2 text-xs text-[#6E6E80]">
+                                            {latest?.content || channel.description || 'No messages yet'}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-[10px] text-[#6E6E80]">
+                                            {latest?.createdAt ? new Date(latest.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Join'}
+                                        </span>
+                                        {unread > 0 && (
+                                            <div className="mt-2 inline-flex min-w-[20px] items-center justify-center rounded-full border border-[#DADADA] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[#0D0D0D]">
+                                                {unread}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </button>
                         );
                     })}
-                    {isStaff && (
+                    {filteredChannels.length === 0 && (
+                        <div className="p-4 text-center text-sm text-[#6E6E80]">No channels match your search.</div>
+                    )}
+                </div>
+                {isStaff && (
+                    <div className="border-t border-[#E5E5E5] p-3">
                         <button
                             type="button"
                             onClick={handleCreateChannel}
-                            className="mt-2 flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-medium text-[#0D0D0D] hover:bg-white"
+                            className="flex h-10 w-full items-center justify-center gap-2 rounded-[8px] border border-[#E5E5E5] bg-white text-sm font-medium text-[#0D0D0D] transition hover:bg-[#F7F7F8]"
                         >
                             <Plus size={14} />
                             New Channel
                         </button>
-                    )}
-                </div>
-                <div className="border-t border-[#E5E5E5] p-3">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">Direct Messages</p>
-                    {dmThreads.slice(0, 4).map((thread) => (
-                        <div key={thread.thread_id || thread.id} className="rounded-[8px] px-3 py-2 text-xs text-[#6E6E80]">
-                            {thread.participants?.map((participant: any) => participant.full_name).filter(Boolean).join(', ') || 'Direct thread'}
-                        </div>
-                    ))}
-                    {dmThreads.length === 0 && <p className="px-3 py-2 text-xs text-[#6E6E80]">No direct messages yet</p>}
-                </div>
+                    </div>
+                )}
             </aside>
 
-            <main className="flex min-w-0 flex-1 flex-col">
-                <header className="flex items-center justify-between gap-3 border-b border-[#E5E5E5] px-4 py-3">
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-[#0D0D0D]">
-                            {activeChannel?.is_private || activeChannelName === 'internal' ? <Lock size={16} /> : <Hash size={16} />}
-                            <span className="truncate">{activeChannelName}</span>
+            <main className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+                <header className="border-b border-[#E5E5E5] bg-white p-4 md:flex md:items-center md:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-[#DADADA] bg-[#0D0D0D] text-sm font-semibold text-white">
+                            {spaceName.substring(0, 2)}
                         </div>
-                        <p className="mt-0.5 truncate text-xs text-[#6E6E80]">{activeChannel?.description || 'Space conversation'}</p>
+                        <div className="min-w-0">
+                            <h3 className="truncate font-semibold tracking-[-0.03em] text-[#0D0D0D]">{spaceName}</h3>
+                            <p className="text-xs text-[#6E6E80]">
+                                {loading ? 'Loading...' : `${activeMessages.length} messages`}
+                            </p>
+                        </div>
                     </div>
-                    <div className="hidden items-center gap-2 rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] px-3 py-2 text-xs text-[#6E6E80] sm:flex">
-                        <Search size={14} />
-                        Search enabled in backend
+                    <div className="mt-3 flex flex-wrap items-center gap-2 md:mt-0 md:justify-end">
+                        {channels.length > 1 && (
+                            <select
+                                value={activeChannelName}
+                                onChange={(event) => setActiveChannelName(event.target.value)}
+                                className="h-8 rounded-[8px] border border-[#E5E5E5] bg-white px-3 text-[11px] font-medium text-[#0D0D0D] outline-none transition hover:bg-[#F7F7F8] focus:border-black lg:hidden"
+                                title="Select channel"
+                                aria-label="Select channel"
+                            >
+                                {channels.map((channel) => (
+                                    <option key={channel.id || channel.name} value={channel.name}>
+                                        {channel.name}{getUnreadFor(channel) > 0 ? ` (${getUnreadFor(channel)})` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                        {isStaff && (
+                            <button
+                                type="button"
+                                onClick={handleCreateChannel}
+                                className="flex h-8 items-center gap-1.5 rounded-[8px] border border-[#E5E5E5] bg-white px-3 text-[11px] font-medium text-[#6E6E80] transition hover:bg-[#F7F7F8] hover:text-[#0D0D0D] lg:hidden"
+                            >
+                                <Plus size={13} />
+                                Channel
+                            </button>
+                        )}
+                        <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-3 text-[11px] font-medium text-[#6E6E80]">
+                            <span className="h-2 w-2 rounded-full bg-[#3B82F6]" />
+                            Active thread
+                        </span>
                     </div>
                 </header>
 
                 <div
-                    className={`relative flex-1 overflow-y-auto p-5 ${draggingFile ? 'bg-[#F7F7F8]' : 'bg-white'}`}
+                    className={`relative flex-1 overflow-y-auto p-4 md:p-6 ${draggingFile ? 'bg-[#F7F7F8]' : 'bg-white'}`}
                     onDragOver={(event) => {
                         event.preventDefault();
                         setDraggingFile(true);
@@ -330,8 +453,13 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
                         </div>
                     )}
 
-                    {loading ? (
-                        <div className="flex h-full items-center justify-center text-sm text-[#6E6E80]">Loading messages...</div>
+                    {loadingGate.isVisible ? (
+                        <LoadingScreen
+                            key={loadingGate.cycleKey}
+                            message="Loading messages..."
+                            isComplete={loadingGate.isComplete}
+                            onExitComplete={loadingGate.handleExitComplete}
+                        />
                     ) : activeMessages.length === 0 ? (
                         <div className="flex h-full flex-col items-center justify-center text-center text-[#6E6E80]">
                             <MessageCircle className="mb-3" />
@@ -341,14 +469,14 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
                         <div>
                             {activeMessages.map((message, index) => {
                                 const previous = activeMessages[index - 1];
-                                const showDateDivider = !previous || new Date(previous.createdAt).toDateString() !== new Date(message.createdAt).toDateString();
+                                const next = activeMessages[index + 1];
+                                const groupedWithPrevious = sameMessageGroup(previous, message);
+                                const groupedWithNext = sameMessageGroup(message, next);
                                 return (
                                     <React.Fragment key={message.id}>
-                                        {showDateDivider && (
-                                            <div className="my-4 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6E6E80]">
-                                                <span className="h-px flex-1 bg-[#E5E5E5]" />
-                                                {formatDateDivider(message.createdAt)}
-                                                <span className="h-px flex-1 bg-[#E5E5E5]" />
+                                        {shouldShowTimeMarker(previous, message) && (
+                                            <div className="my-3 text-center text-[11px] font-medium text-[#6E6E80]">
+                                                {formatTimeMarker(message.createdAt)}
                                             </div>
                                         )}
                                         <MessageItem
@@ -356,7 +484,9 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
                                             currentUserId={user?.id || ''}
                                             organizationId={orgId}
                                             theme="panel"
-                                            showHeader={!sameMessageGroup(previous, message)}
+                                            showHeader={!groupedWithPrevious}
+                                            groupedWithPrevious={groupedWithPrevious}
+                                            groupedWithNext={groupedWithNext}
                                             onReply={setReplyTarget}
                                             onReact={handleReact}
                                             onPin={isStaff ? handlePin : undefined}
@@ -417,17 +547,46 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
                                 </div>
                             </div>
                         )}
-                        <div className="flex items-end gap-2 rounded-[28px] border border-[#DADADA] bg-white px-2 py-2 shadow-[0_1px_2px_rgba(16,24,40,0.04)] focus-within:border-black">
+                        {emojiPickerOpen && (
+                            <div className="absolute bottom-full right-12 z-20 mb-2 grid w-44 grid-cols-6 gap-1 rounded-[12px] border border-[#D7D7DC] bg-white p-2 shadow-[0_12px_24px_rgba(15,23,42,0.12)]">
+                                {COMPOSER_EMOJIS.map((emoji) => (
+                                    <button
+                                        key={emoji}
+                                        type="button"
+                                        onClick={() => insertEmoji(emoji)}
+                                        className="flex h-7 w-7 items-center justify-center rounded-full text-base transition hover:bg-[#F1F1F3]"
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        <input
+                            ref={documentInputRef}
+                            type="file"
+                            className="hidden"
+                            accept=".csv,.doc,.docx,.pdf,.ppt,.pptx,.txt,.xls,.xlsx,application/*,text/*"
+                            onChange={handlePickedFile}
+                        />
+                        <input
+                            ref={imageInputRef}
+                            type="file"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={handlePickedFile}
+                        />
+                        <div className="flex items-center gap-3">
                             <button
                                 type="button"
-                                onClick={() => setIsUploadModalOpen(true)}
-                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#6E6E80] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
-                                title="Attach file"
-                                aria-label="Attach file"
+                                onClick={() => documentInputRef.current?.click()}
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] text-[#6E6E80] transition hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                                title="Upload file"
+                                aria-label="Upload file"
                             >
                                 <Paperclip size={18} />
                             </button>
-                            <textarea
+                            <input
+                                type="text"
                                 value={messageInput}
                                 onChange={(event) => setMessageInput(event.target.value)}
                                 onKeyDown={(event) => {
@@ -436,35 +595,43 @@ const SpaceChatPanel = ({ spaceId, spaceName }: { spaceId: string; spaceName: st
                                         handleSend();
                                     }
                                 }}
-                                placeholder={`Message ${activeChannelName}`}
-                                className="max-h-32 min-h-[40px] flex-1 resize-none border-0 bg-transparent px-1 py-2.5 text-sm outline-none"
+                                placeholder="Message..."
+                                className="min-w-0 flex-1 rounded-[8px] border border-[#DADADA] bg-white px-5 py-3 text-sm text-[#0D0D0D] outline-none placeholder:text-[#6E6E80] focus:border-black"
                                 disabled={sending}
                             />
                             <button
                                 type="button"
+                                onClick={() => setEmojiPickerOpen((open) => !open)}
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] text-[#6E6E80] transition hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                                title="Add emoji"
+                                aria-label="Add emoji"
+                            >
+                                <Smile size={18} />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => imageInputRef.current?.click()}
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] text-[#6E6E80] transition hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
+                                title="Upload image"
+                                aria-label="Upload image"
+                            >
+                                <ImageIcon size={18} />
+                            </button>
+                            <button
+                                type="button"
                                 onClick={handleSend}
                                 disabled={sending || !messageInput.trim()}
-                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black text-white disabled:opacity-50"
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-black text-white transition disabled:cursor-not-allowed disabled:opacity-50"
                                 title="Send"
                                 aria-label="Send"
                             >
-                                <Send size={16} />
+                                <Send size={18} />
                             </button>
                         </div>
                     </div>
                 </footer>
             </main>
 
-            <FileUploadModal
-                isOpen={isUploadModalOpen}
-                onClose={() => setIsUploadModalOpen(false)}
-                loading={sending}
-                uploadProgress={null}
-                onUpload={async (file) => {
-                    await handleFileDrop(file);
-                    return true;
-                }}
-            />
         </div>
     );
 };

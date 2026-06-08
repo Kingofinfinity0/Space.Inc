@@ -1,24 +1,27 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, LayoutGrid, List, Search, Briefcase, Sparkles, FileText, MessageSquare, Calendar } from 'lucide-react';
+import { Plus, LayoutGrid, List, Search, Briefcase, Sparkles, FileText, MessageSquare, Calendar, User, Target, HeartPulse, ExternalLink, ChevronRight } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
-import { GlassCard, Button, Heading, Input, Modal, Checkbox } from '../UI/index';
+import { GlassCard, Button, Heading, Input, Modal } from '../UI/index';
 import { ClientSpace } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/apiService';
 
+type SpaceModel = 'retainer' | 'project';
+
 const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], onSelect: (id: string) => void, onCreate: (data: any) => void }) => {
     const { showToast } = useToast();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [createStep, setCreateStep] = useState<'model' | 'setup'>('model');
     const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
     const [searchQuery, setSearchQuery] = useState('');
     const [newClientName, setNewClientName] = useState('');
-    const [newClientContact, setNewClientContact] = useState('');
-    const [selectedModules, setSelectedModules] = useState({
+    const [selectedModel, setSelectedModel] = useState<SpaceModel | null>(null);
+    const defaultModules = {
         messages: true,
         chat: true,
         upload: true,
         meetings: true
-    });
+    };
 
     const spaces = useMemo(() => clients.filter((client) => {
         const q = searchQuery.trim().toLowerCase();
@@ -26,20 +29,53 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
         return [client.name, client.description, client.status].some((value) => String(value || '').toLowerCase().includes(q));
     }), [clients, searchQuery]);
 
+    const closeCreateModal = () => {
+        setIsModalOpen(false);
+        setCreateStep('model');
+        setSelectedModel(null);
+        setNewClientName('');
+    };
+
+    const getSpaceModel = (space: ClientSpace): SpaceModel => {
+        const value = String(space.metadata?.space_type || space.metadata?.work_model || '').toLowerCase();
+        return value === 'retainer' ? 'retainer' : 'project';
+    };
+
+    const getLeadConsultant = (space: ClientSpace) => space.metadata?.lead_consultant_name || 'Lead consultant pending';
+
+    const getModelLabel = (model: SpaceModel) => model === 'retainer' ? 'Retainer' : 'One-Time Project';
+
+    const getActivityTotal = (space: ClientSpace) => Number(space.message_count || 0) + Number(space.file_count || 0) + Number(space.meeting_count || 0);
+
+    const getAccountHealth = (space: ClientSpace) => Math.min(98, Math.max(42, 64 + getActivityTotal(space) * 4));
+
+    const getProjectProgress = (space: ClientSpace) => {
+        const done = Math.min(4, Math.max(0, Math.floor(getActivityTotal(space) / 3)));
+        const total = Math.max(4, done || 4);
+        return { done, total, percent: Math.round((done / total) * 100) };
+    };
+
     const handleSubmit = () => {
+        if (!selectedModel) {
+            showToast('Please select a space type.', 'info');
+            return;
+        }
+
         if (!newClientName) {
-            showToast('Please enter a space name.', 'info');
+            showToast('Please enter a company name.', 'info');
             return;
         }
 
         onCreate({
             name: newClientName,
-            contactName: newClientContact,
-            modules: selectedModules
+            modules: defaultModules,
+            metadata: {
+                space_type: selectedModel,
+                work_model: selectedModel,
+                create_flow: 'model_first'
+            }
         });
-        setIsModalOpen(false);
-        setNewClientName('');
-        setNewClientContact('');
+        closeCreateModal();
     };
 
     return (
@@ -80,27 +116,97 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
 
             {viewMode === 'board' ? (
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-                    {spaces.map((client) => (
-                        <GlassCard
-                            key={client.id}
-                            onClick={() => onSelect(client.id)}
-                            className="sheet-panel group relative cursor-pointer overflow-hidden p-6"
-                        >
-                            <div className="mb-4 flex items-start justify-between">
-                                <div className="flex h-12 w-12 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] text-lg font-semibold text-[#0D0D0D] transition-colors group-hover:bg-[#0D0D0D] group-hover:text-white">
-                                    {client.name ? client.name.substring(0, 2).toUpperCase() : 'SP'}
+                    {spaces.map((client) => {
+                        const model = getSpaceModel(client);
+                        const isRetainer = model === 'retainer';
+                        const progress = getProjectProgress(client);
+                        const health = getAccountHealth(client);
+                        return (
+                            <GlassCard
+                                key={client.id}
+                                onClick={() => onSelect(client.id)}
+                                className="group flex cursor-pointer flex-col overflow-hidden !rounded-none p-5"
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <span className={`border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                                        client.status === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'
+                                    }`}>
+                                        {client.status}
+                                    </span>
+                                    <span className={`inline-flex items-center gap-1 border px-2.5 py-1 text-[10px] font-semibold ${
+                                        isRetainer ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                    }`}>
+                                        {isRetainer ? <HeartPulse size={11} /> : <Target size={11} />}
+                                        {getModelLabel(model)}
+                                    </span>
                                 </div>
-                                <span className={`surface-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${client.status === 'active' ? 'surface-chip-active' : ''}`}>
-                                    {client.status}
-                                </span>
-                            </div>
-                            <h3 className="text-xl font-semibold tracking-[-0.03em] text-[#0D0D0D]">{client.name}</h3>
-                            <p className="mt-1 text-sm text-[#6E6E80]">{client.description || 'Verified portal environment'}</p>
-                            <div className="mt-6 border-t border-[#E5E5E5] pt-4">
-                                <SpaceActivityIndicators spaceId={client.id} />
-                            </div>
-                        </GlassCard>
-                    ))}
+
+                                <div className="mt-4 border-b border-[#F1F1F1] pb-3">
+                                    <h3 className="truncate text-xl font-semibold tracking-[-0.03em] text-[#0D0D0D]">{client.name}</h3>
+                                    <p className="mt-2 flex items-center gap-2 truncate text-sm text-[#6E6E80]">
+                                        <User size={13} />
+                                        {getLeadConsultant(client)}
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 border-b border-[#F1F1F1] py-3">
+                                    <div>
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A8A9A]">Start date</p>
+                                        <p className="mt-1 text-sm font-medium text-[#0D0D0D]">
+                                            {new Date(client.created_at).toLocaleDateString('en-CA')}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A8A9A]">Consultant lead</p>
+                                        <p className="mt-1 truncate text-sm font-medium text-[#0D0D0D]">{getLeadConsultant(client)}</p>
+                                    </div>
+                                </div>
+
+                                <div className="py-3">
+                                    {isRetainer ? (
+                                        <div>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A8A9A]">
+                                                    <HeartPulse size={12} className="text-rose-500" />
+                                                    Account health score
+                                                </p>
+                                                <span className="bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{health}%</span>
+                                            </div>
+                                            <div className="mt-3 h-2 bg-[#ECECEF]">
+                                                <div className="h-full bg-emerald-500" style={{ width: `${health}%` }} />
+                                            </div>
+                                            <p className="mt-3 text-xs text-[#6E6E80]">Activity signals tracked: {getActivityTotal(client)}</p>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A8A9A]">
+                                                    <Target size={12} className="text-emerald-600" />
+                                                    Project progress
+                                                </p>
+                                                <span className="text-xs font-semibold text-[#0D0D0D]">{progress.percent}%</span>
+                                            </div>
+                                            <div className="mt-3 h-2 bg-[#ECECEF]">
+                                                <div className="h-full bg-emerald-500" style={{ width: `${progress.percent}%` }} />
+                                            </div>
+                                            <p className="mt-3 text-xs text-[#6E6E80]">Milestones tracked: {progress.done} of {progress.total} done</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-2 flex items-center justify-between border-t border-[#F1F1F1] pt-4">
+                                    <span className="flex items-center gap-2 text-xs font-semibold text-[#0D0D0D]">
+                                        <ExternalLink size={13} />
+                                        Client Sandbox Portal
+                                    </span>
+                                    <button className="flex items-center gap-1 border border-[#0D0D0D] px-3 py-2 text-xs font-medium text-[#0D0D0D]">
+                                        Manage Workspace
+                                        <ChevronRight size={13} />
+                                    </button>
+                                </div>
+                            </GlassCard>
+                        );
+                    })}
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -123,31 +229,81 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                 </div>
             )}
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Provision New Space">
-                <div className="space-y-4">
-                    <div>
-                        <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">Space Name</label>
-                        <Input placeholder="Client Name or Project" value={newClientName} onChange={e => setNewClientName(e.target.value)} />
-                    </div>
-
-                    <div className="pt-2">
-                        <label className="mb-4 block text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">Included Features</label>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Checkbox label="Messages" checked={selectedModules.messages} onChange={(val) => setSelectedModules(prev => ({ ...prev, messages: val }))} />
-                            <Checkbox label="Chat" checked={selectedModules.chat} onChange={(val) => setSelectedModules(prev => ({ ...prev, chat: val }))} />
-                            <Checkbox label="Upload" checked={selectedModules.upload} onChange={(val) => setSelectedModules(prev => ({ ...prev, upload: val }))} />
-                            <Checkbox label="Meetings" checked={selectedModules.meetings} onChange={(val) => setSelectedModules(prev => ({ ...prev, meetings: val }))} />
+            <Modal isOpen={isModalOpen} onClose={closeCreateModal} title="Create Client Space">
+                {createStep === 'model' ? (
+                    <div className="space-y-5">
+                        <div>
+                            <p className="text-sm text-[#6E6E80]">Choose the relationship model before setting up the workspace.</p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            {([
+                                {
+                                    id: 'retainer',
+                                    title: 'Retainer',
+                                    icon: HeartPulse,
+                                    body: 'Ongoing account space for recurring work, check-ins, activity health, and long-term client operations.',
+                                    bullets: ['Account health', 'Recurring meetings', 'Monthly check-ins']
+                                },
+                                {
+                                    id: 'project',
+                                    title: 'One-Time Project',
+                                    icon: Target,
+                                    body: 'Scoped delivery room for milestones, approvals, files, and final handoff.',
+                                    bullets: ['Milestone progress', 'Deliverable tracking', 'Project handoff']
+                                }
+                            ] as const).map((option) => (
+                                <button
+                                    key={option.id}
+                                    className={`border p-4 text-left transition-colors ${
+                                        selectedModel === option.id ? 'border-emerald-500 bg-emerald-50' : 'border-[#DADADA] bg-white hover:border-[#0D0D0D]'
+                                    }`}
+                                    onClick={() => setSelectedModel(option.id)}
+                                >
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="grid h-9 w-9 place-items-center bg-[#F7F7F8] text-[#0D0D0D]">
+                                            <option.icon size={17} />
+                                        </span>
+                                        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                                            {option.id === 'retainer' ? 'Ongoing' : 'Scoped'}
+                                        </span>
+                                    </div>
+                                    <h3 className="mt-4 text-lg font-semibold text-[#0D0D0D]">{option.title}</h3>
+                                    <p className="mt-2 text-sm leading-5 text-[#6E6E80]">{option.body}</p>
+                                    <div className="mt-4 space-y-2">
+                                        {option.bullets.map((bullet) => (
+                                            <p key={bullet} className="text-xs text-[#0D0D0D]">- {bullet}</p>
+                                        ))}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                            <Button className="w-full" variant="outline" onClick={closeCreateModal}>Cancel</Button>
+                            <Button className="w-full" onClick={() => {
+                                if (!selectedModel) {
+                                    showToast('Please select a space type.', 'info');
+                                    return;
+                                }
+                                setCreateStep('setup');
+                            }}>Continue</Button>
                         </div>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4 pt-6">
-                        <Button className="w-full" variant="outline" onClick={() => {
-                            setIsModalOpen(false);
-                            setNewClientName('');
-                        }}>Cancel</Button>
-                        <Button className="w-full" onClick={handleSubmit}>Create Space</Button>
+                ) : (
+                    <div className="space-y-5">
+                        <div className="border border-[#E5E5E5] bg-[#F7F7F8] p-3">
+                            <p className="text-xs text-[#6E6E80]">Space type</p>
+                            <p className="mt-1 text-sm font-semibold text-[#0D0D0D]">{selectedModel ? getModelLabel(selectedModel) : 'Not selected'}</p>
+                        </div>
+                        <div>
+                            <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-[#6E6E80]">Company / Client Name</label>
+                            <Input placeholder="Acme Enterprises" value={newClientName} onChange={e => setNewClientName(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 pt-4">
+                            <Button className="w-full" variant="outline" onClick={() => setCreateStep('model')}>Back</Button>
+                            <Button className="w-full" onClick={handleSubmit}>Create Space</Button>
+                        </div>
                     </div>
-                </div>
+                )}
             </Modal>
         </div>
     );

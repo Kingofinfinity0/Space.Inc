@@ -5,7 +5,6 @@ import LoginPage from './views/LoginPage';
 import SignupPage from './views/SignupPage';
 import { apiService } from './services/apiService';
 import {
-    Rocket,
     LayoutGrid,
     Users,
     Inbox,
@@ -33,7 +32,9 @@ import {
     Button,
     Heading,
     Text,
-    GlassCard
+    GlassCard,
+    LoadingScreen,
+    useLoadingScreenGate
 } from './components/UI/index';
 import { FileViewerModal } from './components/FileViewerModal';
 import { FileUploadModal } from './components/FileUploadModal';
@@ -45,6 +46,8 @@ import { friendlyError } from './utils/errors';
 
 // Shared Layouts
 import { AppLayout } from './components/Layout';
+import ScrollProgressPill from './components/ScrollProgressPill';
+import { VeroMark } from './components/brand/VeroLogo';
 
 // View Components
 import StaffDashboardView from './components/views/StaffDashboardView';
@@ -94,7 +97,7 @@ const PendingSpaceView = () => (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 font-sans">
         <div className="max-w-md w-full text-center space-y-6">
             <div className="h-20 w-20 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto">
-                <Rocket size={36} className="text-zinc-400" />
+                <VeroMark className="h-12 w-12 opacity-40" />
             </div>
             <div className="space-y-2">
                 <h1 className="text-2xl font-black tracking-tight text-zinc-900">
@@ -174,14 +177,16 @@ const ClientSpacePicker: React.FC = () => {
         load();
     }, [user]);
 
-    if (loading) {
+    const clientSpacePickerLoadingGate = useLoadingScreenGate(loading);
+
+    if (clientSpacePickerLoadingGate.isVisible) {
         return (
-            <div className="min-h-screen bg-white flex items-center justify-center animate-pulse">
-                <div className="text-center space-y-3">
-                    <div className="h-10 w-10 bg-zinc-100 rounded-xl mx-auto" />
-                    <div className="h-4 w-32 bg-zinc-100 rounded mx-auto" />
-                </div>
-            </div>
+            <LoadingScreen
+                key={clientSpacePickerLoadingGate.cycleKey}
+                message="Loading your spaces..."
+                isComplete={clientSpacePickerLoadingGate.isComplete}
+                onExitComplete={clientSpacePickerLoadingGate.handleExitComplete}
+            />
         );
     }
 
@@ -190,7 +195,7 @@ const ClientSpacePicker: React.FC = () => {
             <div className="max-w-md w-full space-y-8">
                 <div className="text-center space-y-2">
                     <div className="h-12 w-12 bg-black rounded-[8px] flex items-center justify-center text-white mx-auto mb-4">
-                        <Rocket size={24} />
+                        <VeroMark tone="light" className="h-8 w-8" />
                     </div>
                     <h1 className="text-2xl font-semibold tracking-tight text-[#0D0D0D]">Your Spaces</h1>
                     <p className="text-[#6E6E80] text-sm">Select a workspace to continue</p>
@@ -476,7 +481,8 @@ const App = () => {
                 data.name || 'New Client',
                 `Workspace for ${data.name || 'New Client'}`,
                 organizationId || '',
-                data.modules
+                data.modules,
+                data.metadata
             );
 
             if (error) throw error;
@@ -514,6 +520,7 @@ const App = () => {
                     last_activity_at: new Date().toISOString(),
                     organization_id: organizationId || profile?.organization_id || '',
                     visibility: 'organization',
+                    metadata: data.metadata ?? {},
                     invitation_token: invitationToken,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
@@ -804,42 +811,17 @@ case ViewState.STAFF:
         }
     };
 
-    // Only show full-screen skeleton on the very first load if we have no data yet
-    if (loading || (isAuthenticated && userRole !== 'client' && isInitialLoading && clients.length === 0)) {
+    const isAppLoading = loading || (isAuthenticated && userRole !== 'client' && isInitialLoading && clients.length === 0);
+    const appLoadingGate = useLoadingScreenGate(isAppLoading);
+
+    if (appLoadingGate.isVisible) {
         return (
-            <div className="flex h-screen w-full bg-white font-sans animate-pulse">
-                <aside className="w-64 bg-[#ECECF1] border-r border-[#D1D5DB] flex flex-col justify-between p-4 z-20">
-                    <div className="space-y-8">
-                        <div className="flex items-center gap-3 px-3 mb-8 mt-2">
-                            <div className="h-8 w-8 bg-zinc-200 rounded-md"></div>
-                            <div className="h-5 w-24 bg-zinc-200 rounded"></div>
-                        </div>
-                        <div className="space-y-3 px-2">
-                            {[1, 2, 3, 4, 5, 6].map((i) => (
-                                <div key={i} className="h-10 bg-white/50 border border-zinc-100 rounded-md w-full"></div>
-                            ))}
-                        </div>
-                    </div>
-                </aside>
-                <main className="flex-1 bg-zinc-50/30 p-8 flex flex-col">
-                    <header className="h-16 border-b border-zinc-100 flex items-center justify-between px-8 bg-white/50 -mx-8 -mt-8 mb-8">
-                        <div className="h-4 w-48 bg-zinc-100 rounded"></div>
-                    </header>
-                    <div className="max-w-7xl mx-auto w-full space-y-8">
-                        <div className="flex justify-between items-end">
-                            <div className="space-y-2">
-                                <div className="h-10 w-64 bg-zinc-200 rounded-lg"></div>
-                                <div className="h-4 w-96 bg-zinc-100 rounded"></div>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {[1, 2, 3].map((i) => (
-                                <div key={i} className="h-48 bg-white border border-zinc-100 rounded-2xl shadow-sm"></div>
-                            ))}
-                        </div>
-                    </div>
-                </main>
-            </div>
+            <LoadingScreen
+                key={appLoadingGate.cycleKey}
+                message="Loading Vero..."
+                isComplete={appLoadingGate.isComplete}
+                onExitComplete={appLoadingGate.handleExitComplete}
+            />
         );
     }
 
@@ -1175,9 +1157,15 @@ case ViewState.STAFF:
                                             </div>
                                         </header>
                                     ) : null}
-                                    <div className="flex-1 overflow-y-auto px-2 pb-20 pt-3 sm:px-3 md:px-4 md:pb-24 md:pt-4">
-                                        <div className="w-full min-w-0">{renderContent()}</div>
+                                    <div
+                                        data-scroll-root="app"
+                                        className={currentView === ViewState.SPACE_DETAIL && selectedSpaceTab === 'Chat'
+                                        ? 'flex-1 overflow-hidden px-2 pb-2 pt-2 sm:px-3 md:px-4'
+                                        : 'flex-1 overflow-y-auto px-2 pb-20 pt-3 sm:px-3 md:px-4 md:pb-24 md:pt-4'
+                                    }>
+                                        <div className={currentView === ViewState.SPACE_DETAIL && selectedSpaceTab === 'Chat' ? 'h-full w-full min-w-0' : 'w-full min-w-0'}>{renderContent()}</div>
                                     </div>
+                                    <ScrollProgressPill />
                                     {currentView !== ViewState.SPACE_DETAIL ? (
                                     <nav className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4 md:bottom-8">
                                         <div className="dock-shell dock-enter flex max-w-[calc(100vw-2rem)] items-center gap-2 overflow-x-auto rounded-[999px] px-2 py-2">
@@ -1200,7 +1188,7 @@ case ViewState.STAFF:
                                                             {item.label}
                                                         </span>
                                                         {item.badge ? (
-                                                            <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-1.5 py-0.5 text-[10px] font-semibold text-[#6E6E80]">
+                                                                <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-1.5 py-0.5 text-[10px] font-semibold text-[#6E6E80]">
                                                                 {item.badge}
                                                             </span>
                                                         ) : null}

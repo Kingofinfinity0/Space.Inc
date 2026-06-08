@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/UI';
+import { VeroMark } from '../components/brand/VeroLogo';
 
 export const AuthenticatedLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
@@ -16,8 +17,15 @@ export const AuthenticatedLayout: React.FC<{ children: React.ReactNode }> = ({ c
           className="mb-8 text-left hover:opacity-80 transition-opacity"
           aria-label="Go to home page"
         >
-          <h1 className="text-2xl font-bold text-emerald-400">Nexus</h1>
-          <p className="text-sm text-gray-400">Client Portal</p>
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-white text-black">
+              <VeroMark className="h-7 w-7" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold text-emerald-400">Vero</h1>
+              <p className="text-sm text-gray-400">Client Portal</p>
+            </div>
+          </div>
         </button>
         
         <div className="flex-1">

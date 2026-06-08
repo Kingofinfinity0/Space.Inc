@@ -14,8 +14,7 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
-    GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle,
-    SkeletonLoader, SkeletonCard, SkeletonText, SkeletonImage
+    GlassCard, Button, Heading, Text, Input, Modal, Checkbox, Toggle, LoadingScreen, useLoadingScreenGate
 } from '../UI/index';
 import { FileViewerModal } from '../FileViewerModal';
 import { FileUploadModal } from '../FileUploadModal';
@@ -36,6 +35,7 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
 
     // Use realtime messages hook
     const { messages, loading, error, sendMessage, sendFile, messagesEndRef, uploadProgress } = useRealtimeMessages(selectedSpaceId || '', organizationId || '');
+    const loadingGate = useLoadingScreenGate(loading);
 
     const activeClient = clients.find(c => c.id === selectedSpaceId);
     const filteredInbox = inboxData.filter((item) => {
@@ -68,7 +68,23 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
     // Format timestamp for display
     const formatTime = (dateStr: string) => {
         const date = new Date(dateStr);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    };
+
+    const sameMessageGroup = (previous: Message | undefined, current: Message | undefined) => {
+        if (!previous || !current) return false;
+        const previousSenderKey = previous.senderId || `${previous.senderType}:${previous.senderName || ''}`;
+        const currentSenderKey = current.senderId || `${current.senderType}:${current.senderName || ''}`;
+        if (previousSenderKey !== currentSenderKey) return false;
+        return Math.abs(new Date(current.createdAt).getTime() - new Date(previous.createdAt).getTime()) <= 60 * 1000;
+    };
+
+    const shouldShowTimeMarker = (previous: Message | undefined, current: Message) => {
+        if (!previous) return true;
+        const previousDate = new Date(previous.createdAt);
+        const currentDate = new Date(current.createdAt);
+        if (previousDate.toDateString() !== currentDate.toDateString()) return true;
+        return currentDate.getTime() - previousDate.getTime() > 60 * 60 * 1000;
     };
 
     const activeCount = filteredInbox.length;
@@ -174,10 +190,13 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
 
                         {/* Messages Feed */}
                         <div className="flex-1 space-y-4 overflow-y-auto bg-[#FFFFFF] p-4 md:p-6">
-                            {loading ? (
-                                <div className="flex h-full items-center justify-center text-[#6E6E80]">
-                                    <div className="animate-pulse">Loading messages...</div>
-                                </div>
+                            {loadingGate.isVisible ? (
+                                <LoadingScreen
+                                    key={loadingGate.cycleKey}
+                                    message="Loading messages..."
+                                    isComplete={loadingGate.isComplete}
+                                    onExitComplete={loadingGate.handleExitComplete}
+                                />
                             ) : error ? (
                                 <div className="flex h-full items-center justify-center text-[#B42318]">
                                     {error}
@@ -188,15 +207,30 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                                     <p>No messages yet. Start the conversation.</p>
                                 </div>
                             ) : (
-                                messages.map(msg => (
-                                    <MessageItem 
-                                        key={msg.id} 
-                                        msg={msg} 
-                                        currentUserId={user?.id || ''} 
-                                        organizationId={organizationId || profile?.organization_id || ''} 
-                                        theme="inbox" 
-                                    />
-                                ))
+                                messages.map((msg, index) => {
+                                    const previous = messages[index - 1];
+                                    const next = messages[index + 1];
+                                    const groupedWithPrevious = sameMessageGroup(previous, msg);
+                                    const groupedWithNext = sameMessageGroup(msg, next);
+                                    return (
+                                        <React.Fragment key={msg.id}>
+                                            {shouldShowTimeMarker(previous, msg) && (
+                                                <div className="my-3 text-center text-[11px] font-medium text-[#6E6E80]">
+                                                    {formatTime(msg.createdAt)}
+                                                </div>
+                                            )}
+                                            <MessageItem
+                                                msg={msg}
+                                                currentUserId={user?.id || ''}
+                                                organizationId={organizationId || profile?.organization_id || ''}
+                                                theme="inbox"
+                                                showHeader={!groupedWithPrevious}
+                                                groupedWithPrevious={groupedWithPrevious}
+                                                groupedWithNext={groupedWithNext}
+                                            />
+                                        </React.Fragment>
+                                    );
+                                })
                             )}
                             <div ref={messagesEndRef} />
                         </div>

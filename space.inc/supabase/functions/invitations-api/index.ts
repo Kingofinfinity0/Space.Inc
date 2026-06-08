@@ -68,7 +68,7 @@ async function getInviterContext(
 
   return {
     inviter_name:  profile?.full_name ?? profile?.email?.split("@")[0] ?? "Your team",
-    org_name:      org?.name ?? "Space.inc",
+    org_name:      org?.name ?? "Vero",
     inviter_email: profile?.email ?? "",
   };
 }

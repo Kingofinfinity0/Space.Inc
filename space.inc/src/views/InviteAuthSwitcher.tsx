@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Rocket, Shield, UserPlus } from 'lucide-react';
+import { ArrowRight, Shield, UserPlus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, GlassCard, Heading, Input, Text } from '@/components/UI/index';
+import { VeroMark } from '@/components/brand/VeroLogo';
 import { getRouteFromReadiness } from '@/lib/contextReadiness';
 
 type AuthMode = 'login' | 'signup';
@@ -91,9 +92,9 @@ export default function InviteAuthSwitcher({ initialMode, redirectTo }: InviteAu
         <GlassCard className="min-h-[560px] p-8 transition-[min-height,box-shadow,transform] duration-[920ms] ease-[cubic-bezier(0.2,0.86,0.24,1)] md:p-10">
           <div className="mb-10 flex items-center justify-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-black text-white">
-              <Rocket size={18} />
+              <VeroMark tone="light" className="h-6 w-6" />
             </div>
-            <span className="text-lg font-semibold tracking-[-0.03em] text-[#0D0D0D]">Space.inc</span>
+            <span className="text-lg font-semibold tracking-[-0.03em] text-[#0D0D0D]">Vero</span>
           </div>
 
           <div className="mb-8 text-center">

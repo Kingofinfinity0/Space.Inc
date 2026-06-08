@@ -4,7 +4,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { apiService } from '../../services/apiService';
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
-import { GlassCard, Button, Heading, Input, Modal, SkeletonCard } from '../UI/index';
+import { GlassCard, Button, Heading, Input, Modal, LoadingScreen, useLoadingScreenGate } from '../UI/index';
 import { MessageItem } from './MessageItem';
 import { FileUploadModal } from '../FileUploadModal';
 import { SurfaceDock } from '../SurfaceDock';
@@ -24,7 +24,7 @@ import {
   LogOut,
   FolderClosed,
 } from 'lucide-react';
-import { ClientSpace, Meeting, Task } from '../../types';
+import { ClientSpace, Meeting, Message, Task } from '../../types';
 
 type ClientTab = 'Dashboard' | 'Chat' | 'Meetings' | 'Docs';
 
@@ -54,6 +54,8 @@ const ClientPortalView = ({
   const { messages, loading: messagesLoading, error, sendMessage, sendFile, messagesEndRef, uploadProgress } =
     useRealtimeMessages(client.id, orgId);
   const { files, loading: filesLoading, refreshFiles, removeFile } = useRealtimeFiles(client.id, orgId);
+  const messagesLoadingGate = useLoadingScreenGate(messagesLoading);
+  const filesLoadingGate = useLoadingScreenGate(filesLoading);
 
   const loadData = useCallback(async () => {
     if (!user || !orgId) return;
@@ -96,10 +98,26 @@ const ClientPortalView = ({
   ];
 
   const formatTime = (dateString: string) =>
-    new Date(dateString).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    new Date(dateString).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+  const sameMessageGroup = (previous: Message | undefined, current: Message | undefined) => {
+    if (!previous || !current) return false;
+    const previousSenderKey = previous.senderId || `${previous.senderType}:${previous.senderName || ''}`;
+    const currentSenderKey = current.senderId || `${current.senderType}:${current.senderName || ''}`;
+    if (previousSenderKey !== currentSenderKey) return false;
+    return Math.abs(new Date(current.createdAt).getTime() - new Date(previous.createdAt).getTime()) <= 60 * 1000;
+  };
+
+  const shouldShowTimeMarker = (previous: Message | undefined, current: Message) => {
+    if (!previous) return true;
+    const previousDate = new Date(previous.createdAt);
+    const currentDate = new Date(current.createdAt);
+    if (previousDate.toDateString() !== currentDate.toDateString()) return true;
+    return currentDate.getTime() - previousDate.getTime() > 60 * 60 * 1000;
+  };
 
   const handleSend = async () => {
     if (!messageInput.trim() || sending) return;
@@ -364,17 +382,43 @@ const ClientPortalView = ({
                 Conversation
               </div>
 
-              {messagesLoading ? (
-                <SkeletonCard className="h-64 rounded-[8px] border-[#E5E5E5] bg-white" />
+              {messagesLoadingGate.isVisible ? (
+                <LoadingScreen
+                  key={messagesLoadingGate.cycleKey}
+                  message="Loading messages..."
+                  isComplete={messagesLoadingGate.isComplete}
+                  onExitComplete={messagesLoadingGate.handleExitComplete}
+                />
               ) : error ? (
                 <div className="flex h-64 items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-white text-sm text-[#B42318]">
                   {error}
                 </div>
               ) : filteredMessages.length > 0 ? (
-                <div className="space-y-4">
-                  {filteredMessages.map((msg) => (
-                    <MessageItem key={msg.id} msg={msg} currentUserId={user?.id || ''} organizationId={orgId} theme="inbox" />
-                  ))}
+                <div>
+                  {filteredMessages.map((msg, index) => {
+                    const previous = filteredMessages[index - 1];
+                    const next = filteredMessages[index + 1];
+                    const groupedWithPrevious = sameMessageGroup(previous, msg);
+                    const groupedWithNext = sameMessageGroup(msg, next);
+                    return (
+                      <React.Fragment key={msg.id}>
+                        {shouldShowTimeMarker(previous, msg) && (
+                          <div className="my-3 text-center text-[11px] font-medium text-[#6E6E80]">
+                            {formatTime(msg.createdAt)}
+                          </div>
+                        )}
+                        <MessageItem
+                          msg={msg}
+                          currentUserId={user?.id || ''}
+                          organizationId={orgId}
+                          theme="inbox"
+                          showHeader={!groupedWithPrevious}
+                          groupedWithPrevious={groupedWithPrevious}
+                          groupedWithNext={groupedWithNext}
+                        />
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="flex h-64 flex-col items-center justify-center rounded-[8px] border border-[#E5E5E5] bg-white text-center text-[#6E6E80]">
@@ -507,8 +551,13 @@ const ClientPortalView = ({
           </Button>
         </div>
 
-        {filesLoading ? (
-          <SkeletonCard className="h-40 rounded-[8px] border-[#E5E5E5] bg-[#F7F7F8]" />
+        {filesLoadingGate.isVisible ? (
+          <LoadingScreen
+            key={filesLoadingGate.cycleKey}
+            message="Loading files..."
+            isComplete={filesLoadingGate.isComplete}
+            onExitComplete={filesLoadingGate.handleExitComplete}
+          />
         ) : files.length > 0 ? (
           <div className="space-y-3">
             {files.map((file) => (

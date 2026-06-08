@@ -16,6 +16,14 @@ type SendMessageOptions = {
     replyTo?: Message | null;
 };
 
+const IMAGE_FILE_EXTENSIONS = new Set(['avif', 'bmp', 'gif', 'heic', 'heif', 'jfif', 'jpeg', 'jpg', 'pjp', 'pjpeg', 'png', 'svg', 'webp']);
+
+const isImageFile = (file: File) => {
+    if (file.type.startsWith('image/')) return true;
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    return !!extension && IMAGE_FILE_EXTENSIONS.has(extension);
+};
+
 const normalizeReactions = (raw: any) => {
     const source = raw?.reactions ?? raw?.reaction_summary ?? [];
     if (Array.isArray(source)) return source;
@@ -70,11 +78,8 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string, init
     };
 
     useEffect(() => {
-        // Immediate cleanup of messages when spaceId or orgId changes
-        // This prevents showing "old" data from the previous context
-        setMessages([]);
-
         if (!spaceId || !orgId) {
+            setMessages([]);
             setLoading(false);
             return;
         }
@@ -85,6 +90,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string, init
             setMessages(cachedMessages);
             setLoading(false);
         } else {
+            setMessages([]);
             setLoading(true);
         }
         setError(null);
@@ -217,14 +223,13 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string, init
         if (!spaceId || !effectiveOrgId || !file) return { success: false, fileData: null };
 
         try {
-            setLoading(true);
             setError(null);
             setUploadProgress(0);
             const fileData = await apiService.uploadFile(spaceId, effectiveOrgId, file, (progress) => {
                 setUploadProgress(progress);
             });
 
-            const isImage = file.type.startsWith('image/');
+            const isImage = isImageFile(file);
             const extension = isImage ? 'image' : 'file';
             const label = isImage ? `Shared an image: ${file.name}` : `Shared a file: ${file.name}`;
             const { data, error: sendError } = await apiService.sendMessage(
@@ -235,6 +240,7 @@ export function useRealtimeMessages(spaceId: string | null, orgId?: string, init
                     file_id: fileData.id,
                     file_name: file.name,
                     mime_type: file.type,
+                    file_size: file.size,
                     kind: isImage ? 'image' : 'file'
                 },
                 channel,

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Activity, AlertCircle, BarChart3, ChevronRight, Download, FolderKanban, MoreVertical, Plus, Search, UserPlus, Users, X } from 'lucide-react';
-import { Button, GlassCard, Heading, Input, SkeletonLoader } from '../UI/index';
+import { Button, GlassCard, Heading, Input, LoadingScreen, useLoadingScreenGate } from '../UI/index';
 import { ClientLifecycle } from '../../types';
 
 type ClientsTab = 'list' | 'insights';
@@ -324,7 +324,18 @@ const ClientsCRMView: React.FC<{
     const hasActiveTools = Boolean(searchQuery.trim() || statusFilter !== 'all' || sortBy !== 'joined_desc');
     const selectedClient = clients.find((client) => client.id === selectedClientId) || null;
 
-    if (loading) return <SkeletonLoader type="dashboard" />;
+    const loadingGate = useLoadingScreenGate(loading);
+
+    if (loadingGate.isVisible) {
+        return (
+            <LoadingScreen
+                key={loadingGate.cycleKey}
+                message="Loading clients..."
+                isComplete={loadingGate.isComplete}
+                onExitComplete={loadingGate.handleExitComplete}
+            />
+        );
+    }
 
     return (
         <div className="space-y-6 page-enter">

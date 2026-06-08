@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PermissionMap } from '../../types';
-import { LoadingScreen } from '../UI';
+import { LoadingScreen, useLoadingScreenGate } from '../UI';
 
 interface PermissionGuardProps {
     spaceId?: string;
@@ -22,9 +22,16 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
     const params = useParams();
     const spaceId = propSpaceId || params.spaceId;
     const { permissions, isLoading, role } = usePermissions(spaceId);
+    const loadingGate = useLoadingScreenGate(isLoading);
 
-    if (isLoading) {
-        return <LoadingScreen />;
+    if (loadingGate.isVisible) {
+        return (
+            <LoadingScreen
+                key={loadingGate.cycleKey}
+                isComplete={loadingGate.isComplete}
+                onExitComplete={loadingGate.handleExitComplete}
+            />
+        );
     }
 
     if (requiredRole && role !== requiredRole) {

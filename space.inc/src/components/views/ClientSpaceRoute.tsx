@@ -6,16 +6,7 @@ import ClientPortalView from './ClientPortalView';
 import SpaceDetailView from './SpaceDetailView';
 import { ClientSpace, Meeting } from '../../types';
 import { apiService } from '../../services/apiService';
-
-const LoadingScreen = () => (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 animate-pulse">
-        <div className="max-w-md w-full space-y-4">
-            <div className="h-10 w-10 bg-zinc-100 rounded-xl mx-auto mb-6" />
-            <div className="h-6 bg-zinc-100 rounded-lg w-3/4 mx-auto" />
-            <div className="h-4 bg-zinc-50 rounded w-1/2 mx-auto" />
-        </div>
-    </div>
-);
+import { LoadingScreen, useLoadingScreenGate } from '../UI';
 
 const SpaceRoute: React.FC = () => {
     const { spaceId } = useParams<{ spaceId: string }>();
@@ -28,6 +19,8 @@ const SpaceRoute: React.FC = () => {
     const [fetchLoading, setFetchLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
     const activatedSpaceRef = useRef<string | null>(null);
+    const authLoadingGate = useLoadingScreenGate(authLoading);
+    const fetchLoadingGate = useLoadingScreenGate(fetchLoading);
 
     useEffect(() => {
         if (authLoading || !user) return;
@@ -98,9 +91,27 @@ const SpaceRoute: React.FC = () => {
         load();
     }, [authLoading, spaceId, user?.id]);
 
-    if (authLoading) return <LoadingScreen />;
+    if (authLoadingGate.isVisible) {
+        return (
+            <LoadingScreen
+                key={authLoadingGate.cycleKey}
+                message="Loading Vero..."
+                isComplete={authLoadingGate.isComplete}
+                onExitComplete={authLoadingGate.handleExitComplete}
+            />
+        );
+    }
     if (!user) return <Navigate to="/login" replace />;
-    if (fetchLoading) return <LoadingScreen />;
+    if (fetchLoadingGate.isVisible) {
+        return (
+            <LoadingScreen
+                key={fetchLoadingGate.cycleKey}
+                message="Loading space..."
+                isComplete={fetchLoadingGate.isComplete}
+                onExitComplete={fetchLoadingGate.handleExitComplete}
+            />
+        );
+    }
     if (notFound || !space) {
         return (
             <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 font-sans">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Copy, RefreshCw, Trash2 } from 'lucide-react';
-import { Button, SkeletonText } from '@/components/UI';
+import { Button, LoadingScreen, useLoadingScreenGate } from '@/components/UI';
 import { usePendingInvitations } from '@/hooks/useInvitationQueries';
 import { getInvitationId, InvitationRow } from './inviteTypes';
 import { RegenerateConfirmDialog } from './RegenerateConfirmDialog';
@@ -14,8 +14,18 @@ export const InviteListTable: React.FC<InviteListTableProps> = ({ spaceId }) => 
   const { data = [], isLoading, error } = usePendingInvitations(spaceId);
   const [regenerating, setRegenerating] = useState<InvitationRow | null>(null);
   const [revoking, setRevoking] = useState<InvitationRow | null>(null);
+  const loadingGate = useLoadingScreenGate(isLoading);
 
-  if (isLoading) return <SkeletonText lines={5} />;
+  if (loadingGate.isVisible) {
+    return (
+      <LoadingScreen
+        key={loadingGate.cycleKey}
+        message="Loading invitations..."
+        isComplete={loadingGate.isComplete}
+        onExitComplete={loadingGate.handleExitComplete}
+      />
+    );
+  }
 
   if (error) {
     return (

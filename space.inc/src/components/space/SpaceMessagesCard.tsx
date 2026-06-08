@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AtSign, MessageSquare, Send, X } from 'lucide-react';
 import { Message } from '../../types';
+import { LoadingScreen, useLoadingScreenGate } from '../UI';
 
 type SpaceMemberOption = {
     user_id?: string;
@@ -100,6 +101,7 @@ export function SpaceMessagesCard({
     const [drafts, setDrafts] = useState<Record<string, string>>({});
     const [sendingMessageId, setSendingMessageId] = useState<string | null>(null);
     const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(() => new Set());
+    const loadingGate = useLoadingScreenGate(loading);
 
     const normalizedMentionTokens = useMemo(() => {
         return mentionTokens
@@ -209,12 +211,13 @@ export function SpaceMessagesCard({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-                {loading ? (
-                    <div className="space-y-3 px-4 py-4">
-                        {[0, 1].map((item) => (
-                            <div key={item} className="h-16 animate-pulse rounded-[8px] bg-[#F0F0F2]" />
-                        ))}
-                    </div>
+                {loadingGate.isVisible ? (
+                    <LoadingScreen
+                        key={loadingGate.cycleKey}
+                        message="Loading messages..."
+                        isComplete={loadingGate.isComplete}
+                        onExitComplete={loadingGate.handleExitComplete}
+                    />
                 ) : spotlightMessages.length > 0 ? (
                     <div className="divide-y divide-[#ECECEF]">
                         {spotlightMessages.map(({ message, label }) => {
