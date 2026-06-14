@@ -115,7 +115,7 @@ export function SpaceMemberPanel({ spaceId, compact = false, className = '' }: {
     }, [members]);
 
     return (
-        <section className={`flex flex-col overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${className}`}>
+        <section className={`ui-card-lane overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${className}`}>
             <div className="space-dashboard-panel-header flex items-center justify-between gap-3 border-b border-[#E5E5E5] px-4 py-3">
                 <h2 className="space-dashboard-panel-title truncate text-[#0D0D0D]">Space Members</h2>
                 <span className="space-dashboard-meta-pill shrink-0 rounded-full border border-[#E5E5E5] bg-[#F7F7F8] px-2 py-0.5 text-[#6E6E80]">
@@ -123,7 +123,7 @@ export function SpaceMemberPanel({ spaceId, compact = false, className = '' }: {
                 </span>
             </div>
 
-            <div className={`min-h-0 flex-1 px-4 py-1.5 ${compact ? 'overflow-y-auto' : ''}`}>
+            <div className={`min-h-0 flex-1 px-4 py-1.5 ${compact ? 'ui-card-scroll' : ''}`}>
                 {loadingGate.isVisible ? (
                     <LoadingScreen
                         key={loadingGate.cycleKey}

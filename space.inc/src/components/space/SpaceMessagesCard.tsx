@@ -194,7 +194,7 @@ export function SpaceMessagesCard({
     };
 
     return (
-        <section className={`flex flex-col overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${className}`}>
+        <section className={`ui-card-lane overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${className}`}>
             <div className="space-dashboard-panel-header flex items-center justify-between gap-3 border-b border-[#E5E5E5] px-4 py-3">
                 <button
                     type="button"
@@ -210,7 +210,7 @@ export function SpaceMessagesCard({
                 )}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="ui-card-scroll">
                 {loadingGate.isVisible ? (
                     <LoadingScreen
                         key={loadingGate.cycleKey}

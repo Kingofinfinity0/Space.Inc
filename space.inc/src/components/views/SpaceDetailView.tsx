@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -10,7 +10,7 @@ import {
     Briefcase, ChevronRight, LogOut, Video, Download, Upload, Clock, UserPlus, ArrowRight,
     Link as LinkIcon, Copy, ListTodo, MoreVertical, Flag, Trash2, User, ArrowLeft,
     GripVertical, Activity, Shield, Lock, FileUp, Key, FilePlus as FilePlus2,
-    File as DocIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
+    File as DocIcon, FileSpreadsheet, Image as ImageIcon, Rocket, LayoutGrid, Inbox, UserCheck, CheckSquare, FolderClosed,
     Bell, Eye, Play, X, FileVideo, ChevronLeft, History, Mail, ChevronsUpDown
 } from 'lucide-react';
 import {
@@ -62,6 +62,28 @@ const getGreeting = () => {
     if (hour < 12) return 'Good Morning';
     if (hour < 17) return 'Good Afternoon';
     return 'Good Evening';
+};
+
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif', 'heic', 'heif']);
+const SPREADSHEET_EXTENSIONS = new Set(['xls', 'xlsx', 'csv', 'ods', 'tsv', 'numbers']);
+
+const getFileExtension = (file: SpaceFile) => {
+    const source = file.name || file.display_name || '';
+    return source.includes('.') ? source.split('.').pop()?.toLowerCase() || '' : '';
+};
+
+const isImageFile = (file: SpaceFile) => {
+    const mimeType = file.mime_type || file.type || '';
+    return mimeType.startsWith('image/') || IMAGE_EXTENSIONS.has(getFileExtension(file));
+};
+
+const getDocumentIcon = (file: SpaceFile, size = 20) => {
+    const mimeType = file.mime_type || file.type || '';
+    const extension = getFileExtension(file);
+
+    if (isImageFile(file)) return <ImageIcon size={size} />;
+    if (mimeType.includes('spreadsheet') || mimeType.includes('csv') || SPREADSHEET_EXTENSIONS.has(extension)) return <FileSpreadsheet size={size} />;
+    return <DocIcon size={size} />;
 };
 
 const DonutStat = ({ label, value, progress, tone = '#0D0D0D' }: { label: string; value: string; progress: number; tone?: string }) => {
@@ -506,6 +528,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
         ? space.status as typeof allowedSpaceStatuses[number]
         : 'active';
     const canManageMeetings = ['owner', 'admin', 'staff'].includes(userRole || '');
+    const canDeleteTasks = permissions ? !!(permissions.delete_task || permissions.manage_tasks) : true;
     const dashboardMentionTokens = [
         profile?.full_name?.trim().replace(/\s+/g, '.').toLowerCase(),
         profile?.email?.split('@')[0]?.toLowerCase(),
@@ -588,6 +611,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
 
     const effectiveOrgId = organizationId || profile?.organization_id || '';
     const { files, loading: filesLoading, refreshFiles, upsertFile, removeFile } = useRealtimeFiles(space.id, organizationId || '', showTrash);
+    const documentFiles = useMemo(() => files.filter((file) => !isImageFile(file)), [files]);
     const tasksLoadingGate = useLoadingScreenGate(tasksLoading);
     const filesLoadingGate = useLoadingScreenGate(filesLoading);
     const {
@@ -832,7 +856,19 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             </div>
                         ) : null}
                             </>
-                        ) : null}
+                        ) : (
+                            canManageSpace ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeleteSpaceModal(true)}
+                                    className="flex h-9 w-9 items-center justify-center rounded-full border border-[#F2D4D1] bg-white text-[#B42318] transition-colors hover:bg-[#FFF4F2]"
+                                    title="Delete space"
+                                    aria-label={`Delete ${space.name}`}
+                                >
+                                    <Trash2 size={15} />
+                                </button>
+                            ) : null
+                        )}
                     </div>
                 </div>
             </div>
@@ -941,7 +977,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             <SpaceMemberPanel spaceId={space.id} compact className="h-full" />
                         </div>
 
-                        <GlassCard className="h-[340px] overflow-hidden border border-[#E5E5E5] bg-white/95 p-0 md:col-span-1 xl:col-span-1">
+                        <GlassCard className="ui-card-lane h-[340px] border border-[#E5E5E5] bg-white/95 p-0 md:col-span-1 xl:col-span-1">
                             <div className="space-dashboard-panel-header flex items-center justify-between gap-4 border-b border-[#E5E5E5] px-4 py-3">
                                 <div>
                                     <p className="space-dashboard-panel-subtitle uppercase tracking-[0.14em] text-[#6E6E80]">Task flow</p>
@@ -951,7 +987,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                     {tasks.filter((task) => task.status !== 'done').length} open
                                 </span>
                             </div>
-                            <div className="h-[265px] overflow-y-auto p-4">
+                            <div className="ui-card-scroll p-4">
                                 {tasksLoadingGate.isVisible ? (
                                     <LoadingScreen
                                         key={tasksLoadingGate.cycleKey}
@@ -1020,6 +1056,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                 showTypeFilter={true}
                                 title=""
                                 variant="compact"
+                                stateKey={`space-overview.${space.id}`}
                                 onTaskAction={handleCalendarTaskAction}
                                 onMeetingAction={handleCalendarMeetingAction}
                                 canDeleteMeetings={canManageMeetings}
@@ -1059,36 +1096,38 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                 {localMeetings.map(m => {
     const isEnded = m.status === 'ended' || m.status === 'cancelled';
     return (
-        <GlassCard key={m.id} className="p-4 flex flex-col justify-between h-auto">
-            <div className="flex justify-between items-start mb-3">
-                <div>
-                    <p className="font-semibold text-sm truncate max-w-[200px]">{m.title}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-zinc-500 uppercase">
-                            {isEnded ? m.status : m.status}
-                        </span>
-                        {!isEnded && (m.status === 'active' || m.status === 'live') && (
-                            <span className="text-emerald-500 font-bold text-[10px] flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> LIVE
+        <GlassCard key={m.id} className="ui-card-lane min-h-[156px] max-h-[156px] p-4">
+            <div className="ui-card-scroll mb-3 pr-1">
+                <div className="flex justify-between items-start">
+                    <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate max-w-[200px]">{m.title}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] text-zinc-500 uppercase">
+                                {isEnded ? m.status : m.status}
                             </span>
-                        )}
-                        {isEnded && m.outcome && (
-                            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                                m.outcome === 'successful' ? 'bg-emerald-100 text-emerald-700' :
-                                m.outcome === 'no_show' ? 'bg-red-100 text-red-700' :
-                                'bg-amber-100 text-amber-700'
-                            }`}>
-                                {m.outcome.replace(/_/g, ' ')}
-                            </span>
-                        )}
+                            {!isEnded && (m.status === 'active' || m.status === 'live') && (
+                                <span className="text-emerald-500 font-bold text-[10px] flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> LIVE
+                                </span>
+                            )}
+                            {isEnded && m.outcome && (
+                                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                                    m.outcome === 'successful' ? 'bg-emerald-100 text-emerald-700' :
+                                    m.outcome === 'no_show' ? 'bg-red-100 text-red-700' :
+                                    'bg-amber-100 text-amber-700'
+                                }`}>
+                                    {m.outcome.replace(/_/g, ' ')}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                        <p className="text-xs font-bold">{new Date(m.starts_at).toLocaleDateString()}</p>
+                        <p className="text-[10px] text-zinc-400">{new Date(m.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
                 </div>
-                <div className="text-right">
-                    <p className="text-xs font-bold">{new Date(m.starts_at).toLocaleDateString()}</p>
-                    <p className="text-[10px] text-zinc-400">{new Date(m.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                </div>
             </div>
-            <div className="flex gap-2 w-full mt-2">
+            <div className="flex shrink-0 gap-2 w-full">
                 <Button
                     variant={isEnded ? 'outline' : 'primary'}
                     size="sm"
@@ -1284,6 +1323,16 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                 showToast(friendlyError(err?.message || 'Failed to archive task'), 'error');
                             }
                         }}
+                        onDeleteTask={canDeleteTasks ? async (taskId) => {
+                            try {
+                                const { error } = await apiService.deleteTask(taskId);
+                                if (error) throw error;
+                                setTasks((current) => current.filter((task) => task.id !== taskId));
+                                showToast('Task deleted.', 'success');
+                            } catch (err: any) {
+                                showToast(friendlyError(err?.message || 'Failed to delete task'), 'error');
+                            }
+                        } : undefined}
                         onRequestReview={async (taskId, reviewerId) => {
                             try {
                                 const { data, error } = await apiService.requestTaskReview(taskId, reviewerId);
@@ -1343,7 +1392,7 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                                 isComplete={filesLoadingGate.isComplete}
                                 onExitComplete={filesLoadingGate.handleExitComplete}
                             />
-                        ) : files.length === 0 ? (
+                        ) : documentFiles.length === 0 ? (
                             <GlassCard className="p-12 flex flex-col items-center justify-center text-center">
                                 <FileText size={48} className="text-zinc-200 mb-4" />
                                 <Heading level={3} className="text-zinc-400">{showTrash ? 'Trash is empty' : 'No documents yet'}</Heading>
@@ -1353,11 +1402,11 @@ const SpaceDetailView = ({ spaceId, space: initialSpace, meetings, onBack, onJoi
                             </GlassCard>
                         ) : (
                             <div className="grid grid-cols-1 gap-3">
-                                {files.map(file => (
+                                {documentFiles.map(file => (
                                     <GlassCard key={file.id} className="p-4 flex justify-between items-center group hover:border-zinc-300 transition-all shadow-sm">
                                         <div className="flex items-center gap-4">
                                             <div className="h-10 w-10 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-400">
-                                                <DocIcon size={20} />
+                                                {getDocumentIcon(file, 20)}
                                             </div>
                                             <div>
                                                 <div className="flex items-center gap-2">

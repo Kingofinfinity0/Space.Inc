@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Filter, ListTodo, MoreHorizontal, Video, X } from 'lucide-react';
 import { Button, GlassCard } from './UI/index';
 import { ClientSpace, Meeting, Task } from '../types';
+import { usePersistentState } from '../lib/persistence';
 
 type CalendarItemType = 'meeting' | 'task';
 
@@ -27,15 +28,44 @@ type Props = {
     showTypeFilter?: boolean;
     title?: string;
     variant?: 'default' | 'compact';
+    stateKey?: string;
     onOpenSpace?: (spaceId: string) => void;
     onTaskAction?: (taskId: string, action: CalendarTaskAction) => void | Promise<void>;
     onMeetingAction?: (meetingId: string, action: CalendarMeetingAction) => void | Promise<void>;
     canDeleteMeetings?: boolean;
 };
 
+type CalendarCursor = {
+    year: number;
+    month: number;
+};
+
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 const toDayKey = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+const isDayKey = (value: unknown): value is string => (
+    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+);
+
+const isOptionalDayKey = (value: unknown): value is string => value === '' || isDayKey(value);
+
+const isString = (value: unknown): value is string => typeof value === 'string';
+
+const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
+
+const isCalendarCursor = (value: unknown): value is CalendarCursor => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const cursor = value as Partial<CalendarCursor>;
+    return (
+        Number.isInteger(cursor.year)
+        && Number.isInteger(cursor.month)
+        && (cursor.year as number) >= 1970
+        && (cursor.year as number) <= 2200
+        && (cursor.month as number) >= 0
+        && (cursor.month as number) <= 11
+    );
+};
 
 const parseIsoSafe = (iso?: string | null) => {
     if (!iso) return null;
@@ -82,18 +112,54 @@ export function CalendarWidget({
     onOpenSpace,
     onTaskAction,
     onMeetingAction,
-    canDeleteMeetings = false
+    canDeleteMeetings = false,
+    stateKey
 }: Props) {
     const now = new Date();
-    const [cursorYear, setCursorYear] = useState(now.getFullYear());
-    const [cursorMonth, setCursorMonth] = useState(now.getMonth());
-    const [selectedDayKey, setSelectedDayKey] = useState<string>(toDayKey(now));
-    const [agendaDayKey, setAgendaDayKey] = useState<string | null>(null);
+    const initialDayKey = toDayKey(now);
+    const calendarStateKey = `calendar.${variant}.${stateKey || defaultSpaceId || 'global'}`;
+    const [cursor, setCursor] = usePersistentState<CalendarCursor>(
+        `${calendarStateKey}.cursor`,
+        { year: now.getFullYear(), month: now.getMonth() },
+        { validate: isCalendarCursor }
+    );
+    const cursorYear = cursor.year;
+    const cursorMonth = cursor.month;
+    const [selectedDayKey, setSelectedDayKey] = usePersistentState<string>(
+        `${calendarStateKey}.selectedDay`,
+        initialDayKey,
+        { validate: isDayKey }
+    );
+    const [agendaDayValue, setAgendaDayValue] = usePersistentState<string>(
+        `${calendarStateKey}.agendaDay`,
+        '',
+        { validate: isOptionalDayKey }
+    );
+    const agendaDayKey = agendaDayValue || null;
+    const setAgendaDayKey = (key: string | null) => setAgendaDayValue(key || '');
     const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
-    const [spaceFilter, setSpaceFilter] = useState<string>(defaultSpaceId || 'all');
-    const [showMeetings, setShowMeetings] = useState(true);
-    const [showTasks, setShowTasks] = useState(true);
+    const [spaceFilter, setSpaceFilter] = usePersistentState<string>(
+        `${calendarStateKey}.spaceFilter`,
+        defaultSpaceId || 'all',
+        { validate: isString }
+    );
+    const [showMeetings, setShowMeetings] = usePersistentState<boolean>(
+        `${calendarStateKey}.showMeetings`,
+        true,
+        { validate: isBoolean }
+    );
+    const [showTasks, setShowTasks] = usePersistentState<boolean>(
+        `${calendarStateKey}.showTasks`,
+        true,
+        { validate: isBoolean }
+    );
+
+    useEffect(() => {
+        if (defaultSpaceId && !showSpaceFilter && spaceFilter !== defaultSpaceId) {
+            setSpaceFilter(defaultSpaceId);
+        }
+    }, [defaultSpaceId, showSpaceFilter, spaceFilter, setSpaceFilter]);
 
     const spaceNameById = useMemo(() => {
         const m = new Map<string, string>();
@@ -191,14 +257,12 @@ export function CalendarWidget({
 
     const goPrevMonth = () => {
         const d = new Date(cursorYear, cursorMonth - 1, 1);
-        setCursorYear(d.getFullYear());
-        setCursorMonth(d.getMonth());
+        setCursor({ year: d.getFullYear(), month: d.getMonth() });
     };
 
     const goNextMonth = () => {
         const d = new Date(cursorYear, cursorMonth + 1, 1);
-        setCursorYear(d.getFullYear());
-        setCursorMonth(d.getMonth());
+        setCursor({ year: d.getFullYear(), month: d.getMonth() });
     };
 
     const todayKey = toDayKey(now);
@@ -549,48 +613,50 @@ export function CalendarWidget({
                 </div>
             </GlassCard>
 
-            <GlassCard className="p-5">
+            <GlassCard className="ui-card-lane max-h-[560px] p-5">
                 <div className="flex items-center justify-between mb-3">
                     <div className="text-sm font-semibold text-zinc-900">Agenda</div>
                     <div className="text-[11px] text-zinc-500">{selectedDayKey}</div>
                 </div>
 
-                {selectedItems.length === 0 ? (
-                    <div className="p-6 border border-dashed border-zinc-200 rounded-xl bg-zinc-50 text-center">
-                        <div className="text-xs text-zinc-500">No items on this day.</div>
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        {selectedItems.map(item => {
-                            const d = new Date(item.startAt);
-                            const time = item.type === 'meeting'
-                                ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                : 'Due';
+                <div className="ui-card-scroll pr-1">
+                    {selectedItems.length === 0 ? (
+                        <div className="p-6 border border-dashed border-zinc-200 rounded-xl bg-zinc-50 text-center">
+                            <div className="text-xs text-zinc-500">No items on this day.</div>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {selectedItems.map(item => {
+                                const d = new Date(item.startAt);
+                                const time = item.type === 'meeting'
+                                    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                    : 'Due';
 
-                            const spaceName = spaceNameById.get(item.spaceId) || 'Unknown space';
-                            const color = hashToColor(item.spaceId);
+                                const spaceName = spaceNameById.get(item.spaceId) || 'Unknown space';
+                                const color = hashToColor(item.spaceId);
 
-                            return (
-                                <div key={item.id} className="p-3 bg-white border border-zinc-200 rounded-xl hover:border-zinc-300 transition-colors">
-                                    <div className="flex items-start gap-3">
-                                        <div className={`h-9 w-1.5 rounded-full ${color}`} />
-                                        <button type="button" onClick={() => onOpenSpace?.(item.spaceId)} className="min-w-0 flex-1 text-left">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="text-xs font-bold text-zinc-900 truncate">{item.title}</div>
-                                                <div className="text-[10px] text-zinc-500 whitespace-nowrap">{time}</div>
-                                            </div>
-                                            <div className="text-[10px] text-zinc-500 mt-1 truncate">{spaceName}</div>
-                                            <div className="mt-2 inline-flex items-center gap-2 text-[10px] px-2 py-1 rounded-md bg-zinc-50 text-zinc-600 border border-zinc-100">
-                                                {item.type === 'meeting' ? <Video size={12} /> : <ListTodo size={12} />}
-                                                {item.type === 'meeting' ? 'Meeting' : 'Task deadline'}
-                                            </div>
-                                        </button>
+                                return (
+                                    <div key={item.id} className="p-3 bg-white border border-zinc-200 rounded-xl hover:border-zinc-300 transition-colors">
+                                        <div className="flex items-start gap-3">
+                                            <div className={`h-9 w-1.5 rounded-full ${color}`} />
+                                            <button type="button" onClick={() => onOpenSpace?.(item.spaceId)} className="min-w-0 flex-1 text-left">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="text-xs font-bold text-zinc-900 truncate">{item.title}</div>
+                                                    <div className="text-[10px] text-zinc-500 whitespace-nowrap">{time}</div>
+                                                </div>
+                                                <div className="text-[10px] text-zinc-500 mt-1 truncate">{spaceName}</div>
+                                                <div className="mt-2 inline-flex items-center gap-2 text-[10px] px-2 py-1 rounded-md bg-zinc-50 text-zinc-600 border border-zinc-100">
+                                                    {item.type === 'meeting' ? <Video size={12} /> : <ListTodo size={12} />}
+                                                    {item.type === 'meeting' ? 'Meeting' : 'Task deadline'}
+                                                </div>
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
             </GlassCard>
         </div>
     );

@@ -12,6 +12,7 @@ import {
     Search,
     Send,
     SlidersHorizontal,
+    Trash2,
     UserRound,
     UsersRound,
     X
@@ -20,6 +21,8 @@ import { Button, Input, LoadingScreen, useLoadingScreenGate } from '../UI';
 import { ClientSpace, SpaceTaskMember, Task, TaskStatusDefinition } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/apiService';
+import { useUrlParamState } from '../../hooks/useUrlParamState';
+import { usePersistentState } from '../../lib/persistence';
 
 type TaskScopeFilter = 'my' | 'team' | 'assigned';
 type TaskSortMode = 'due' | 'updated' | 'priority';
@@ -60,6 +63,7 @@ type TaskWorkspaceProps = {
     onCreateTask?: (draft: Partial<Task>) => Promise<void> | void;
     onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void> | void;
     onArchiveTask?: (taskId: string) => Promise<void> | void;
+    onDeleteTask?: (taskId: string) => Promise<void> | void;
     onRequestReview?: (taskId: string, reviewerId: string) => Promise<void> | void;
     onCompleteReview?: (taskId: string, approved: boolean, comment?: string) => Promise<void> | void;
     onAddTaskComment?: (taskId: string, content: string) => Promise<Task | void> | Task | void;
@@ -71,6 +75,10 @@ const SCOPE_OPTIONS: Array<{ id: TaskScopeFilter; label: string; icon: React.Rea
     { id: 'team', label: 'Team issues', icon: <UsersRound size={14} /> },
     { id: 'assigned', label: 'Assigned', icon: <CheckCircle2 size={14} /> }
 ];
+const TASK_SCOPE_FILTERS = ['my', 'team', 'assigned'] as const;
+const TASK_STATUS_FILTERS = ['all', 'pending', 'todo', 'in_progress', 'review', 'done', 'canceled', 'archived'] as const;
+const TASK_SORT_MODES = ['due', 'updated', 'priority'] as const;
+const TASK_DENSITIES = ['auto', 'compact', 'comfortable'] as const;
 
 type DisplayStatus = Task['status'] | 'archived';
 type StatusGroup = { id: DisplayStatus; label: string; caption: string; position: number; color?: string };
@@ -424,6 +432,7 @@ export default function TaskWorkspace({
     onCreateTask,
     onUpdateTask,
     onArchiveTask,
+    onDeleteTask,
     onRequestReview,
     onCompleteReview,
     onAddTaskComment,
@@ -432,17 +441,59 @@ export default function TaskWorkspace({
     void groupOptions;
     void showSummary;
     const { user } = useAuth();
-    const [scopeFilter, setScopeFilter] = useState<TaskScopeFilter>('team');
-    const [spaceFilter, setSpaceFilter] = useState(scopeSpaceId || 'all');
-    const [statusFilter, setStatusFilter] = useState<'all' | DisplayStatus>('all');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [sortMode, setSortMode] = useState<TaskSortMode>('due');
-    const [density, setDensity] = useState<TaskDensity>('auto');
+    const persistControlState = showToolbar;
+    const [localScopeFilter, setLocalScopeFilter] = useState<TaskScopeFilter>('team');
+    const [urlScopeFilter, setUrlScopeFilter] = useUrlParamState<TaskScopeFilter>('task_scope', 'team', {
+        allowedValues: TASK_SCOPE_FILTERS,
+        enabled: persistControlState,
+        replace: true
+    });
+    const scopeFilter = persistControlState ? urlScopeFilter : localScopeFilter;
+    const setScopeFilter = persistControlState ? setUrlScopeFilter : setLocalScopeFilter;
+    const [localSpaceFilter, setLocalSpaceFilter] = useState(scopeSpaceId || 'all');
+    const [urlSpaceFilter, setUrlSpaceFilter] = useUrlParamState('task_space', scopeSpaceId || 'all', {
+        enabled: persistControlState && !scopeSpaceId,
+        replace: true
+    });
+    const spaceFilter = scopeSpaceId ? scopeSpaceId : (persistControlState ? urlSpaceFilter : localSpaceFilter);
+    const setSpaceFilter = persistControlState && !scopeSpaceId ? setUrlSpaceFilter : setLocalSpaceFilter;
+    const [localStatusFilter, setLocalStatusFilter] = useState<'all' | DisplayStatus>('all');
+    const [urlStatusFilter, setUrlStatusFilter] = useUrlParamState<'all' | DisplayStatus>('task_status', 'all', {
+        allowedValues: TASK_STATUS_FILTERS,
+        enabled: persistControlState,
+        replace: true
+    });
+    const statusFilter = persistControlState ? urlStatusFilter : localStatusFilter;
+    const setStatusFilter = persistControlState ? setUrlStatusFilter : setLocalStatusFilter;
+    const [localSearchQuery, setLocalSearchQuery] = useState('');
+    const [urlSearchQuery, setUrlSearchQuery] = useUrlParamState('task_q', '', {
+        enabled: persistControlState,
+        replace: true
+    });
+    const searchQuery = persistControlState ? urlSearchQuery : localSearchQuery;
+    const setSearchQuery = persistControlState ? setUrlSearchQuery : setLocalSearchQuery;
+    const [localSortMode, setLocalSortMode] = useState<TaskSortMode>('due');
+    const [urlSortMode, setUrlSortMode] = useUrlParamState<TaskSortMode>('task_sort', 'due', {
+        allowedValues: TASK_SORT_MODES,
+        enabled: persistControlState,
+        replace: true
+    });
+    const sortMode = persistControlState ? urlSortMode : localSortMode;
+    const setSortMode = persistControlState ? setUrlSortMode : setLocalSortMode;
+    const [density, setDensity] = usePersistentState<TaskDensity>(`tasks.${scopeSpaceId || 'global'}.density`, 'auto', {
+        validate: (value): value is TaskDensity => typeof value === 'string' && TASK_DENSITIES.includes(value as TaskDensity)
+    });
+    const [activeTaskParam, setActiveTaskParam] = useUrlParamState('task', '', {
+        enabled: persistControlState,
+        replace: false
+    });
     const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth));
     const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
     const dragPreviewRef = useRef<DragPreview | null>(null);
     const dragCandidateRef = useRef<{ task: Task; startX: number; startY: number; pointerId: number } | null>(null);
-    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+    const [collapsedGroups, setCollapsedGroups] = usePersistentState<Record<string, boolean>>(`tasks.${scopeSpaceId || 'global'}.collapsedGroups`, {}, {
+        validate: (value): value is Record<string, boolean> => typeof value === 'object' && value !== null && !Array.isArray(value)
+    });
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const filterMenuRef = useRef<HTMLDivElement | null>(null);
     const [isComposerOpen, setIsComposerOpen] = useState(false);
@@ -722,6 +773,7 @@ export default function TaskWorkspace({
         setCommentDraft('');
         setDetailError(null);
         setDetailLoading(false);
+        if (persistControlState) setActiveTaskParam('');
         setIsComposerOpen(true);
     };
 
@@ -736,17 +788,37 @@ export default function TaskWorkspace({
         setCommentDraft('');
         setDetailError(null);
         setDetailLoading(false);
+        if (persistControlState) setActiveTaskParam('');
         setIsComposerOpen(true);
     };
 
-    const openEdit = (task: Task) => {
+    const openEdit = (task: Task, syncUrl = true) => {
         setEditingTask(task);
         setDraft(makeDraft(task, scopeSpaceId));
         setReviewComment('');
         setCommentDraft('');
         setDetailError(null);
+        if (persistControlState && syncUrl) setActiveTaskParam(task.id);
         setIsComposerOpen(true);
     };
+
+    const closeComposer = () => {
+        setIsComposerOpen(false);
+        if (persistControlState) setActiveTaskParam('');
+    };
+
+    useEffect(() => {
+        if (!persistControlState) return;
+
+        if (!activeTaskParam) {
+            if (isComposerOpen && editingTask) closeComposer();
+            return;
+        }
+
+        const task = tasks.find((item) => item.id === activeTaskParam);
+        if (!task || editingTask?.id === task.id) return;
+        openEdit(task, false);
+    }, [activeTaskParam, editingTask, isComposerOpen, persistControlState, tasks]);
 
     const handleSave = async () => {
         if (!draft.title.trim()) return;
@@ -771,7 +843,7 @@ export default function TaskWorkspace({
             } else {
                 await onCreateTask?.(payload);
             }
-            setIsComposerOpen(false);
+            closeComposer();
         } finally {
             setIsSaving(false);
         }
@@ -783,9 +855,22 @@ export default function TaskWorkspace({
         setIsSaving(true);
         try {
             await onArchiveTask(editingTask.id);
-            setIsComposerOpen(false);
+            closeComposer();
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async (task: Task, closeAfterDelete = false) => {
+        if (!onDeleteTask) return;
+        if (!window.confirm(`Delete ${task.title || 'this task'}?`)) return;
+
+        if (closeAfterDelete) setIsSaving(true);
+        try {
+            await onDeleteTask(task.id);
+            if (closeAfterDelete) closeComposer();
+        } finally {
+            if (closeAfterDelete) setIsSaving(false);
         }
     };
 
@@ -807,7 +892,7 @@ export default function TaskWorkspace({
         setIsSaving(true);
         try {
             await onCompleteReview(editingTask.id, approved, reviewComment.trim() || undefined);
-            setIsComposerOpen(false);
+            closeComposer();
         } finally {
             setIsSaving(false);
         }
@@ -923,10 +1008,9 @@ export default function TaskWorkspace({
     return (
         <>
             <div className="task-workspace mx-auto flex w-full max-w-[1480px] flex-col gap-4">
-                <div className={`task-page-header flex min-h-[76px] flex-col justify-center gap-3 border-b pb-4 ${compact ? '' : 'md:flex-row md:items-end md:justify-between'}`}>
+                <div className={`task-page-header flex min-h-[48px] flex-col justify-center gap-2 border-b pb-2 ${compact ? '' : 'md:flex-row md:items-center md:justify-between'}`}>
                     <div className="min-w-0">
                         <h1 className="task-title text-[30px] font-semibold leading-tight">{title}</h1>
-                        <p className="task-muted mt-1 max-w-2xl text-[13px] leading-5">{subtitle}</p>
                     </div>
                     {allowCreate && (
                         <Button className="h-9 w-fit rounded-none px-3 text-[13px]" onClick={openCreate}>
@@ -937,7 +1021,7 @@ export default function TaskWorkspace({
                 </div>
 
                 {showToolbar && (
-                    <div className="task-toolbar sticky top-[76px] z-20 flex min-h-12 flex-col gap-2 border-b py-2 backdrop-blur md:flex-row md:items-center md:justify-between">
+                    <div className="task-toolbar sticky top-[52px] z-20 flex min-h-12 flex-col gap-2 border-b py-2 backdrop-blur md:flex-row md:items-center md:justify-between">
                         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                             {SCOPE_OPTIONS.map((option) => (
                                 <button
@@ -1171,6 +1255,22 @@ export default function TaskWorkspace({
                                                         </div>
 
                                                         <div className={`flex shrink-0 items-center ${rowMetaClass}`}>
+                                                            {onDeleteTask && (
+                                                                <button
+                                                                    type="button"
+                                                                    onPointerDown={(event) => event.stopPropagation()}
+                                                                    onPointerUp={(event) => event.stopPropagation()}
+                                                                    onClick={(event) => {
+                                                                        event.stopPropagation();
+                                                                        void handleDelete(task);
+                                                                    }}
+                                                                    className="task-icon-button inline-flex h-7 w-7 items-center justify-center rounded-none text-rose-600 opacity-70 transition-opacity hover:bg-rose-50 group-hover:opacity-100 focus:opacity-100"
+                                                                    title="Delete task"
+                                                                    aria-label={`Delete ${task.title || 'task'}`}
+                                                                >
+                                                                    <Trash2 size={13} />
+                                                                </button>
+                                                            )}
                                                             <span className={`${isNarrowLayout ? 'inline' : 'hidden sm:inline'} min-w-[84px] text-right text-[12px] ${dueTone === 'overdue' ? 'font-medium text-rose-600' : dueTone === 'today' ? 'task-title font-medium' : dueTone === 'none' ? 'task-muted' : 'task-muted'}`}>
                                                                 {formatDateLabel(task.due_date)}
                                                             </span>
@@ -1227,7 +1327,7 @@ export default function TaskWorkspace({
                             </div>
                             <button
                                 type="button"
-                                onClick={() => !isSaving && setIsComposerOpen(false)}
+                                onClick={() => !isSaving && closeComposer()}
                                 className="rounded-[8px] p-2 text-[#6E6E80] hover:bg-[#F7F7F8] hover:text-[#0D0D0D]"
                                 title="Close task"
                                 aria-label="Close task"
@@ -1401,9 +1501,15 @@ export default function TaskWorkspace({
                                         Archive
                                     </Button>
                                 )}
+                                {editingTask && onDeleteTask && (
+                                    <Button variant="secondary" className="rounded-full text-[#B42318] hover:bg-[#FFF4F2]" onClick={() => void handleDelete(editingTask, true)} disabled={isSaving}>
+                                        <Trash2 size={14} className="mr-2" />
+                                        Delete
+                                    </Button>
+                                )}
                             </div>
                             <div className="flex gap-2">
-                                <Button variant="secondary" className="rounded-full px-5" onClick={() => setIsComposerOpen(false)} disabled={isSaving}>Cancel</Button>
+                                <Button variant="secondary" className="rounded-full px-5" onClick={closeComposer} disabled={isSaving}>Cancel</Button>
                                 <Button className="rounded-full px-5" onClick={() => void handleSave()} disabled={isSaving || !canSave}>{isSaving ? 'Saving...' : editingTask ? 'Save' : 'Create Task'}</Button>
                             </div>
                         </div>

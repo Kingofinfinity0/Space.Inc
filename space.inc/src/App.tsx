@@ -13,7 +13,6 @@ import {
     CheckSquare,
     Calendar,
     FolderClosed,
-    Activity,
     Bell,
     Video,
     Shield,
@@ -63,10 +62,10 @@ import TaskView from './components/views/TaskView';
 import GlobalFilesView from './components/views/GlobalFilesView';
 import SettingsView, { BillingSettingsView } from './components/views/SettingsView';
 import InboxView from './components/views/InboxView';
-import HistoryView from './components/views/HistoryView';
 import ClientPortalView from './components/views/ClientPortalView';
 import { MeetingRoom } from './components/MeetingRoom';
-import { Routes, Route, useNavigate, Navigate, useParams } from 'react-router-dom';
+import { Routes, Route, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ClientSpaceRoute from './components/views/ClientSpaceRoute';
 import { PermissionGuard } from "./components/auth/PermissionGuard";
 import { ContextSwitcher } from './components/auth/ContextSwitcher';
@@ -77,8 +76,8 @@ import { supabase as _supabase } from './lib/supabase';
 import { getWorkspaceRoleLabel } from './lib/workspaceRoles';
 import { getAvailableContexts, getContextRoute } from './lib/contextReadiness';
 import type { UserContext } from './types/context';
-
-type SpaceDetailTab = 'Dashboard' | 'Chat' | 'Meetings' | 'Tasks' | 'Docs';
+import { parseWorkspaceUrlState, patchSearchParams, SpaceDetailTab, VIEW_STATE_TO_URL } from './lib/urlState';
+import { readPersistedValue, writePersistedValue } from './lib/persistence';
 
 const ErrorView = ({ message }: { message: string }) => (
     <div className="h-screen w-full flex items-center justify-center bg-[#FFFFFF] p-4">
@@ -146,6 +145,71 @@ const getProfileInitials = (name?: string | null, email?: string | null) => {
         .slice(0, 2)
         .map((part) => part[0]?.toUpperCase())
         .join('') || 'A';
+};
+
+type WorkspaceCriticalData = {
+    clients: ClientSpace[];
+    tasks: Task[];
+    meetings: Meeting[];
+};
+
+type WorkspacePeripheralData = {
+    staff: StaffMember[];
+    clientLifecycle: ClientLifecycle[];
+    inboxData: any[];
+};
+
+const workspaceQueryKeys = {
+    all: (organizationId: string) => ['workspace', organizationId] as const,
+    critical: (organizationId: string) => ['workspace', organizationId, 'critical'] as const,
+    peripheral: (organizationId: string) => ['workspace', organizationId, 'peripheral'] as const
+};
+
+const EMPTY_CRITICAL_DATA: WorkspaceCriticalData = {
+    clients: [],
+    tasks: [],
+    meetings: []
+};
+
+const getContextStorageKey = (context: UserContext | null) => (
+    context ? `${context.context_type}:${context.context_id}` : null
+);
+
+const findContextByStorageKey = (contexts: UserContext[], key?: string | null) => {
+    if (!key) return null;
+    return contexts.find((context) => getContextStorageKey(context) === key || context.context_id === key) || null;
+};
+
+const loadWorkspaceCriticalData = async (organizationId: string): Promise<WorkspaceCriticalData> => {
+    const [spacesRes, tasksRes, meetingsRes] = await Promise.all([
+        apiService.getSpaces(organizationId),
+        apiService.getTasks(organizationId),
+        apiService.getMeetings(organizationId)
+    ]);
+
+    if (spacesRes.error) throw spacesRes.error;
+    if (tasksRes.error) throw tasksRes.error;
+    if (meetingsRes.error) throw meetingsRes.error;
+
+    return {
+        clients: (spacesRes.data || []) as ClientSpace[],
+        tasks: (tasksRes.data || []) as Task[],
+        meetings: (meetingsRes.data || []) as Meeting[]
+    };
+};
+
+const loadWorkspacePeripheralData = async (organizationId: string): Promise<WorkspacePeripheralData> => {
+    const results = await Promise.allSettled([
+        apiService.getStaffMembers(organizationId),
+        apiService.getClientLifecycle(organizationId),
+        apiService.getUnifiedInbox(organizationId)
+    ]);
+
+    return {
+        staff: results[0].status === 'fulfilled' ? results[0].value as StaffMember[] : [],
+        clientLifecycle: results[1].status === 'fulfilled' ? results[1].value as ClientLifecycle[] : [],
+        inboxData: results[2].status === 'fulfilled' ? results[2].value as any[] : []
+    };
 };
 
 // ── Client Space Picker ─────────────────────────────────────────────────
@@ -236,6 +300,9 @@ const App = () => {
     } = useAuth();
     const { showToast, removeToast } = useToast();
     const navigate = useNavigate();
+    const location = useLocation();
+    const queryClient = useQueryClient();
+    const initialUrlState = parseWorkspaceUrlState(typeof window === 'undefined' ? '' : window.location.search);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [currentTime, setCurrentTime] = useState(() => new Date());
@@ -244,13 +311,16 @@ const App = () => {
     const [switchingContextId, setSwitchingContextId] = useState<string | null>(null);
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         if (typeof window === 'undefined') return 'light';
-        return window.localStorage.getItem('space-theme') === 'dark' ? 'dark' : 'light';
+        const persistedTheme = readPersistedValue<'light' | 'dark'>('ui.colorMode', 'light', {
+            validate: (value): value is 'light' | 'dark' => value === 'light' || value === 'dark'
+        });
+        return window.localStorage.getItem('space-theme') === 'dark' ? 'dark' : persistedTheme;
     });
 
     // Sidebar/View State
-    const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
-    const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
-    const [selectedSpaceTab, setSelectedSpaceTab] = useState<SpaceDetailTab>('Dashboard');
+    const [currentView, setCurrentView] = useState<ViewState>(initialUrlState.view);
+    const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(initialUrlState.selectedSpaceId);
+    const [selectedSpaceTab, setSelectedSpaceTab] = useState<SpaceDetailTab>(initialUrlState.selectedSpaceTab);
     const { permissions, role: permissionRole, isLoading: permissionsLoading } = usePermissions(selectedSpaceId || undefined);
     const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
     const [activeMeetingRoomUrl, setActiveMeetingRoomUrl] = useState<string | null>(null);
@@ -263,19 +333,88 @@ const App = () => {
     const [files, setFiles] = useState<SpaceFile[]>([]); // although unused in App.tsx routing now, kept for state sync if needed
     const [staff, setStaff] = useState<StaffMember[]>([]);
     const [clientLifecycle, setClientLifecycle] = useState<ClientLifecycle[]>([]);
-    const [logs, setLogs] = useState<any[]>([]);
     const [inboxData, setInboxData] = useState<any[]>([]);
+    const workspaceDataEnabled = Boolean(isAuthenticated && userRole !== 'client' && organizationId);
+    const organizationQueryId = organizationId || 'none';
+
+    const workspaceCriticalQuery = useQuery({
+        queryKey: workspaceQueryKeys.critical(organizationQueryId),
+        queryFn: () => loadWorkspaceCriticalData(organizationQueryId),
+        enabled: workspaceDataEnabled,
+        initialData: () => queryClient.getQueryData<WorkspaceCriticalData>(workspaceQueryKeys.critical(organizationQueryId)),
+        staleTime: 1000 * 60 * 5
+    });
+
+    const workspacePeripheralQuery = useQuery({
+        queryKey: workspaceQueryKeys.peripheral(organizationQueryId),
+        queryFn: () => loadWorkspacePeripheralData(organizationQueryId),
+        enabled: workspaceDataEnabled,
+        initialData: () => queryClient.getQueryData<WorkspacePeripheralData>(workspaceQueryKeys.peripheral(organizationQueryId)),
+        staleTime: 1000 * 60 * 5
+    });
 
     const [isInstantMeetingModalOpen, setIsInstantMeetingModalOpen] = useState(false);
     const [instantMeetingTargetSpace, setInstantMeetingTargetSpace] = useState<string | null>(null);
     const [instantMeetingTitle, setInstantMeetingTitle] = useState('Instant Meeting');
     const [instantMeetingCategory, setInstantMeetingCategory] = useState<string>('general');
 
-    const openSpace = (spaceId: string, tab: SpaceDetailTab = 'Dashboard') => {
+    const commitWorkspaceUrlState = useCallback((
+        updates: Record<string, string | number | boolean | null | undefined>,
+        options: { replace?: boolean } = {}
+    ) => {
+        const nextSearch = patchSearchParams(location.search, updates, {
+            view: VIEW_STATE_TO_URL[ViewState.DASHBOARD],
+            tab: 'Dashboard'
+        });
+        navigate(
+            {
+                pathname: '/dashboard',
+                search: nextSearch,
+                hash: location.hash
+            },
+            { replace: options.replace ?? false }
+        );
+    }, [location.hash, location.search, navigate]);
+
+    const setWorkspaceView = useCallback((view: ViewState, options: { replace?: boolean } = {}) => {
+        setCurrentView(view);
+        if (view !== ViewState.SPACE_DETAIL) {
+            setSelectedSpaceId(null);
+            setSelectedSpaceTab('Dashboard');
+        }
+
+        commitWorkspaceUrlState({
+            view: VIEW_STATE_TO_URL[view],
+            space: null,
+            project: null,
+            tab: null
+        }, options);
+    }, [commitWorkspaceUrlState]);
+
+    const openSpace = useCallback((spaceId: string, tab: SpaceDetailTab = 'Dashboard', options: { replace?: boolean } = {}) => {
         setSelectedSpaceId(spaceId);
         setSelectedSpaceTab(tab);
         setCurrentView(ViewState.SPACE_DETAIL);
-    };
+        writePersistedValue('ui.lastSelectedSpace', spaceId);
+        commitWorkspaceUrlState({
+            view: VIEW_STATE_TO_URL[ViewState.SPACE_DETAIL],
+            space: spaceId,
+            project: spaceId,
+            tab
+        }, options);
+    }, [commitWorkspaceUrlState]);
+
+    const setWorkspaceSpaceTab = useCallback((tab: SpaceDetailTab, options: { replace?: boolean } = {}) => {
+        setSelectedSpaceTab(tab);
+        if (selectedSpaceId) {
+            commitWorkspaceUrlState({
+                view: VIEW_STATE_TO_URL[ViewState.SPACE_DETAIL],
+                space: selectedSpaceId,
+                project: selectedSpaceId,
+                tab
+            }, options);
+        }
+    }, [commitWorkspaceUrlState, selectedSpaceId]);
 
     useEffect(() => {
         if (user && !loading) {
@@ -294,7 +433,17 @@ const App = () => {
         document.documentElement.classList.toggle('dark', theme === 'dark');
         document.documentElement.dataset.theme = theme;
         window.localStorage.setItem('space-theme', theme);
+        writePersistedValue('ui.colorMode', theme);
     }, [theme]);
+
+    useEffect(() => {
+        if (location.pathname !== '/dashboard') return;
+
+        const nextUrlState = parseWorkspaceUrlState(location.search);
+        setCurrentView(nextUrlState.view);
+        setSelectedSpaceId(nextUrlState.selectedSpaceId);
+        setSelectedSpaceTab(nextUrlState.selectedSpaceTab);
+    }, [location.pathname, location.search]);
 
     // ── Client role redirect ─────────────────────────────────────────────────
     // If the backend has already selected a client-space context, send the user
@@ -331,15 +480,40 @@ const App = () => {
             setIsInitialLoading(false);
             return;
         }
-        if (isAuthenticated && organizationId) {
+        if (workspaceDataEnabled && workspaceCriticalQuery.data) {
             // Skip full data fetch for clients — they only need their own space data
-            if (userRole === 'client') return;
-            fetchData();
-        } else if (!loading && !user) {
+            setIsInitialLoading(false);
+        } else if (!workspaceDataEnabled && !loading && !user) {
             // If we're not loading and there's no user, we're on the login/signup page
             setIsInitialLoading(false);
         }
-    }, [isAuthenticated, organizationId, loading, user, userRole]);
+    }, [isAuthenticated, loading, user, userRole, workspaceCriticalQuery.data, workspaceDataEnabled]);
+
+    useEffect(() => {
+        const data = workspaceCriticalQuery.data;
+        if (!data) return;
+
+        setClients(data.clients);
+        setTasks(data.tasks);
+        setMeetings(data.meetings);
+        setIsInitialLoading(false);
+    }, [workspaceCriticalQuery.data]);
+
+    useEffect(() => {
+        const data = workspacePeripheralQuery.data;
+        if (!data) return;
+
+        setStaff(data.staff);
+        setClientLifecycle(data.clientLifecycle);
+        setInboxData(data.inboxData);
+    }, [workspacePeripheralQuery.data]);
+
+    useEffect(() => {
+        if (!workspaceCriticalQuery.error) return;
+        console.error("[App] Critical error fetching system data:", workspaceCriticalQuery.error);
+        showToast("Failed to sync some data. Please check your connection.", "error");
+        setIsInitialLoading(false);
+    }, [showToast, workspaceCriticalQuery.error]);
 
     useEffect(() => {
         if (!user || !profile) return;
@@ -373,7 +547,14 @@ const App = () => {
             setIsSwitchMenuOpen(false);
             setIsAccountMenuOpen(false);
             setSwitchingContextId(null);
-            navigate(getContextRoute(context) || '/dashboard', { replace: true });
+            const contextKey = getContextStorageKey(context);
+            if (contextKey) writePersistedValue('ui.lastWorkspaceContext', contextKey);
+            const contextRoute = getContextRoute(context) || '/dashboard';
+            if (contextRoute === '/dashboard') {
+                commitWorkspaceUrlState({ workspace: contextKey }, { replace: true });
+            } else {
+                navigate(contextRoute, { replace: true });
+            }
             showToast(`Switched to ${getContextDisplayName(context)}`, 'success');
 
             void Promise.all([refreshContexts(), refreshCapabilities()]).catch((syncError) => {
@@ -383,7 +564,69 @@ const App = () => {
             showToast(err?.message || 'Could not switch account right now.', 'error');
             setSwitchingContextId(null);
         }
-    }, [navigate, refreshCapabilities, refreshContexts, setActiveContext, showToast]);
+    }, [commitWorkspaceUrlState, navigate, refreshCapabilities, refreshContexts, setActiveContext, showToast]);
+
+    useEffect(() => {
+        const contextKey = getContextStorageKey(activeContext);
+        if (contextKey) writePersistedValue('ui.lastWorkspaceContext', contextKey);
+    }, [activeContext]);
+
+    useEffect(() => {
+        if (loading || !user || !contexts || switchingContextId) return;
+        if (location.pathname !== '/dashboard') return;
+
+        const availableContexts = getAvailableContexts(contexts);
+        const requestedWorkspaceKey = parseWorkspaceUrlState(location.search).workspaceKey
+            || readPersistedValue<string | null>('ui.lastWorkspaceContext', null);
+        const targetContext = findContextByStorageKey(availableContexts, requestedWorkspaceKey);
+        const activeKey = getContextStorageKey(activeContext);
+        const targetKey = getContextStorageKey(targetContext);
+
+        if (!targetContext || !targetKey || activeKey === targetKey) return;
+
+        let isCurrent = true;
+        setSwitchingContextId(targetContext.context_id);
+        apiService.activateMembershipContext(targetContext.context_type, targetContext.context_id)
+            .then((activation) => {
+                if (!isCurrent || !activation.success) return;
+                setActiveContext(targetContext);
+                writePersistedValue('ui.lastWorkspaceContext', targetKey);
+                commitWorkspaceUrlState({ workspace: targetKey }, { replace: true });
+                void Promise.all([refreshContexts(), refreshCapabilities()]).catch((syncError) => {
+                    console.warn('[App] Background context restore sync failed:', syncError);
+                });
+            })
+            .catch((error) => {
+                console.warn('[App] Could not restore persisted workspace context:', error);
+            })
+            .finally(() => {
+                if (isCurrent) setSwitchingContextId(null);
+            });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [
+        activeContext,
+        commitWorkspaceUrlState,
+        contexts,
+        loading,
+        location.pathname,
+        location.search,
+        refreshCapabilities,
+        refreshContexts,
+        setActiveContext,
+        switchingContextId,
+        user
+    ]);
+
+    const updateWorkspaceCriticalCache = useCallback((updater: (current: WorkspaceCriticalData) => WorkspaceCriticalData) => {
+        if (!organizationId) return;
+        queryClient.setQueryData<WorkspaceCriticalData>(
+            workspaceQueryKeys.critical(organizationId),
+            (current) => updater(current || EMPTY_CRITICAL_DATA)
+        );
+    }, [organizationId, queryClient]);
 
     const fetchData = async (silent = false) => {
         if (!user || !organizationId) {
@@ -391,43 +634,13 @@ const App = () => {
             return;
         }
         
-        if (!silent) setIsInitialLoading(true);
+        if (!silent && !workspaceCriticalQuery.data) setIsInitialLoading(true);
         try {
-            // Phase 1: Critical UI Data (Spaces, Tasks, Meetings)
-            // We fetch these first to get the main dashboard ready
-            const [spacesRes, tasksRes, meetingsRes] = await Promise.all([
-                apiService.getSpaces(organizationId),
-                apiService.getTasks(organizationId),
-                apiService.getMeetings(organizationId)
+            await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.all(organizationId) });
+            await Promise.allSettled([
+                queryClient.refetchQueries({ queryKey: workspaceQueryKeys.critical(organizationId), type: 'active' }),
+                queryClient.refetchQueries({ queryKey: workspaceQueryKeys.peripheral(organizationId), type: 'active' })
             ]);
-
-            if (spacesRes.data) setClients(spacesRes.data);
-            if (tasksRes.data) setTasks(tasksRes.data);
-            if (meetingsRes.data) setMeetings(meetingsRes.data);
-
-            // Phase 2: Peripheral Data (Staff, Lifecycle, Logs, Inbox)
-            // We use allSettled so that if one (like the heavy Unified Inbox or Logs) fails or is slow,
-            // the rest of the app still functions.
-            const peripheralResults = await Promise.allSettled([
-                apiService.getStaffMembers(organizationId),
-                apiService.getClientLifecycle(organizationId),
-                apiService.getActivityLogs(organizationId),
-                apiService.getUnifiedInbox(organizationId)
-            ]);
-
-            // Handle results individually
-            if (peripheralResults[0].status === 'fulfilled') setStaff(peripheralResults[0].value as StaffMember[]);
-            if (peripheralResults[1].status === 'fulfilled') setClientLifecycle(peripheralResults[1].value as ClientLifecycle[]);
-            
-            const logsRes = peripheralResults[2];
-            if (logsRes.status === 'fulfilled' && (logsRes.value as any).data) {
-                setLogs((logsRes.value as any).data);
-            }
-
-            if (peripheralResults[3].status === 'fulfilled') {
-                setInboxData(peripheralResults[3].value as any[]);
-            }
-
         } catch (error) {
             console.error("[App] Critical error fetching system data:", error);
             showToast("Failed to sync some data. Please check your connection.", "error");
@@ -526,6 +739,10 @@ const App = () => {
                     updated_at: new Date().toISOString()
                 };
                 setClients(prev => [optimisticSpace as ClientSpace, ...prev]);
+                updateWorkspaceCriticalCache((current) => ({
+                    ...current,
+                    clients: [optimisticSpace as ClientSpace, ...current.clients.filter((space) => space.id !== optimisticSpace.id)]
+                }));
                 openSpace(optimisticSpace.id, 'Dashboard');
                 fetchData();
                 showToast("Space Created Successfully!", "success");
@@ -546,11 +763,42 @@ const App = () => {
         }
     };
 
+    const handleDeleteSpace = async (spaceId: string) => {
+        if (!spaceId || !organizationId) return;
+
+        const previousClients = clients;
+        const deletingSelectedSpace = selectedSpaceId === spaceId;
+        setClients((current) => current.filter((space) => space.id !== spaceId));
+        updateWorkspaceCriticalCache((current) => ({
+            ...current,
+            clients: current.clients.filter((space) => space.id !== spaceId)
+        }));
+        if (deletingSelectedSpace) {
+            setWorkspaceView(ViewState.SPACES);
+        }
+
+        try {
+            const { error } = await apiService.deleteSpace(spaceId, organizationId);
+            if (error) throw error;
+            showToast('Space deleted.', 'success');
+        } catch (err: any) {
+            setClients(previousClients);
+            fetchData(true);
+            showToast(friendlyError(err?.message || 'Failed to delete space'), 'error');
+        }
+    };
+
     const handleCreateTask = async (data: Partial<Task>) => {
         try {
             const { data: newTask, error } = await apiService.createTask(data, organizationId || '');
             if (error) throw error;
-            if (newTask) setTasks((current) => [newTask, ...current]);
+            if (newTask) {
+                setTasks((current) => [newTask, ...current]);
+                updateWorkspaceCriticalCache((current) => ({
+                    ...current,
+                    tasks: [newTask as Task, ...current.tasks.filter((task) => task.id !== newTask.id)]
+                }));
+            }
         } catch (err: any) {
             showToast(`Error creating task: ${err.message}`, "error");
         }
@@ -561,6 +809,10 @@ const App = () => {
             const { data, error } = await apiService.updateTask(taskId, updates, organizationId || '');
             if (error) throw error;
             setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...(data || updates) } : task));
+            updateWorkspaceCriticalCache((current) => ({
+                ...current,
+                tasks: current.tasks.map((task) => task.id === taskId ? { ...task, ...(data || updates) } : task)
+            }));
         } catch (err: any) {
             showToast(`Error updating task: ${err.message}`, "error");
         }
@@ -571,9 +823,32 @@ const App = () => {
             const { data, error } = await apiService.archiveTask(taskId);
             if (error) throw error;
             setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...(data || {}), archived_at: data?.archived_at || new Date().toISOString() } : task));
+            updateWorkspaceCriticalCache((current) => ({
+                ...current,
+                tasks: current.tasks.map((task) => task.id === taskId ? { ...task, ...(data || {}), archived_at: data?.archived_at || new Date().toISOString() } : task)
+            }));
             showToast('Task archived.', 'success');
         } catch (err: any) {
             showToast(`Error archiving task: ${err.message}`, 'error');
+        }
+    };
+
+    const handleDeleteTask = async (taskId: string) => {
+        const previousTasks = tasks;
+        setTasks((current) => current.filter((task) => task.id !== taskId));
+        updateWorkspaceCriticalCache((current) => ({
+            ...current,
+            tasks: current.tasks.filter((task) => task.id !== taskId)
+        }));
+
+        try {
+            const { error } = await apiService.deleteTask(taskId);
+            if (error) throw error;
+            showToast('Task deleted.', 'success');
+        } catch (err: any) {
+            setTasks(previousTasks);
+            fetchData(true);
+            showToast(friendlyError(err?.message || 'Failed to delete task'), 'error');
         }
     };
 
@@ -582,6 +857,10 @@ const App = () => {
             const { data, error } = await apiService.requestTaskReview(taskId, reviewerId);
             if (error) throw error;
             setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...(data || {}) } : task));
+            updateWorkspaceCriticalCache((current) => ({
+                ...current,
+                tasks: current.tasks.map((task) => task.id === taskId ? { ...task, ...(data || {}) } : task)
+            }));
             showToast('Review requested.', 'success');
         } catch (err: any) {
             showToast(`Error requesting review: ${err.message}`, 'error');
@@ -593,6 +872,10 @@ const App = () => {
             const { data, error } = await apiService.completeTaskReview(taskId, approved, comment);
             if (error) throw error;
             setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...(data || {}) } : task));
+            updateWorkspaceCriticalCache((current) => ({
+                ...current,
+                tasks: current.tasks.map((task) => task.id === taskId ? { ...task, ...(data || {}) } : task)
+            }));
             showToast(approved ? 'Task approved.' : 'Task sent back.', 'success');
         } catch (err: any) {
             showToast(`Error completing review: ${err.message}`, 'error');
@@ -603,7 +886,13 @@ const App = () => {
         try {
             const { data, error } = await apiService.addTaskComment(taskId, content);
             if (error) throw error;
-            if (data) setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...data } : task));
+            if (data) {
+                setTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...data } : task));
+                updateWorkspaceCriticalCache((current) => ({
+                    ...current,
+                    tasks: current.tasks.map((task) => task.id === taskId ? { ...task, ...(data as Task) } : task)
+                }));
+            }
             showToast('Comment added.', 'success');
             return data as Task | undefined;
         } catch (err: any) {
@@ -656,6 +945,10 @@ const App = () => {
     const handleDeleteMeeting = async (meetingId: string) => {
         // Optimistic removal — no reload needed
         setMeetings(prev => prev.filter(m => m.id !== meetingId));
+        updateWorkspaceCriticalCache((current) => ({
+            ...current,
+            meetings: current.meetings.filter((meeting) => meeting.id !== meetingId)
+        }));
         try {
             const { error } = await apiService.cancelMeeting(meetingId);
             if (error) {
@@ -694,7 +987,11 @@ const App = () => {
             });
             if (error) throw error;
             if (newMeeting) {
-                setMeetings([newMeeting, ...meetings]);
+                setMeetings((current) => [newMeeting, ...current]);
+                updateWorkspaceCriticalCache((current) => ({
+                    ...current,
+                    meetings: [newMeeting as Meeting, ...current.meetings.filter((meeting) => meeting.id !== newMeeting.id)]
+                }));
                 fetchData(true);
             }
         } catch (err: any) {
@@ -712,7 +1009,7 @@ case ViewState.DASHBOARD:
                             clients={clients}
                             staff={staff}
                             clientLifecycle={clientLifecycle}
-                            messages={[]}
+                            messages={messages}
                             meetings={meetings}
                             tasks={tasks}
                             files={files}
@@ -726,12 +1023,12 @@ case ViewState.DASHBOARD:
                             onRequestReview={handleRequestTaskReview}
                             onCompleteReview={handleCompleteTaskReview}
                             onAddTaskComment={handleAddTaskComment}
-                            onGoToSpaces={() => setCurrentView(ViewState.SPACES)}
-                            onGoToClients={() => setCurrentView(ViewState.CLIENTS)}
-                            onGoToStaff={() => setCurrentView(ViewState.STAFF)}
-                            onGoToMeetings={() => setCurrentView(ViewState.MEETINGS)}
-                            onGoToFiles={() => setCurrentView(ViewState.FILES)}
-                            onGoToTasks={() => setCurrentView(ViewState.TASKS)}
+                            onGoToSpaces={() => setWorkspaceView(ViewState.SPACES)}
+                            onGoToClients={() => setWorkspaceView(ViewState.CLIENTS)}
+                            onGoToStaff={() => setWorkspaceView(ViewState.STAFF)}
+                            onGoToMeetings={() => setWorkspaceView(ViewState.MEETINGS)}
+                            onGoToFiles={() => setWorkspaceView(ViewState.FILES)}
+                            onGoToTasks={() => setWorkspaceView(ViewState.TASKS)}
                             onRefreshData={() => fetchData(true)}
                             onGoToSpace={(spaceId) => {
                                 openSpace(spaceId, 'Dashboard');
@@ -766,14 +1063,11 @@ case ViewState.DASHBOARD:
                     return <ClientPortalView client={currentClient} meetings={meetings} onJoin={handleJoinMeeting} onLogout={signOut} />;
                 }
                 return <ErrorView message="No dashboard available for this identity." />;
-            case ViewState.ACTIVITY_LEDGER:
-                if (!can('can_view_history')) return <div className="p-8">Access Denied</div>;
-                return <HistoryView logs={logs} />;
             case ViewState.SPACES:
                 if (!can('can_view_all_spaces')) return <div className="p-8">Access Denied</div>;
-                return <SpacesView clients={clients} onSelect={(id) => openSpace(id, 'Dashboard')} onCreate={handleCreateSpace} />;
+                return <SpacesView clients={clients} onSelect={(id) => openSpace(id, 'Dashboard')} onCreate={handleCreateSpace} onDelete={handleDeleteSpace} />;
             case ViewState.SPACE_DETAIL:
-                return <SpaceDetailView spaceId={selectedSpaceId!} space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setCurrentView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} onEndMeeting={handleEndMeeting} activeTab={selectedSpaceTab} onTabChange={setSelectedSpaceTab} />;
+                return <SpaceDetailView spaceId={selectedSpaceId!} space={clients.find(c => c.id === selectedSpaceId)} meetings={meetings} onBack={() => setWorkspaceView(ViewState.SPACES)} onJoin={handleJoinMeeting} onSchedule={handleScheduleMeeting} onInstantMeet={handleInstantMeeting} onEndMeeting={handleEndMeeting} onDeleteMeeting={handleDeleteMeeting} activeTab={selectedSpaceTab} onTabChange={(tab) => setWorkspaceSpaceTab(tab)} />;
             case ViewState.INBOX:
                 if (!can('can_view_dashboard')) return <div className="p-8">Access Denied</div>;
                 return <InboxView clients={clients} inboxData={inboxData} />;
@@ -785,8 +1079,8 @@ case ViewState.DASHBOARD:
                     <ClientsCRMView
                         clients={clientLifecycle}
                         loading={false}
-                        onCreateSpace={() => setCurrentView(ViewState.SPACES)}
-                        onInvitePerson={() => setCurrentView(ViewState.STAFF)}
+                        onCreateSpace={() => setWorkspaceView(ViewState.SPACES)}
+                        onInvitePerson={() => setWorkspaceView(ViewState.STAFF)}
                     />
                 );
 case ViewState.STAFF:
@@ -794,7 +1088,7 @@ case ViewState.STAFF:
                 return <StaffView staff={staff} spaces={clients} onUpdateCapability={handleUpdateStaffCapability} onRefresh={fetchData} />;
             case ViewState.TASKS:
                 if (permissions ? !permissions.view_tasks : !can('can_view_tasks')) return <div className="p-8">Access Denied</div>;
-                return <TaskView tasks={tasks} clients={clients} onUpdateTask={handleUpdateTask} onCreateTask={handleCreateTask} onArchiveTask={handleArchiveTask} onRequestReview={handleRequestTaskReview} onCompleteReview={handleCompleteTaskReview} onAddTaskComment={handleAddTaskComment} onOpenSpace={(spaceId) => {
+                return <TaskView tasks={tasks} clients={clients} onUpdateTask={handleUpdateTask} onCreateTask={handleCreateTask} onArchiveTask={handleArchiveTask} onDeleteTask={handleDeleteTask} onRequestReview={handleRequestTaskReview} onCompleteReview={handleCompleteTaskReview} onAddTaskComment={handleAddTaskComment} onOpenSpace={(spaceId) => {
                     openSpace(spaceId, 'Dashboard');
                 }} />;
             case ViewState.MEETINGS:
@@ -811,7 +1105,8 @@ case ViewState.STAFF:
         }
     };
 
-    const isAppLoading = loading || (isAuthenticated && userRole !== 'client' && isInitialLoading && clients.length === 0);
+    const hasWorkspaceSnapshot = clients.length > 0 || Boolean(workspaceCriticalQuery.data);
+    const isAppLoading = loading || (isAuthenticated && userRole !== 'client' && isInitialLoading && !hasWorkspaceSnapshot);
     const appLoadingGate = useLoadingScreenGate(isAppLoading);
 
     if (appLoadingGate.isVisible) {
@@ -827,7 +1122,7 @@ case ViewState.STAFF:
 
     const totalInboxItems = inboxData.reduce((acc, curr) => acc + (curr.unread_count || 0), 0);
     const currentViewLabelMap: Record<ViewState, string> = {
-        [ViewState.DASHBOARD]: 'Dashboard',
+        [ViewState.DASHBOARD]: 'Overview',
         [ViewState.SPACES]: 'Spaces',
         [ViewState.SPACE_DETAIL]: 'Space Detail',
         [ViewState.INBOX]: 'Inbox',
@@ -836,7 +1131,7 @@ case ViewState.STAFF:
         [ViewState.TASKS]: 'Tasks',
         [ViewState.STAFF]: 'Team',
         [ViewState.SETTINGS]: 'Settings',
-        [ViewState.ACTIVITY_LEDGER]: 'History',
+        [ViewState.ACTIVITY_LEDGER]: 'Dashboard',
         [ViewState.CLIENTS]: 'Clients',
     };
     const currentViewLabel = currentViewLabelMap[currentView] || 'Workspace';
@@ -845,12 +1140,6 @@ case ViewState.STAFF:
     const contextCount = contexts?.available?.count ?? contexts?.total ?? availableContexts.length;
     const isTeamContext = ['owner', 'admin', 'staff'].includes(userRole || '');
     const showSwitchAccount = isTeamContext && contextCount >= 2;
-    const activeOrganizationName =
-        activeContext?.org_name ||
-        contexts?.org_contexts?.[0]?.org_name ||
-        contexts?.client_contexts?.[0]?.org_name ||
-        profile?.organization_name ||
-        'Organization';
     const accountName = profile?.full_name || user?.email || 'Account';
     const accountInitials = getProfileInitials(profile?.full_name, user?.email);
     const timeLabel = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -861,42 +1150,42 @@ case ViewState.STAFF:
             icon: ArrowLeft,
             allowed: true,
             isActive: false,
-            onClick: () => setCurrentView(ViewState.SPACES),
+            onClick: () => setWorkspaceView(ViewState.SPACES),
         },
         {
             label: 'Overview',
             icon: LayoutGrid,
             allowed: true,
             isActive: selectedSpaceTab === 'Dashboard',
-            onClick: () => setSelectedSpaceTab('Dashboard'),
+            onClick: () => setWorkspaceSpaceTab('Dashboard'),
         },
         {
             label: 'Chat',
             icon: Inbox,
             allowed: true,
             isActive: selectedSpaceTab === 'Chat',
-            onClick: () => setSelectedSpaceTab('Chat'),
+            onClick: () => setWorkspaceSpaceTab('Chat'),
         },
         {
             label: 'Meetings',
             icon: Calendar,
             allowed: true,
             isActive: selectedSpaceTab === 'Meetings',
-            onClick: () => setSelectedSpaceTab('Meetings'),
+            onClick: () => setWorkspaceSpaceTab('Meetings'),
         },
         {
             label: 'Tasks',
             icon: CheckSquare,
             allowed: true,
             isActive: selectedSpaceTab === 'Tasks',
-            onClick: () => setSelectedSpaceTab('Tasks'),
+            onClick: () => setWorkspaceSpaceTab('Tasks'),
         },
         {
             label: 'Docs',
             icon: FolderClosed,
             allowed: true,
             isActive: selectedSpaceTab === 'Docs',
-            onClick: () => setSelectedSpaceTab('Docs'),
+            onClick: () => setWorkspaceSpaceTab('Docs'),
         },
     ] : [
         {
@@ -904,28 +1193,21 @@ case ViewState.STAFF:
             icon: LayoutGrid,
             allowed: permissions ? !!permissions.view_dashboard : can('can_view_dashboard'),
             isActive: currentView === ViewState.DASHBOARD,
-            onClick: () => setCurrentView(ViewState.DASHBOARD),
-        },
-        {
-            label: 'History',
-            icon: Activity,
-            allowed: permissions ? !!permissions.view_history : can('can_view_history'),
-            isActive: currentView === ViewState.ACTIVITY_LEDGER,
-            onClick: () => setCurrentView(ViewState.ACTIVITY_LEDGER),
+            onClick: () => setWorkspaceView(ViewState.DASHBOARD),
         },
         {
             label: 'Spaces',
             icon: Users,
             allowed: permissions ? (!!permissions.view_all_spaces || !!permissions.view_assigned_spaces) : (can('can_view_all_spaces') || can('can_view_assigned_spaces')),
             isActive: currentView === ViewState.SPACES,
-            onClick: () => setCurrentView(ViewState.SPACES),
+            onClick: () => setWorkspaceView(ViewState.SPACES),
         },
         {
             label: 'Inbox',
             icon: Inbox,
             allowed: permissions ? !!permissions.view_dashboard : can('can_view_dashboard'),
             isActive: currentView === ViewState.INBOX,
-            onClick: () => setCurrentView(ViewState.INBOX),
+            onClick: () => setWorkspaceView(ViewState.INBOX),
             badge: totalInboxItems,
         },
         {
@@ -933,35 +1215,35 @@ case ViewState.STAFF:
             icon: UserCheck,
             allowed: permissions ? !!permissions.manage_team : can('can_manage_team'),
             isActive: currentView === ViewState.STAFF,
-            onClick: () => setCurrentView(ViewState.STAFF),
+            onClick: () => setWorkspaceView(ViewState.STAFF),
         },
         {
             label: 'Clients',
             icon: Briefcase,
             allowed: permissions ? !!permissions.view_all_spaces : (userRole === 'owner' || userRole === 'admin'),
             isActive: currentView === ViewState.CLIENTS,
-            onClick: () => setCurrentView(ViewState.CLIENTS),
+            onClick: () => setWorkspaceView(ViewState.CLIENTS),
         },
         {
             label: 'Tasks',
             icon: CheckSquare,
             allowed: permissions ? !!permissions.view_tasks : can('can_view_tasks'),
             isActive: currentView === ViewState.TASKS,
-            onClick: () => setCurrentView(ViewState.TASKS),
+            onClick: () => setWorkspaceView(ViewState.TASKS),
         },
         {
             label: 'Calendar',
             icon: Calendar,
             allowed: permissions ? !!permissions.view_meetings : can('can_view_meetings'),
             isActive: currentView === ViewState.MEETINGS,
-            onClick: () => setCurrentView(ViewState.MEETINGS),
+            onClick: () => setWorkspaceView(ViewState.MEETINGS),
         },
         {
             label: 'Drive',
             icon: FolderClosed,
             allowed: permissions ? !!permissions.view_files : can('can_view_files'),
             isActive: currentView === ViewState.FILES,
-            onClick: () => setCurrentView(ViewState.FILES),
+            onClick: () => setWorkspaceView(ViewState.FILES),
         },
     ].filter((item) => item.allowed);
 
@@ -1028,10 +1310,10 @@ case ViewState.STAFF:
 
                                                 <div className="min-w-0 text-center">
                                                     <div className="truncate text-sm font-semibold text-[#0D0D0D] md:text-[15px]">
-                                                        {activeOrganizationName}
+                                                        {currentViewLabel}
                                                     </div>
                                                     <div className="hidden text-[10px] font-medium uppercase tracking-[0.18em] text-[#6E6E80] sm:block">
-                                                        {currentViewLabel}
+                                                        {currentViewLabel} section
                                                     </div>
                                                 </div>
 
@@ -1049,20 +1331,6 @@ case ViewState.STAFF:
                                                         <span className="hidden md:inline">Switch to another account</span>
                                                     </button>
                                                 ) : null}
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setIsSwitchMenuOpen(false);
-                                                        setIsAccountMenuOpen(false);
-                                                        void signOut();
-                                                    }}
-                                                    className="flex h-9 items-center gap-2 rounded-full border border-[#F2D4D1] bg-white px-2.5 text-xs font-semibold text-[#B42318] transition-colors hover:bg-[#FFF4F2] md:px-3"
-                                                    aria-label="Log out"
-                                                >
-                                                    <LogOut size={14} />
-                                                    <span className="hidden md:inline">Log out</span>
-                                                </button>
 
                                                 <button
                                                     type="button"
@@ -1134,7 +1402,7 @@ case ViewState.STAFF:
                                                             <button
                                                                 type="button"
                                                                 onClick={() => {
-                                                                    setCurrentView(ViewState.SETTINGS);
+                                                                    setWorkspaceView(ViewState.SETTINGS);
                                                                     setIsAccountMenuOpen(false);
                                                                 }}
                                                                 className="flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-sm font-medium text-[#0D0D0D] transition-colors hover:bg-[#F7F7F8]"
@@ -1160,8 +1428,8 @@ case ViewState.STAFF:
                                     <div
                                         data-scroll-root="app"
                                         className={currentView === ViewState.SPACE_DETAIL && selectedSpaceTab === 'Chat'
-                                        ? 'flex-1 overflow-hidden px-2 pb-2 pt-2 sm:px-3 md:px-4'
-                                        : 'flex-1 overflow-y-auto px-2 pb-20 pt-3 sm:px-3 md:px-4 md:pb-24 md:pt-4'
+                                        ? 'flex-1 overflow-hidden px-2 pb-2 pt-1 sm:px-3 md:px-4'
+                                        : 'flex-1 overflow-y-auto px-2 pb-20 pt-1 sm:px-3 md:px-4 md:pb-24 md:pt-2'
                                     }>
                                         <div className={currentView === ViewState.SPACE_DETAIL && selectedSpaceTab === 'Chat' ? 'h-full w-full min-w-0' : 'w-full min-w-0'}>{renderContent()}</div>
                                     </div>
@@ -1214,7 +1482,7 @@ case ViewState.STAFF:
                     if (meetingEntrySource.spaceId) {
                         openSpace(meetingEntrySource.spaceId, 'Meetings');
                     } else {
-                        setCurrentView(meetingEntrySource.view);
+                        setWorkspaceView(meetingEntrySource.view);
                     }
                     setMeetingEntrySource(null);
                 }

@@ -8,6 +8,7 @@ type TaskViewProps = {
     onUpdateTask: (id: string, updates: Partial<Task>) => Promise<void> | void;
     onCreateTask: (task: Partial<Task>) => Promise<void> | void;
     onArchiveTask?: (taskId: string) => Promise<void> | void;
+    onDeleteTask?: (taskId: string) => Promise<void> | void;
     onRequestReview?: (taskId: string, reviewerId: string) => Promise<void> | void;
     onCompleteReview?: (taskId: string, approved: boolean, comment?: string) => Promise<void> | void;
     onAddTaskComment?: (taskId: string, content: string) => Promise<Task | void> | Task | void;
@@ -20,6 +21,7 @@ export default function TaskView({
     onUpdateTask,
     onCreateTask,
     onArchiveTask,
+    onDeleteTask,
     onRequestReview,
     onCompleteReview,
     onAddTaskComment,
@@ -35,6 +37,7 @@ export default function TaskView({
             onCreateTask={onCreateTask}
             onUpdateTask={onUpdateTask}
             onArchiveTask={onArchiveTask}
+            onDeleteTask={onDeleteTask}
             onRequestReview={onRequestReview}
             onCompleteReview={onCompleteReview}
             onAddTaskComment={onAddTaskComment}

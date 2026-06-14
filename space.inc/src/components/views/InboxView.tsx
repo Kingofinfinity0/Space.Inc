@@ -22,13 +22,22 @@ import { ClientSpace, ViewState, Meeting, Message, StaffMember, Task, SpaceFile,
 import { useRealtimeMessages } from '../../hooks/useRealtimeMessages';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
 import { MessageItem } from './MessageItem';
+import { useUrlParamState } from '../../hooks/useUrlParamState';
+import { usePersistentState } from '../../lib/persistence';
 
 // 9. Inbox View - Realtime Chat
 const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: any[] }) => {
-    const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(clients[0]?.id || null);
+    const [lastSelectedSpaceId, setLastSelectedSpaceId] = usePersistentState('inbox.lastSelectedSpace', '');
+    const [selectedSpaceParam, setSelectedSpaceParam] = useUrlParamState('inbox_space', lastSelectedSpaceId, {
+        removeWhenDefault: false,
+        replace: false
+    });
+    const selectedSpaceId = selectedSpaceParam || clients[0]?.id || null;
     const { user, profile, organizationId } = useAuth();
     const [messageInput, setMessageInput] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useUrlParamState('inbox_q', '', {
+        replace: true
+    });
     const [sending, setSending] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const { showToast } = useToast(); // Added useToast hook
@@ -90,6 +99,18 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
     const activeCount = filteredInbox.length;
     const unreadCount = filteredInbox.reduce((total, item) => total + (item.unread_count || 0), 0);
 
+    useEffect(() => {
+        if (clients.length === 0) return;
+        const selectedExists = selectedSpaceId ? clients.some((client) => client.id === selectedSpaceId) : false;
+        if (selectedExists && selectedSpaceId) {
+            setLastSelectedSpaceId(selectedSpaceId);
+            return;
+        }
+
+        const fallback = clients.find((client) => client.id === lastSelectedSpaceId)?.id || clients[0]?.id || '';
+        if (fallback) setSelectedSpaceParam(fallback);
+    }, [clients, lastSelectedSpaceId, selectedSpaceId, setLastSelectedSpaceId, setSelectedSpaceParam]);
+
     return (
         <div className="grid min-h-[calc(100svh-240px)] gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
             {/* List Sidebar */}
@@ -129,7 +150,10 @@ const InboxView = ({ clients, inboxData }: { clients: ClientSpace[], inboxData: 
                         return (
                         <button
                             key={item.space_id}
-                            onClick={() => setSelectedSpaceId(item.space_id)}
+                            onClick={() => {
+                                setSelectedSpaceParam(item.space_id);
+                                setLastSelectedSpaceId(item.space_id);
+                            }}
                             style={{ animationDelay: `${index * 20}ms` }}
                             className={`database-row page-enter block w-full border-b-0 border-x-0 border-t-0 px-4 py-4 text-left transition-colors ${selected ? 'bg-[#F7F7F8]' : 'hover:bg-[#F7F7F8]'}`}
                         >

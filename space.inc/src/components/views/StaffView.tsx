@@ -3,7 +3,6 @@ import {
   Hash,
   Mail,
   MailPlus,
-  MessageSquare,
   Search,
   ShieldCheck,
   UserRound,
@@ -11,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { GlassCard, Button } from '../UI/index';
+import { GlassCard, Button, Heading } from '../UI/index';
 import { ClientSpace, StaffMember } from '../../types';
 import { InviteMemberModal } from '../invite/InviteMemberModal';
 
@@ -91,38 +90,27 @@ const StaffView: React.FC<{
   };
 
   return (
-    <div className="space-y-6 page-enter">
-      <GlassCard className="sheet-panel overflow-hidden p-6 md:p-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl space-y-3">
-            <div className="surface-chip px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em]">
-              <MessageSquare size={14} />
-              Team room
-            </div>
-            <h1 className="text-3xl font-semibold tracking-[-0.04em] text-[#0D0D0D] md:text-4xl">Team</h1>
-            <p className="max-w-2xl text-sm leading-6 text-[#6E6E80] md:text-base">
-              A shared place to see who is on the team, how to reach them, and which spaces they are part of.
-            </p>
-          </div>
+    <div className="space-y-4 page-enter">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <Heading level={1}>Team</Heading>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {canInviteTeam ? (
-              <Button
-                type="button"
-                variant="primary"
-                className="rounded-[8px]"
-                onClick={openInvite}
-                icon={<MailPlus size={16} />}
-              >
-                Invite teammate
-              </Button>
-            ) : null}
-            <div className="surface-chip px-3 py-1.5 text-[11px] uppercase tracking-[0.18em]">
-              {activeMembers.length} people
-            </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {canInviteTeam ? (
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-[8px]"
+              onClick={openInvite}
+              icon={<MailPlus size={16} />}
+            >
+              Invite teammate
+            </Button>
+          ) : null}
+          <div className="surface-chip px-3 py-1.5 text-[11px] uppercase tracking-[0.18em]">
+            {activeMembers.length} people
           </div>
         </div>
-      </GlassCard>
+      </header>
 
       <InviteMemberModal
         isOpen={inviteOpen}

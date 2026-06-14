@@ -129,7 +129,7 @@ export function SpacePermissionsMatrix({ spaceId, compact = false, className = '
 
     return (
         <>
-        <section className={`flex flex-col overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white ${className}`}>
+        <section className={`ui-card-lane overflow-hidden rounded-[8px] border border-[#E5E5E5] bg-white ${className}`}>
             <div className={`space-dashboard-panel-header flex items-center justify-between gap-3 border-b border-[#E5E5E5] px-4 ${compact ? 'py-3' : 'py-4'}`}>
                 <div className="min-w-0">
                     <h3 className="space-dashboard-panel-title text-[#0D0D0D]">Permissions</h3>
@@ -161,7 +161,7 @@ export function SpacePermissionsMatrix({ spaceId, compact = false, className = '
             {error && <div className="border-b border-[#E5E5E5] bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
             {compact ? (
-                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <div className="ui-card-scroll p-3">
                     {members.length === 0 ? (
                         <p className="rounded-[8px] border border-dashed border-[#E5E5E5] p-4 text-sm text-[#6E6E80]">No client members to configure.</p>
                     ) : (
@@ -189,7 +189,7 @@ export function SpacePermissionsMatrix({ spaceId, compact = false, className = '
                     )}
                 </div>
             ) : (
-            <div className="overflow-auto">
+            <div className="ui-card-scroll ui-card-scroll-x">
                 <table className="min-w-full border-collapse text-sm">
                     <thead>
                         <tr className="border-b border-[#E5E5E5] bg-[#F7F7F8] text-left text-[11px] uppercase tracking-[0.14em] text-[#6E6E80]">

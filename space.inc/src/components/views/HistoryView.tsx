@@ -37,10 +37,9 @@ const HistoryView = ({ logs }: { logs: any[] }) => {
     };
 
     return (
-        <div className="space-y-6 animate-[fadeIn_0.5s_ease-out]">
-            <header className="mb-8">
+        <div className="space-y-4 animate-[fadeIn_0.5s_ease-out]">
+            <header>
                 <Heading level={1}>Activity Log</Heading>
-                <Text variant="secondary" className="mt-1">A concise audit trail of organization activity.</Text>
             </header>
 
             <GlassCard className="overflow-hidden">

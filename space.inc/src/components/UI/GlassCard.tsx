@@ -13,7 +13,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', 
       onClick={onClick}
       style={style}
       className={[
-        'glass-surface rounded-[28px] text-[color:var(--text-primary)] interactive-surface',
+        'glass-surface ui-card rounded-[var(--radius-card)] text-[color:var(--text-primary)] interactive-surface',
         onClick ? 'cursor-pointer' : '',
         className,
       ].join(' ')}

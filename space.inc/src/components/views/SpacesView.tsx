@@ -1,19 +1,30 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, LayoutGrid, List, Search, Briefcase, Sparkles, FileText, MessageSquare, Calendar, User, Target, HeartPulse, ExternalLink, ChevronRight } from 'lucide-react';
+import { Plus, LayoutGrid, List, Search, Sparkles, FileText, MessageSquare, Calendar, User, Target, HeartPulse, ExternalLink, ChevronRight, Trash2 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { GlassCard, Button, Heading, Input, Modal } from '../UI/index';
 import { ClientSpace } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/apiService';
+import { useUrlParamState } from '../../hooks/useUrlParamState';
+import { usePersistentState } from '../../lib/persistence';
 
 type SpaceModel = 'retainer' | 'project';
 
-const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], onSelect: (id: string) => void, onCreate: (data: any) => void }) => {
+const SpacesView = ({ clients, onSelect, onCreate, onDelete }: { clients: ClientSpace[], onSelect: (id: string) => void, onCreate: (data: any) => void, onDelete?: (id: string) => Promise<void> | void }) => {
     const { showToast } = useToast();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [createStep, setCreateStep] = useState<'model' | 'setup'>('model');
-    const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [storedViewMode, setStoredViewMode] = usePersistentState<'board' | 'list'>('spaces.viewMode', 'board', {
+        validate: (value): value is 'board' | 'list' => value === 'board' || value === 'list'
+    });
+    const [viewMode, setViewMode] = useUrlParamState<'board' | 'list'>('spaces_view', storedViewMode, {
+        allowedValues: ['board', 'list'] as const,
+        removeWhenDefault: false,
+        replace: true
+    });
+    const [searchQuery, setSearchQuery] = useUrlParamState('spaces_q', '', {
+        replace: true
+    });
     const [newClientName, setNewClientName] = useState('');
     const [selectedModel, setSelectedModel] = useState<SpaceModel | null>(null);
     const defaultModules = {
@@ -28,6 +39,10 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
         if (!q) return true;
         return [client.name, client.description, client.status].some((value) => String(value || '').toLowerCase().includes(q));
     }), [clients, searchQuery]);
+
+    React.useEffect(() => {
+        setStoredViewMode(viewMode);
+    }, [setStoredViewMode, viewMode]);
 
     const closeCreateModal = () => {
         setIsModalOpen(false);
@@ -78,16 +93,19 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
         closeCreateModal();
     };
 
+    const handleDeleteSpace = (event: React.MouseEvent, client: ClientSpace) => {
+        event.stopPropagation();
+        if (!onDelete) return;
+        if (window.confirm(`Delete ${client.name || 'this space'}?`)) {
+            void onDelete(client.id);
+        }
+    };
+
     return (
-        <div className="space-y-6 page-enter">
-            <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="space-y-2">
-                    <div className="surface-chip px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em]">
-                        <Briefcase size={12} />
-                        Client spaces
-                    </div>
+        <div className="space-y-4 page-enter">
+            <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
                     <Heading level={1}>Spaces</Heading>
-                    <p className="max-w-2xl text-sm text-[#6E6E80]">Manage all your client environments from a clean, contextual workspace list.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <button onClick={() => setViewMode('board')} className={`surface-chip px-3 py-2 text-xs font-medium ${viewMode === 'board' ? 'surface-chip-active' : ''}`}>
@@ -133,12 +151,25 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                                     }`}>
                                         {client.status}
                                     </span>
-                                    <span className={`inline-flex items-center gap-1 border px-2.5 py-1 text-[10px] font-semibold ${
-                                        isRetainer ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                    }`}>
-                                        {isRetainer ? <HeartPulse size={11} /> : <Target size={11} />}
-                                        {getModelLabel(model)}
-                                    </span>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                        <span className={`inline-flex items-center gap-1 border px-2.5 py-1 text-[10px] font-semibold ${
+                                            isRetainer ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                        }`}>
+                                            {isRetainer ? <HeartPulse size={11} /> : <Target size={11} />}
+                                            {getModelLabel(model)}
+                                        </span>
+                                        {onDelete && (
+                                            <button
+                                                type="button"
+                                                onClick={(event) => handleDeleteSpace(event, client)}
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#F2D4D1] bg-white text-[#B42318] transition-colors hover:bg-[#FFF4F2]"
+                                                title="Delete space"
+                                                aria-label={`Delete ${client.name}`}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="mt-4 border-b border-[#F1F1F1] pb-3">
@@ -221,9 +252,22 @@ const SpacesView = ({ clients, onSelect, onCreate }: { clients: ClientSpace[], o
                                     <div className="truncate text-xs text-[#6E6E80]">{client.description || 'Verified portal environment'}</div>
                                 </div>
                             </div>
-                            <span className={`surface-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${client.status === 'active' ? 'surface-chip-active' : ''}`}>
-                                {client.status}
-                            </span>
+                            <div className="flex shrink-0 items-center gap-2">
+                                <span className={`surface-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${client.status === 'active' ? 'surface-chip-active' : ''}`}>
+                                    {client.status}
+                                </span>
+                                {onDelete && (
+                                    <button
+                                        type="button"
+                                        onClick={(event) => handleDeleteSpace(event, client)}
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#F2D4D1] bg-white text-[#B42318] transition-colors hover:bg-[#FFF4F2]"
+                                        title="Delete space"
+                                        aria-label={`Delete ${client.name}`}
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                )}
+                            </div>
                         </GlassCard>
                     ))}
                 </div>

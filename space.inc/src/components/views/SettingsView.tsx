@@ -44,7 +44,7 @@ const SettingsView = () => {
 
     return (
         <div>
-            <Heading level={1} className="mb-8">Settings</Heading>
+            <Heading level={1} className="mb-4">Settings</Heading>
             {/* Organization Policies (Admins Only) */}
             {(profile?.role === 'owner' || profile?.role === 'admin') && (
                 <div className="mb-12">
@@ -146,7 +146,7 @@ export const BillingSettingsView = () => {
 
     return (
         <div>
-            <Heading level={1} className="mb-8">Billing & Subscription</Heading>
+            <Heading level={1} className="mb-4">Billing & Subscription</Heading>
             <GlassCard className="p-6">
                 <Text>Subscription management and billing history will appear here.</Text>
             </GlassCard>

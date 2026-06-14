@@ -1,14 +1,20 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Activity, AlertCircle, BarChart3, ChevronRight, Download, FolderKanban, MoreVertical, Plus, Search, UserPlus, Users, X } from 'lucide-react';
 import { Button, GlassCard, Heading, Input, LoadingScreen, useLoadingScreenGate } from '../UI/index';
 import { ClientLifecycle } from '../../types';
+import { useSetUrlParam, useUrlParamState } from '../../hooks/useUrlParamState';
 
 type ClientsTab = 'list' | 'insights';
 type StatusFilter = 'all' | 'active' | 'former';
 type SortBy = 'joined_desc' | 'joined_asc' | 'name_asc' | 'name_desc' | 'active_first';
 type TrendRange = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
+const CLIENT_TABS = ['list', 'insights'] as const;
+const CLIENT_STATUS_FILTERS = ['all', 'active', 'former'] as const;
+const CLIENT_SORTS = ['joined_desc', 'joined_asc', 'name_asc', 'name_desc', 'active_first'] as const;
+const TREND_RANGES = ['weekly', 'monthly', 'quarterly', 'yearly'] as const;
 
 const ClientsCRMView: React.FC<{
     clients: ClientLifecycle[];
@@ -16,12 +22,29 @@ const ClientsCRMView: React.FC<{
     onCreateSpace?: () => void;
     onInvitePerson?: () => void;
 }> = ({ clients, loading, onCreateSpace, onInvitePerson }) => {
-    const [activeTab, setActiveTab] = useState<ClientsTab>('list');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-    const [sortBy, setSortBy] = useState<SortBy>('joined_desc');
-    const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-    const [trendRange, setTrendRange] = useState<TrendRange>('monthly');
+    const setUrlParams = useSetUrlParam();
+    const [activeTab, setActiveTab] = useUrlParamState<ClientsTab>('clients_tab', 'list', {
+        allowedValues: CLIENT_TABS,
+        replace: false
+    });
+    const [searchQuery, setSearchQuery] = useUrlParamState('clients_q', '', {
+        replace: true
+    });
+    const [statusFilter, setStatusFilter] = useUrlParamState<StatusFilter>('clients_status', 'all', {
+        allowedValues: CLIENT_STATUS_FILTERS,
+        replace: true
+    });
+    const [sortBy, setSortBy] = useUrlParamState<SortBy>('clients_sort', 'joined_desc', {
+        allowedValues: CLIENT_SORTS,
+        replace: true
+    });
+    const [selectedClientId, setSelectedClientId] = useUrlParamState('client', '', {
+        replace: false
+    });
+    const [trendRange, setTrendRange] = useUrlParamState<TrendRange>('clients_range', 'monthly', {
+        allowedValues: TREND_RANGES,
+        replace: true
+    });
 
     const getJoinedAt = (client: ClientLifecycle) => client.joined_at || client.created_at || '';
 
@@ -294,9 +317,11 @@ const ClientsCRMView: React.FC<{
     }, [clients, trendRange]);
 
     const resetListTools = () => {
-        setSearchQuery('');
-        setStatusFilter('all');
-        setSortBy('joined_desc');
+        setUrlParams({
+            clients_q: null,
+            clients_status: null,
+            clients_sort: null
+        }, { replace: true });
     };
 
     const exportVisibleClients = () => {
@@ -766,7 +791,7 @@ const ClientsCRMView: React.FC<{
             )}
 
             {selectedClient && typeof document !== 'undefined' ? createPortal(
-                <div className="fixed inset-0 z-[1000] bg-black/20" onClick={() => setSelectedClientId(null)}>
+                <div className="fixed inset-0 z-[1000] bg-black/20" onClick={() => setSelectedClientId('')}>
                     <aside
                         className="ml-auto flex h-dvh min-h-dvh w-full max-w-[560px] flex-col overflow-y-auto border-l border-[#DADADA] bg-white shadow-2xl"
                         onClick={(event) => event.stopPropagation()}
@@ -792,7 +817,7 @@ const ClientsCRMView: React.FC<{
                                         Contact: {getLeadName(selectedClient)} - {getLeadEmail(selectedClient)}
                                     </p>
                                 </div>
-                                <button className="text-[#6E6E80] hover:text-[#0D0D0D]" onClick={() => setSelectedClientId(null)} aria-label="Close client details">
+                                <button className="text-[#6E6E80] hover:text-[#0D0D0D]" onClick={() => setSelectedClientId('')} aria-label="Close client details">
                                     <X size={18} />
                                 </button>
                             </div>

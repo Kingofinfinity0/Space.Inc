@@ -403,6 +403,15 @@ export const apiService = {
         return { data, error: null };
     },
 
+    async getBillingUsageSnapshot(organizationId: string) {
+        if (!organizationId) return { data: null, error: { message: 'organization_id is required' } };
+        const { data, error } = await supabase.rpc('get_billing_usage_snapshot', {
+            p_organization_id: organizationId
+        });
+        if (error) return { data: null, error };
+        return { data, error: null };
+    },
+
     async getSpaceDashboardData(spaceId: string, organizationId: string) {
         const { data, error } = await supabase.rpc('get_space_dashboard_data', {
             p_space_id: spaceId,

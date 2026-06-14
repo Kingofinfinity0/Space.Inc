@@ -133,12 +133,9 @@ export default function StaffDashboardView({
     }
 
     return (
-        <div className="space-y-6">
-            <header className="mb-8 flex items-end justify-between">
-                <div>
-                    <Heading level={1}>Overview</Heading>
-                    <Text variant="secondary" className="mt-1">Run work from a cleaner shared task system while staying close to meetings and inbox activity.</Text>
-                </div>
+        <div className="overview-dashboard space-y-4">
+            <header className="flex items-center justify-between">
+                <Heading level={1}>Overview</Heading>
             </header>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
@@ -194,7 +191,7 @@ export default function StaffDashboardView({
                                     const startTime = new Date(meeting.starts_at);
                                     const canJoin = (startTime.getTime() - Date.now()) < 30 * 60 * 1000;
                                     return (
-                                        <div key={meeting.id} className="flex items-center justify-between rounded-xl border border-zinc-100 p-4">
+                                        <div key={meeting.id} className="overview-tile flex items-center justify-between rounded-xl border border-zinc-100 p-4">
                                             <div className="flex items-center gap-4">
                                                 <div className="min-w-[50px] text-center">
                                                     <p className="text-[10px] font-black uppercase text-zinc-400">{startTime.toLocaleString('en-US', { month: 'short' })}</p>
@@ -237,7 +234,7 @@ export default function StaffDashboardView({
                         ) : (
                             <div className="space-y-3">
                                 {notifications.map((notification) => (
-                                    <div key={notification.id} className="cursor-pointer rounded-xl border border-zinc-100 bg-white p-3 transition-colors hover:border-zinc-300" onClick={() => notification.space_id && onGoToSpace?.(notification.space_id)}>
+                                    <div key={notification.id} className="overview-tile cursor-pointer rounded-xl border border-zinc-100 bg-white p-3 transition-colors hover:border-zinc-300" onClick={() => notification.space_id && onGoToSpace?.(notification.space_id)}>
                                         <div className="flex items-center gap-3">
                                             <div className="text-zinc-400">
                                                 {notification.type === 'file_uploaded'
@@ -260,7 +257,7 @@ export default function StaffDashboardView({
                         <div className="space-y-2">
                             <button
                                 onClick={() => onInstantMeet?.()}
-                                className="w-full rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-3 text-left transition-colors hover:bg-white"
+                                className="overview-tile w-full rounded-[8px] border border-[#E5E5E5] bg-[#F7F7F8] p-3 text-left transition-colors hover:bg-white"
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="rounded-[8px] border border-[#E5E5E5] bg-white p-2 text-[#0D0D0D]">
@@ -272,7 +269,7 @@ export default function StaffDashboardView({
                                     </div>
                                 </div>
                             </button>
-                            <div className="flex items-center gap-3 rounded-[8px] border border-[#E5E5E5] p-3">
+                            <div className="overview-tile flex items-center gap-3 rounded-[8px] border border-[#E5E5E5] p-3">
                                 <div className="rounded-[8px] bg-[#F7F7F8] p-2 text-[#6E6E80]">
                                     <ListTodo size={16} />
                                 </div>

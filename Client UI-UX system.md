@@ -93,33 +93,94 @@ Why:
 
 ## Visual language
 ### Shape system
-- Primary card radius: `24px`
-- Continuous soft geometry goal: squircle-like rounded rectangles rather than rigid geometric blocks
-- Controls and pills: `999px` radius
-- Inner tiles: `18px` to `20px`
+- Primary card radius: `28px` via `--radius-card`
+- Standard surface/control radius: `8px` via `--radius-md`
+- Compact control radius: `4px` to `6px`
+- Controls and pills: `999px` via `--radius-pill`
+- Continuous soft geometry goal: rounded, quiet, product-tool surfaces rather than rigid blocks
 
-### Grid and spacing
-Base rhythm:
-- 4px micro grid
-- 8px primary rhythm
+### Spacing and sizing system
+Source of truth:
+- executable tokens live in `src/index.css`
+- documentation lives in this section
+- shared primitives should consume semantic tokens first, raw scale tokens second, and one-off pixel values only when there is a measured exception
 
-Rule of thumb:
-- horizontal padding should be approximately double vertical padding for dashboard controls and chrome
+The system is not "everything is a multiple of 4px." The goal is to make adjacent choices feel meaningfully different. Small values stay close together because 2px to 4px matters inside controls. Large values spread out because 512px to 520px is not a useful design decision.
 
-Examples in the implemented system:
-- header bar padding: `6px vertical / 12px horizontal`
-- meeting range pills: `2.88px vertical / 5.76px horizontal`
-- directory tabs: `4.56px vertical / 9.12px horizontal`
-- quick action button padding: `6.24px vertical / 12.48px horizontal`
+Base:
+- base value: `16px`
+- micro grid: `4px`
+- primary rhythm: `8px`
+- large scale rule: adjacent large values should usually differ by about `25%` or more
 
-Card spacing:
-- card gap: `16px`
-- compact inner gap: `8px`
-- standard inner gap: `12px`
+Canonical scale:
+
+| Token | Value | Factor | Primary use |
+| --- | ---: | ---: | --- |
+| `--space-0` | `0px` | `0` | reset |
+| `--space-1` | `4px` | `0.25x` | hairline gaps, icon nudges |
+| `--space-2` | `8px` | `0.5x` | tight control gaps |
+| `--space-3` | `12px` | `0.75x` | compact row gaps, small stacks |
+| `--space-4` | `16px` | `1x` | default gap, compact card inset |
+| `--space-6` | `24px` | `1.5x` | comfortable card inset, panel gap |
+| `--space-8` | `32px` | `2x` | large card inset, dashboard group gap |
+| `--space-12` | `48px` | `3x` | section gap, modal rhythm |
+| `--space-16` | `64px` | `4x` | major vertical grouping |
+| `--space-24` | `96px` | `6x` | compact page section |
+| `--space-32` | `128px` | `8x` | generous page section |
+| `--space-48` | `192px` | `12x` | hero/landing spacing |
+| `--space-64` | `256px` | `16x` | compact panel width/height |
+| `--space-96` | `384px` | `24x` | narrow content/panel |
+| `--space-128` | `512px` | `32x` | modal/content width |
+| `--space-160` | `640px` | `40x` | standard content width |
+| `--space-192` | `768px` | `48x` | wide content width |
+
+Optical exceptions:
+- `--space-px`, `--space-0-5`, `--space-1-5`, `--space-2-5`, `--space-5`, and `--space-10` exist for alignment, legacy compatibility, and fine control ergonomics
+- do not use optical exceptions to choose major layout spacing
+- when in doubt, step to the next canonical value instead of inventing a middle value
+
+Semantic spacing aliases:
+
+| Role | Tokens | Use |
+| --- | --- | --- |
+| Gaps | `--space-gap-2xs` to `--space-gap-3xl` | horizontal/vertical distance between related peers |
+| Stacks | `--space-stack-tight` to `--space-stack-xl` | vertical rhythm inside a component |
+| Insets | `--space-inset-control-*`, `--space-inset-card-*` | internal padding |
+| Sections | `--space-section-sm` to `--space-section-lg` | page-level separation |
+| Page padding | `--space-inset-page-x`, `--space-inset-page-y` | responsive page shell breathing room |
+
+Decision rules:
+- Choose the role first: gap, stack, inset, section, width, height, icon, control, avatar, or row.
+- Use semantic tokens when the role is obvious.
+- Use canonical raw scale tokens when composing a new pattern that does not yet have a semantic alias.
+- Avoid adjacent values that are visually too close at the large end. If `512px` is too small, try `640px`, not `528px`.
+- Inside controls, horizontal padding should usually be about double vertical padding.
+- Related elements use smaller gaps; unrelated groups use section or large stack gaps.
+- If a value repeats three times, promote it to a semantic token.
+
+Sizing scale:
+
+| Role | Tokens | Values |
+| --- | --- | --- |
+| Icons | `--size-icon-xs` to `--size-icon-xl` | `12`, `16`, `20`, `24`, `32px` |
+| Controls | `--size-control-xs` to `--size-control-xl` | `28`, `32`, `40`, `44`, `48px` |
+| Touch target | `--size-touch-target` | `44px` |
+| Avatars | `--size-avatar-xs` to `--size-avatar-xl` | `24`, `32`, `40`, `48`, `64px` |
+| Rows | `--size-list-row-*` | `32`, `44`, `64px` |
+| Panels | `--size-panel-xs` to `--size-panel-xl` | `256`, `384`, `512`, `640`, `768px` |
+| Content | `--size-content-narrow` to `--size-content-2xl` | `384`, `512`, `640`, `800`, `1024`, `1280px` |
+| Dashboard cards | `--size-dashboard-card-*` | compact, current default, standard |
+
+Implementation helpers:
+- `.ui-stack-tight`, `.ui-stack-sm`, `.ui-stack-md`, `.ui-stack-lg`, `.ui-stack-xl`
+- `.ui-cluster-tight`, `.ui-cluster-sm`, `.ui-cluster-md`, `.ui-cluster-lg`
+- `.ui-inset-card-sm`, `.ui-inset-card-md`, `.ui-inset-card-lg`
+- `.ui-container-narrow`, `.ui-container-sm`, `.ui-container-md`, `.ui-container-lg`, `.ui-container-xl`
 
 ## Typography system
 Typeface:
-- Primary UI font: `Inter`
+- Primary UI font: `Geist Sans`
 - Fallbacks: `"Segoe UI", system-ui, sans-serif`
 
 Philosophy:
@@ -306,7 +367,8 @@ Files most responsible for this system:
 - `src/components/UI/Button.tsx`
 
 ## Future recommendations
-- move the typography scale and card tokens into a dedicated theme file
+- keep migrating shared components from raw Tailwind values to semantic spacing and sizing tokens
+- move the token map into a dedicated theme file once enough components depend on it
 - create a custom icon wrapper component to standardize size, stroke, and optical alignment
 - replace ad hoc utility text colors in JSX with semantic classes or token-driven components
-- introduce motion tokens shared across cards, modals, and dock interactions
+- add linting or review checks for new arbitrary spacing, sizing, and radius values

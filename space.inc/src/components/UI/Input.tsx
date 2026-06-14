@@ -10,17 +10,17 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label className="mb-2 block px-0.5 text-xs font-medium uppercase tracking-[0.18em] text-[#6E6E80]">
+          <label className="ui-field-label mb-[var(--space-stack-tight)] block px-[var(--space-0-5)]">
             {label}
           </label>
         )}
         <input
           ref={ref}
-          className={`w-full rounded-[8px] border border-[#DADADA] bg-white px-4 py-3 text-sm text-[#0D0D0D] placeholder:text-[#6E6E80] focus:border-black focus:outline-none ${error ? 'border-[#B42318]' : ''} ${className}`}
+          className={`ui-input px-[var(--space-inset-control-x-md)] py-[var(--space-inset-control-y-lg)] placeholder:text-[color:var(--text-muted)] focus:border-[color:var(--color-focus)] focus:outline-none ${error ? 'border-[color:var(--color-danger)]' : ''} ${className}`}
           {...props}
         />
         {error && (
-          <p className="mt-2 text-xs text-[#B42318]">{error}</p>
+          <p className="ui-field-error mt-[var(--space-stack-tight)]">{error}</p>
         )}
       </div>
     );

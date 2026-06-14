@@ -23,10 +23,10 @@ export const Text: React.FC<TextProps> = ({ children, variant = 'primary', size 
     };
 
     const sizeStyles = {
-        xs: "text-xs",
-        sm: "text-sm",
-        base: "text-base",
-        lg: "text-lg"
+        xs: "text-[length:var(--font-size-xs)] leading-[var(--line-height-snug)]",
+        sm: "text-[length:var(--font-size-sm)] leading-[var(--line-height-body)]",
+        base: "text-[length:var(--font-size-body)] leading-[var(--line-height-body)]",
+        lg: "text-[length:var(--font-size-lg)] leading-[var(--line-height-relaxed)]"
     };
 
     return (

@@ -20,7 +20,7 @@ export const Button: React.FC<ButtonProps> = ({
   icon,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-full border font-medium tracking-[-0.01em] transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--theme-accent-soft)] focus-visible:ring-offset-0 disabled:opacity-50 disabled:pointer-events-none';
+  const baseStyles = 'ui-control inline-flex items-center justify-center gap-[var(--space-gap-xs)] rounded-[var(--radius-pill)] border font-medium tracking-[var(--tracking-tight)] transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-[var(--motion-fast)] ease-out focus-visible:outline-none focus-visible:ring-[var(--border-width-focus)] focus-visible:ring-[color:var(--theme-accent-soft)] focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-[var(--opacity-disabled)]';
 
   const variantStyles = {
     primary: 'border-[color:var(--theme-accent-muted)] bg-[color:var(--theme-accent-muted)] text-white hover:border-[color:var(--theme-accent-soft)] hover:bg-[color:var(--theme-accent-soft)]',
@@ -28,13 +28,13 @@ export const Button: React.FC<ButtonProps> = ({
     ghost: 'border-transparent bg-transparent text-[color:var(--text-primary)] hover:bg-[color:var(--bg-hover)] hover:text-[color:var(--text-primary)]',
     outline: 'border-[color:var(--border)] bg-[color:var(--bg-base)] text-[color:var(--text-primary)] hover:border-[color:var(--border)] hover:bg-[color:var(--bg-hover)]',
     link: 'border-transparent bg-transparent px-0 text-[color:var(--theme-accent)] hover:text-[color:var(--theme-accent-hover)]',
-    danger: 'border-[#E5E5E5] bg-white text-[#B42318] hover:bg-[#FEF2F2]',
+    danger: 'border-[color:var(--border)] bg-[color:var(--bg-base)] text-[color:var(--color-danger)] hover:bg-[color:var(--color-danger-surface)]',
   };
 
   const sizeStyles = {
-    sm: 'h-8 px-3 text-xs',
-    md: 'h-10 px-4 text-sm',
-    lg: 'h-11 px-5 text-[15px]',
+    sm: 'h-[var(--size-control-sm)] px-[var(--space-inset-control-x-sm)] text-[length:var(--font-size-xs)] leading-[var(--line-height-label)]',
+    md: 'h-[var(--size-control-md)] px-[var(--space-inset-control-x-md)] text-[length:var(--font-size-body)] leading-[var(--line-height-label)]',
+    lg: 'h-[var(--size-control-lg)] px-[var(--space-inset-control-x-lg)] text-[length:var(--font-size-md)] leading-[var(--line-height-label)]',
   };
 
   return (
@@ -46,7 +46,7 @@ export const Button: React.FC<ButtonProps> = ({
       {isLoading ? (
         <>
         <svg
-          className="h-4 w-4 animate-spin text-current"
+          className="h-[var(--size-icon-sm)] w-[var(--size-icon-sm)] animate-spin text-current"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"

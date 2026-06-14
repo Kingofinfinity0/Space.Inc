@@ -63,10 +63,9 @@ const GlobalMeetingsView = ({ meetings, clients, onSchedule, onJoin, onInstantMe
 
     return (
         <div>
-            <header className="flex justify-between items-center mb-8">
+            <header className="mb-4 flex items-center justify-between gap-3">
                 <div>
                     <Heading level={1}>Calendar</Heading>
-                    <Text variant="secondary" className="mt-1">Schedule and manage video calls, tasks, and deadlines across spaces.</Text>
                 </div>
                 <div className="flex gap-4">
                     <Button variant="outline" size="sm" onClick={() => onInstantMeet('')}>
