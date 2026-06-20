@@ -1,362 +1,269 @@
+﻿import React from 'react';
+import { ArrowRight, Check, LogIn } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { VeroBrand } from './brand/VeroLogo';
 
-import React, { useEffect } from 'react';
-import { Layers, Zap, Shield, Check } from 'lucide-react';
-import { VeroMark } from './brand/VeroLogo';
+type Plan = {
+  name: string;
+  price: string;
+  clientSpaces: string;
+  staffSeats: string;
+  storage: string;
+  videoMinutes: string;
+  bestFor: string;
+};
 
-interface LandingPageProps {
-  onStartOnboarding: () => void;
-}
+const plans: Plan[] = [
+  {
+    name: 'Starter',
+    price: '$29/mo',
+    clientSpaces: '3 spaces',
+    staffSeats: '1 staff seat',
+    storage: '5 GB',
+    videoMinutes: '500 participant-min/month',
+    bestFor: 'Solo operators and very small teams'
+  },
+  {
+    name: 'Growth',
+    price: '$79/mo',
+    clientSpaces: '10 spaces',
+    staffSeats: '3 staff seats',
+    storage: '20 GB',
+    videoMinutes: '2,000 participant-min/month',
+    bestFor: 'Growing agencies and consultants'
+  },
+  {
+    name: 'Scale',
+    price: '$199/mo',
+    clientSpaces: '30 spaces',
+    staffSeats: '10 staff seats',
+    storage: '100 GB',
+    videoMinutes: '10,000 participant-min/month',
+    bestFor: 'Established service businesses'
+  },
+  {
+    name: 'Pro Agency',
+    price: '$399/mo',
+    clientSpaces: '50 spaces',
+    staffSeats: '20 staff seats',
+    storage: '250 GB',
+    videoMinutes: '20,000 participant-min/month',
+    bestFor: 'High-volume teams managing many clients'
+  }
+];
 
-// This component is no longer used but kept for reference
-const Navbar = () => (
-  <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4">
-    <div className="max-w-7xl mx-auto flex justify-between items-center rounded-full px-6 py-3 shadow-lg bg-[#ffefcb] border border-[#0b2519]/10">
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-[#0b2519] rounded-lg flex items-center justify-center">
-          <VeroMark tone="light" className="h-6 w-6" />
-        </div>
-        <span className="font-medium text-[#0b2519] tracking-tight">Vero</span>
-      </div>
-      <div className="hidden md:flex items-center gap-8 text-sm font-medium text-[#0b2519]/80">
-        <a href="#features" className="hover:text-[#0b2519] transition-colors">Philosophy</a>
-        <a href="#pricing" className="hover:text-[#0b2519] transition-colors">Pricing</a>
-        <a href="#manifesto" className="hover:text-[#0b2519] transition-colors">Manifesto</a>
-      </div>
-      <div className="bg-[#0b2519] text-[#ffefcb] px-5 py-2 rounded-full text-sm font-semibold inline-block">
-        Loading...
-      </div>
-    </div>
-  </nav>
-);
+const addons = [
+  ['Extra client space', '$15/mo for 5 new spaces'],
+  ['Extra staff seat', '$15/mo per seat'],
+  ['Extra storage', '$0.15 per GB/mo'],
+  ['Extra video minutes', '$0.01 per participant-minute']
+];
 
-// This component is no longer used but kept for reference
-const Hero = () => (
-  <section className="relative min-h-screen flex flex-col items-center justify-center pt-20 overflow-hidden bg-[#ffefcb]">
-    <div className="relative z-10 text-center max-w-4xl mx-auto px-6">
-      <h1 className="text-5xl md:text-7xl lg:text-8xl font-medium text-[#0b2519] tracking-tight leading-[1.1] mb-8 animate-fade-in-up">
-        One Space.<br />
-        <span className="text-[#0b2519]">
-          Total Clarity.
-        </span>
-      </h1>
-
-      <p className="text-lg md:text-xl text-[#0b2519]/90 max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-in-up delay-100">
-        Ditch the 12-tool sprawl. One link for every client relationship.
-        Simpler. Faster. Human.
-      </p>
-
-      <div className="flex items-center justify-center animate-fade-in-up delay-200">
-        <div className="w-full sm:w-auto px-8 py-4 bg-[#0b2519]/90 text-[#ffefcb] rounded-full font-semibold text-lg flex items-center justify-center gap-2">
-          Loading...
-        </div>
-      </div>
-    </div>
-
-    {/* Floating UI Element */}
-    <div className="mt-20 relative w-full max-w-5xl mx-auto animate-float hidden md:block px-6">
-      <div className="glass-panel rounded-2xl border border-zinc-800/50 shadow-2xl overflow-hidden aspect-[16/9] relative group">
-        <div className="absolute inset-0 bg-[#0D0D0D] opacity-90"></div>
-
-        {/* Abstract UI representation */}
-        <div className="absolute inset-0 flex">
-          <div className="w-64 border-r border-white/5 p-6 space-y-4">
-            <div className="h-8 w-8 bg-zinc-800 rounded-lg mb-8"></div>
-            <div className="h-4 w-3/4 bg-zinc-800/50 rounded"></div>
-            <div className="h-4 w-1/2 bg-zinc-800/50 rounded"></div>
-            <div className="mt-auto h-20 bg-zinc-800/20 rounded-xl"></div>
-          </div>
-          <div className="flex-1 p-8">
-            <div className="flex justify-between mb-8">
-              <div className="h-8 w-48 bg-zinc-800/50 rounded"></div>
-              <div className="h-8 w-24 bg-zinc-800/50 rounded"></div>
-            </div>
-            <div className="grid grid-cols-3 gap-6">
-              <div className="aspect-square bg-zinc-800/20 rounded-2xl border border-white/5"></div>
-              <div className="aspect-square bg-zinc-800/20 rounded-2xl border border-white/5"></div>
-              <div className="aspect-square bg-zinc-800/20 rounded-2xl border border-white/5"></div>
-            </div>
-          </div>
-        </div>
-
-        {/* Glow effect on hover */}
-        <div className="absolute inset-0 bg-white/5 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none"></div>
-      </div>
-    </div>
-  </section>
-);
-
-const AntiClickUpManifesto = () => (
-  <section className="py-24 bg-[#0b2519] text-[#ffefcb] relative overflow-hidden">
-    <div className="max-w-7xl mx-auto px-6 relative z-10">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-        <div>
-          <h2 className="text-4xl md:text-5xl font-medium mb-6 leading-tight">
-            Productivity apps became the noise.
-          </h2>
-          <p className="text-lg md:text-xl text-[#ffefcb]/80 mb-8 max-w-2xl">
-            We saw ClickUp try to be "everything" and fail the mission.
-            Feature bloat kills focus. Vero removes the noise so you can scale the human connection.
-          </p>
-          <div className="flex items-center text-[#ffefcb]/60">
-            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <span className="text-sm font-medium">Built for the scaling entrepreneur</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6">
-          {/* Tool Sprawl Card */}
-          <div className="bg-[#0b2519] border border-[#ffefcb]/10 rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
-                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-              </div>
-              <h3 className="text-xl font-medium">THE TOOL SPRAWL</h3>
-            </div>
-            <ul className="space-y-3">
-              {["Fragmented communication", "Endless context switching", "Multiple logins & tabs", "Lost client history", "No single source of truth"].map((item) => (
-                <li key={item} className="flex items-center text-[#ffefcb]/80">
-                  <svg className="w-5 h-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                  </svg>
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Vero Space Card */}
-          <div className="bg-[#ffefcb] border border-[#0b2519]/10 rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-              </div>
-              <h3 className="text-xl font-medium text-[#0b2519]">THE VERO SPACE</h3>
-            </div>
-            <ul className="space-y-3">
-              {["Unified communication", "One link, one space", "Client-first design", "Complete history", "Single source of truth"].map((item) => (
-                <li key={item} className="flex items-center text-[#0b2519]/80">
-                  <svg className="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                  </svg>
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-);
-
-const FeatureCard = ({ icon: Icon, title, desc, isCheck = true }: { icon: any, title: string, desc: string, isCheck?: boolean }) => (
-  <div className="p-8 rounded-3xl bg-white/50 border border-[#0b2519]/10 hover:border-[#0b2519]/30 transition-all hover:bg-white/70 group">
-    <div className="h-12 w-12 bg-[#0b2519] rounded-2xl flex items-center justify-center mb-6 text-[#ffefcb] group-hover:scale-110 transition-transform duration-300">
-      <Icon size={24} strokeWidth={1.5} />
-    </div>
-    <h3 className="text-xl font-medium text-[#0b2519] mb-3">{title}</h3>
-    <p className="text-[#0b2519]/80 leading-relaxed font-light">{desc}</p>
-  </div>
-);
-
-const Features = () => (
-  <section id="features" className="py-32 bg-[#ffefcb] relative">
-    <div className="max-w-7xl mx-auto px-6">
-      <div className="mb-20 text-center max-w-3xl mx-auto">
-        <h2 className="text-3xl md:text-5xl font-medium text-[#0b2519] mb-6 tracking-tight">Productivity apps became the noise.</h2>
-        <p className="text-[#0b2519]/80 text-lg font-light">
-          The Status Quo: Multiple tabs, fragmented history, and management overhead.
-          The Vero Way: One space, total clarity, and meaningful connections.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="space-y-6">
-          <FeatureCard
-            icon={Layers}
-            title="The Lie"
-            desc="More features equal more productivity. The truth? They create more complexity and less clarity."
-            isCheck={false}
-          />
-          <div className="p-6 bg-red-50/50 border-l-4 border-red-500 rounded-r-lg">
-            <h4 className="font-medium text-red-800 mb-2">Trust-Eroding Friction</h4>
-            <p className="text-red-700/80 text-sm">Fragmented communication breaks trust and slows progress.</p>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <FeatureCard
-            icon={Zap}
-            title="The Signal"
-            desc="Vero cuts through the noise with one space for every client relationship."
-          />
-          <div className="p-6 bg-emerald-50/50 border-l-4 border-emerald-500 rounded-r-lg">
-            <h4 className="font-medium text-emerald-800 mb-2">Context Cohesion</h4>
-            <p className="text-emerald-700/80 text-sm">All communication in one place means no more digging for context.</p>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <FeatureCard
-            icon={Shield}
-            title="The Result"
-            desc="Clarity for you, simplicity for your clients, and growth for your business."
-          />
-          <div className="p-6 bg-amber-50/50 border-l-4 border-amber-500 rounded-r-lg">
-            <h4 className="font-medium text-amber-800 mb-2">Effortless Scaling</h4>
-            <p className="text-amber-700/80 text-sm">More clients, less chaos. Scale without the overhead.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-);
-
-const PricingCard = ({ title, price, description, features, highlight = false, isPopular = false }: any) => (
-  <div className={`
-    relative p-8 rounded-3xl border flex flex-col h-full transition-all duration-300
-    bg-white/50 border-[#0b2519]/10 hover:border-[#0b2519]/30 hover:bg-white/70
-    ${highlight ? 'shadow-2xl scale-105 z-10' : ''}
-  `}>
-    {isPopular && (
-      <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-[#0b2519] text-[#ffefcb] text-xs font-bold uppercase tracking-wider rounded-full shadow-lg">
-        Most Popular
-      </div>
-    )}
-    <div className="mb-8">
-      <h3 className="text-lg font-medium text-[#0b2519] mb-2">{title}</h3>
-      <div className="flex items-baseline gap-1 mb-2">
-        <span className="text-4xl font-light text-[#0b2519]">${price}</span>
-        <span className="text-sm text-[#0b2519]/60">/month</span>
-      </div>
-      <p className="text-sm text-[#0b2519]/80 font-light min-h-[40px]">{description}</p>
-    </div>
-
-    <div className="space-y-4 mb-8 flex-1">
-      {features.map((feat: string, i: number) => (
-        <div key={i} className="flex items-start gap-3 text-sm text-[#0b2519]/80">
-          <Check size={16} className="text-[#0b2519] mt-0.5 shrink-0" />
-          <span className="font-light">{feat}</span>
-        </div>
-      ))}
-    </div>
-
-    <a
-      href="https://buy.polar.sh/polar_cl_cugYS6Kfcy651OZLVk1jvxp6gl3KOGikSe6aa3HNqdq"
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`
-        w-full py-3 rounded-xl font-medium text-sm transition-all text-center block
-        bg-[#0b2519] text-[#ffefcb] hover:bg-[#0b2519]/90
-      `}
-    >
-      Get Started
-    </a>
-  </div>
-);
-
-const Pricing = () => (
-  <section id="pricing" className="py-32 bg-[#ffefcb] relative overflow-hidden">
-    <div className="max-w-7xl mx-auto px-6 relative z-10">
-      <div className="mb-20 text-center">
-        <h2 className="text-3xl md:text-5xl font-medium text-[#0b2519] mb-6">Honest Pricing. Select Your Rank.</h2>
-        <p className="text-[#0b2519]/80 text-lg font-light max-w-xl mx-auto">
-          Simple, transparent pricing that grows with your business.
-          No hidden fees. Cancel anytime.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
-        <PricingCard
-          title="Starter"
-          price="29"
-          description="For the solo operator aiming for higher ranks."
-          features={[
-            "3 Client Spaces",
-            "1 Staff Seat",
-            "5 GB Storage",
-            "500 Video Minutes",
-            "Basic Analytics"
-          ]}
+const PublicHeader = () => (
+  <header className="fixed inset-x-0 top-0 z-40 border-b border-[#E5E5E5] bg-white/92 backdrop-blur">
+    <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
+      <Link to="/" aria-label="Vero home">
+        <VeroBrand
+          markTone="dark"
+          markClassName="h-7 w-7"
+          textClassName="text-[15px] font-semibold tracking-[0.01em] text-[#0D0D0D]"
         />
-        <PricingCard
-          title="Growth"
-          price="79"
-          description="Optimized for agency scaling."
-          isPopular={true}
-          features={[
-            "10 Client Spaces",
-            "3 Staff Seats",
-            "20 GB Storage",
-            "2,000 Video Minutes",
-            "AI Summaries"
-          ]}
-        />
-        <PricingCard
-          title="Scale"
-          price="199"
-          description="For established agencies."
-          features={[
-            "30 Client Spaces",
-            "10 Staff Seats",
-            "100 GB Storage",
-            "10,000 Video Minutes",
-            "Automation Rules"
-          ]}
-        />
-        <PricingCard
-          title="Pro Agency"
-          price="399"
-          description="Maximum power. Total domination."
-          features={[
-            "50 Client Spaces",
-            "20 Staff Seats",
-            "250 GB Storage",
-            "20,000 Video Minutes",
-            "Priority Support"
-          ]}
-        />
-      </div>
+      </Link>
+      <nav className="flex items-center gap-2">
+        <Link
+          to="/pricing"
+          className="hidden rounded-[8px] px-3 py-2 text-sm font-medium text-[#52525B] hover:bg-[#F7F7F8] hover:text-[#0D0D0D] sm:inline-flex"
+        >
+          Pricing
+        </Link>
+        <Link
+          to="/login"
+          className="inline-flex min-h-10 items-center gap-2 rounded-[8px] border border-[#DADADA] bg-white px-4 text-sm font-semibold text-[#0D0D0D] hover:bg-[#F7F7F8]"
+        >
+          <LogIn size={16} />
+          Sign in
+        </Link>
+      </nav>
     </div>
-  </section>
+  </header>
 );
 
-const Footer = () => (
-  <footer className="bg-[#0b2519] py-12">
-    <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center">
-      <div className="flex items-center gap-2 mb-4 md:mb-0">
-        <div className="w-6 h-6 bg-[#ffefcb] rounded flex items-center justify-center text-xs text-[#0b2519] font-bold">
-          <VeroMark className="h-4 w-4" />
-        </div>
-        <span className="text-[#ffefcb]/80 text-sm">Vero Inc. © 2024</span>
-      </div>
-      <div className="flex gap-6 text-sm text-[#ffefcb]/60">
-        <a href="#" className="hover:text-[#ffefcb] transition-colors">Privacy</a>
-        <a href="#" className="hover:text-[#ffefcb] transition-colors">Terms</a>
-        <a href="#" className="hover:text-[#ffefcb] transition-colors">Twitter</a>
-      </div>
+const PublicFooter = () => (
+  <footer className="border-t border-[#E5E5E5] bg-white">
+    <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-sm text-[#6E6E80] sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <VeroBrand
+        markTone="dark"
+        markClassName="h-6 w-6"
+        textClassName="font-semibold text-[#0D0D0D]"
+      />
+      <p>Built for service teams that need one clear place for every client.</p>
     </div>
   </footer>
 );
 
-export const LandingPage = ({ onStartOnboarding }: LandingPageProps) => {
-  // Auto-navigate to dashboard when component mounts
-  useEffect(() => {
-    onStartOnboarding();
-  }, [onStartOnboarding]);
-
-  return (
-    <div className="min-h-screen bg-white text-[#1D1D1D] flex items-center justify-center font-sans">
-      <div className="text-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#10A37F] border-t-transparent mx-auto mb-6"></div>
-        <p className="text-sm font-medium text-[#565869]">Initializing your workspace...</p>
+const HeroPreview = () => (
+  <div className="mx-auto w-full max-w-[520px] border border-[#0D0D0D] bg-white p-3 shadow-[12px_12px_0_#0D0D0D]">
+    <div className="flex items-center justify-between border-b border-[#E5E5E5] px-2 pb-3">
+      <div className="flex items-center gap-2">
+        <span className="h-2.5 w-2.5 rounded-full bg-[#0D0D0D]" />
+        <span className="text-xs font-semibold text-[#0D0D0D]">Client OS</span>
       </div>
+      <span className="text-xs text-[#6E6E80]">Live workspace</span>
+    </div>
+    <div className="grid gap-3 p-2 pt-4 sm:grid-cols-[0.9fr_1.1fr]">
+      <div className="space-y-2">
+        {['Strategy room', 'Files', 'Meetings', 'Tasks'].map((item, index) => (
+          <div
+            key={item}
+            className={`flex h-10 items-center justify-between border px-3 text-xs ${
+              index === 0 ? 'border-[#0D0D0D] bg-[#0D0D0D] text-white' : 'border-[#E5E5E5] bg-[#FAFAFA] text-[#52525B]'
+            }`}
+          >
+            <span>{item}</span>
+            <span>{index === 0 ? '12' : `0${index + 2}`}</span>
+          </div>
+        ))}
+      </div>
+      <div className="border border-[#E5E5E5] bg-[#FAFAFA] p-4">
+        <div className="mb-6 h-3 w-24 bg-[#0D0D0D]" />
+        <div className="space-y-3">
+          <div className="h-3 w-full bg-[#DADADA]" />
+          <div className="h-3 w-10/12 bg-[#DADADA]" />
+          <div className="h-3 w-7/12 bg-[#DADADA]" />
+        </div>
+        <div className="mt-8 grid grid-cols-2 gap-3">
+          <div className="border border-[#E5E5E5] bg-white p-3">
+            <div className="text-2xl font-semibold text-[#0D0D0D]">10</div>
+            <div className="text-xs text-[#6E6E80]">spaces</div>
+          </div>
+          <div className="border border-[#E5E5E5] bg-white p-3">
+            <div className="text-2xl font-semibold text-[#0D0D0D]">3</div>
+            <div className="text-xs text-[#6E6E80]">staff</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const PlanCard = ({ plan, featured = false }: { plan: Plan; featured?: boolean }) => (
+  <article className={`flex h-full flex-col border p-6 ${featured ? 'border-[#0D0D0D] bg-[#0D0D0D] text-white' : 'border-[#E5E5E5] bg-white text-[#0D0D0D]'}`}>
+    <div className="mb-7">
+      <h3 className="text-xl font-semibold tracking-tight">{plan.name}</h3>
+      <div className="mt-4 flex items-end gap-2">
+        <span className="text-4xl font-semibold tracking-tight">{plan.price.replace('/mo', '')}</span>
+        <span className={`pb-1 text-sm ${featured ? 'text-white/62' : 'text-[#6E6E80]'}`}>/mo</span>
+      </div>
+      <p className={`mt-4 min-h-10 text-sm leading-6 ${featured ? 'text-white/72' : 'text-[#6E6E80]'}`}>{plan.bestFor}</p>
+    </div>
+
+    <div className="space-y-3 text-sm">
+      {[plan.clientSpaces, plan.staffSeats, plan.storage, plan.videoMinutes].map((item) => (
+        <div key={item} className="flex items-start gap-3">
+          <Check size={16} className={`mt-0.5 shrink-0 ${featured ? 'text-white' : 'text-[#0D0D0D]'}`} />
+          <span>{item}</span>
+        </div>
+      ))}
+    </div>
+
+    <button
+      type="button"
+      className={`mt-8 min-h-11 w-full border px-4 text-sm font-semibold ${
+        featured
+          ? 'border-white bg-white text-[#0D0D0D] hover:bg-[#F7F7F8]'
+          : 'border-[#0D0D0D] bg-white text-[#0D0D0D] hover:bg-[#0D0D0D] hover:text-white'
+      }`}
+    >
+      Get Started
+    </button>
+  </article>
+);
+
+const AddonsSection = () => (
+  <section className="border-t border-[#E5E5E5] bg-[#FAFAFA]">
+    <div className="mx-auto grid max-w-7xl gap-8 px-5 py-20 sm:px-8 lg:grid-cols-[0.8fr_1.2fr]">
+      <div>
+        <h2 className="text-3xl font-semibold tracking-tight text-[#0D0D0D]">Add what you need.</h2>
+        <p className="mt-4 max-w-md text-base leading-7 text-[#6E6E80]">
+          Plans stay simple. Usage can scale with client spaces, staff, storage, and video minutes as your operations grow.
+        </p>
+      </div>
+      <div className="grid gap-px overflow-hidden border border-[#E5E5E5] bg-[#E5E5E5] sm:grid-cols-2">
+        {addons.map(([name, price]) => (
+          <div key={name} className="bg-white p-5">
+            <div className="text-sm font-semibold text-[#0D0D0D]">{name}</div>
+            <div className="mt-2 text-sm text-[#6E6E80]">{price}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+);
+
+export const LandingPage = () => {
+  return (
+    <div className="min-h-screen bg-white font-sans text-[#0D0D0D]">
+      <PublicHeader />
+      <main>
+        <section className="border-b border-[#E5E5E5] pt-16">
+          <div className="mx-auto grid min-h-[calc(100vh-64px)] max-w-7xl items-center gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:py-24">
+            <div className="max-w-3xl">
+              <h1 className="text-[44px] font-semibold leading-[0.96] tracking-tight text-[#0D0D0D] sm:text-[72px] lg:text-[86px]">
+                One client workspace. Every moving part.
+              </h1>
+              <p className="mt-7 max-w-2xl text-lg leading-8 text-[#52525B] sm:text-xl">
+                Vero gives service businesses a focused place for client spaces, meetings, files, messages, and follow-through.
+              </p>
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+                <Link
+                  to="/pricing"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 bg-[#0D0D0D] px-6 text-sm font-semibold text-white hover:bg-black/82"
+                >
+                  View pricing
+                  <ArrowRight size={17} />
+                </Link>
+                <Link
+                  to="/login"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 border border-[#DADADA] bg-white px-6 text-sm font-semibold text-[#0D0D0D] hover:bg-[#F7F7F8]"
+                >
+                  Sign in
+                </Link>
+              </div>
+            </div>
+            <HeroPreview />
+          </div>
+        </section>
+      </main>
+      <PublicFooter />
+    </div>
+  );
+};
+
+export const PricingPage = () => {
+  return (
+    <div className="min-h-screen bg-white font-sans text-[#0D0D0D]">
+      <PublicHeader />
+      <main className="pt-16">
+        <section className="border-b border-[#E5E5E5]">
+          <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:py-24">
+            <div className="max-w-3xl">
+              <h1 className="text-[42px] font-semibold leading-[1] tracking-tight text-[#0D0D0D] sm:text-[64px]">
+                Pricing that matches your client load.
+              </h1>
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-[#52525B]">
+                Start with the workspace capacity you need today, then add spaces, seats, storage, or video minutes when the operation gets busier.
+              </p>
+            </div>
+            <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {plans.map((plan) => (
+                <PlanCard key={plan.name} plan={plan} featured={plan.name === 'Growth'} />
+              ))}
+            </div>
+          </div>
+        </section>
+        <AddonsSection />
+      </main>
+      <PublicFooter />
     </div>
   );
 };

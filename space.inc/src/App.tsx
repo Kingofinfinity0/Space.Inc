@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
 import LoginPage from './views/LoginPage';
@@ -47,6 +47,7 @@ import { friendlyError } from './utils/errors';
 import { AppLayout } from './components/Layout';
 import ScrollProgressPill from './components/ScrollProgressPill';
 import { VeroMark } from './components/brand/VeroLogo';
+import { LandingPage, PricingPage } from './components/LandingPage';
 
 // View Components
 import StaffDashboardView from './components/views/StaffDashboardView';
@@ -212,7 +213,7 @@ const loadWorkspacePeripheralData = async (organizationId: string): Promise<Work
     };
 };
 
-// ── Client Space Picker ─────────────────────────────────────────────────
+// â”€â”€ Client Space Picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Shown on /dashboard when a client has multiple space memberships.
 const ClientSpacePicker: React.FC = () => {
     const { user, signOut } = useAuth();
@@ -445,7 +446,7 @@ const App = () => {
         setSelectedSpaceTab(nextUrlState.selectedSpaceTab);
     }, [location.pathname, location.search]);
 
-    // ── Client role redirect ─────────────────────────────────────────────────
+    // â”€â”€ Client role redirect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // If the backend has already selected a client-space context, send the user
     // there immediately. Otherwise keep the dashboard/picker/pending flow intact.
     useEffect(() => {
@@ -481,7 +482,7 @@ const App = () => {
             return;
         }
         if (workspaceDataEnabled && workspaceCriticalQuery.data) {
-            // Skip full data fetch for clients — they only need their own space data
+            // Skip full data fetch for clients â€” they only need their own space data
             setIsInitialLoading(false);
         } else if (!workspaceDataEnabled && !loading && !user) {
             // If we're not loading and there's no user, we're on the login/signup page
@@ -943,7 +944,7 @@ const App = () => {
     };
 
     const handleDeleteMeeting = async (meetingId: string) => {
-        // Optimistic removal — no reload needed
+        // Optimistic removal â€” no reload needed
         setMeetings(prev => prev.filter(m => m.id !== meetingId));
         updateWorkspaceCriticalCache((current) => ({
             ...current,
@@ -1249,6 +1250,8 @@ case ViewState.STAFF:
 
     return (
         <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
             <Route path="/join/:token" element={<JoinPage />} />
             <Route path="/invite/:token" element={<InvitePage />} />
             <Route path="/login" element={<LoginPage />} />
@@ -1279,9 +1282,9 @@ case ViewState.STAFF:
                     }
 
                     if (userRole === 'client') {
-                        // ── Client dashboard ──────────────────────────────────
-                        // Single membership → redirect handled by useEffect above
-                        // Multiple memberships → show space picker
+                        // â”€â”€ Client dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                        // Single membership â†’ redirect handled by useEffect above
+                        // Multiple memberships â†’ show space picker
                         return <ClientSpacePicker />;
                     }
 
@@ -1535,3 +1538,4 @@ case ViewState.STAFF:
 };
 
 export default App;
+
