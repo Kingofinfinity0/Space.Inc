@@ -17,38 +17,29 @@ const plans: Plan[] = [
   {
     name: 'Starter',
     price: '$29/mo',
-    clientSpaces: '3 spaces',
-    staffSeats: '1 staff seat',
-    storage: '5 GB',
-    videoMinutes: '500 participant-min/month',
-    bestFor: 'Solo operators and very small teams'
+    clientSpaces: '5 spaces',
+    staffSeats: '1 seat included',
+    storage: '10 GB',
+    videoMinutes: '500 / mo',
+    bestFor: 'Solo operators & freelancers'
   },
   {
-    name: 'Growth',
-    price: '$79/mo',
-    clientSpaces: '10 spaces',
-    staffSeats: '3 staff seats',
-    storage: '20 GB',
-    videoMinutes: '2,000 participant-min/month',
-    bestFor: 'Growing agencies and consultants'
+    name: 'Studio (The Sweet Spot)',
+    price: '$89/mo',
+    clientSpaces: '15 spaces',
+    staffSeats: '3 seats included',
+    storage: '50 GB',
+    videoMinutes: '2,500 / mo',
+    bestFor: 'Small agencies & consultants'
   },
   {
-    name: 'Scale',
-    price: '$199/mo',
-    clientSpaces: '30 spaces',
-    staffSeats: '10 staff seats',
-    storage: '100 GB',
-    videoMinutes: '10,000 participant-min/month',
-    bestFor: 'Established service businesses'
-  },
-  {
-    name: 'Pro Agency',
-    price: '$399/mo',
+    name: 'Agency',
+    price: '$249/mo',
     clientSpaces: '50 spaces',
-    staffSeats: '20 staff seats',
-    storage: '250 GB',
-    videoMinutes: '20,000 participant-min/month',
-    bestFor: 'High-volume teams managing many clients'
+    staffSeats: '10 seats included',
+    storage: '200 GB',
+    videoMinutes: '10,000 / mo',
+    bestFor: 'Established service teams'
   }
 ];
 
@@ -254,9 +245,9 @@ export const PricingPage = () => {
                 Start with the workspace capacity you need today, then add spaces, seats, storage, or video minutes when the operation gets busier.
               </p>
             </div>
-            <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {plans.map((plan) => (
-                <PlanCard key={plan.name} plan={plan} featured={plan.name === 'Growth'} />
+                <PlanCard key={plan.name} plan={plan} featured={plan.name === 'Studio (The Sweet Spot)'} />
               ))}
             </div>
           </div>
