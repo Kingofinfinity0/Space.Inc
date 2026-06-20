@@ -27,8 +27,9 @@ import { useUrlParamState } from '../../hooks/useUrlParamState';
 import { useRealtimeFiles } from '../../hooks/useRealtimeFiles';
 import { usePersistentState } from '../../lib/persistence';
 import { ClientLifecycle, ClientSpace, Meeting, Message, SpaceFile, StaffMember, Task } from '../../types';
-import { GlassCard, Button, Heading, Text, LoadingScreen, useLoadingScreenGate } from '../UI/index';
+import { GlassCard, Button, Heading, Text, LoadingScreen, useLoadingScreenGate, EmptyState as UIEmptyState } from '../UI/index';
 import { VeroMark } from '../brand/VeroLogo';
+import calendarEmptyIllustration from '../../assets/empty-states/events-calendar.svg';
 
 type OwnerDashboardProps = {
     clients: ClientSpace[];
@@ -586,14 +587,6 @@ function EmptyState({ children }: { children: React.ReactNode }) {
     return <div className="overview-tile rounded-[8px] border border-dashed border-[#DADADA] bg-[#F7F7F8] px-3 py-5 text-center text-xs text-[#6E6E80]">{children}</div>;
 }
 
-function CenteredEmptyState({ children }: { children: React.ReactNode }) {
-    return (
-        <div className="flex min-h-full items-center justify-center px-3 text-center text-[length:var(--font-size-xs)] leading-[var(--line-height-snug)] text-[#8F8F9A]">
-            {children}
-        </div>
-    );
-}
-
 export default function OwnerDashboardView({
     clients,
     staff = [],
@@ -1052,9 +1045,12 @@ export default function OwnerDashboardView({
 
                         <SectionCard title="Calendar" icon={<Calendar size={16} />} action={<Button variant="ghost" size="sm" onClick={onGoToMeetings}>Open</Button>} className="lg:col-span-4">
                             {dashboard.todayCalendarItems.length === 0 ? (
-                                <CenteredEmptyState>
-                                    No meetings or tasks today.
-                                </CenteredEmptyState>
+                                <UIEmptyState
+                                    size="compact"
+                                    title="No meetings or tasks today."
+                                    illustrationSrc={calendarEmptyIllustration}
+                                    illustrationAlt=""
+                                />
                             ) : (
                                 <div className="divide-y divide-[#EFEFEF]">
                                     {dashboard.todayCalendarItems.slice(0, 6).map((item) => (
