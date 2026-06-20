@@ -24,7 +24,7 @@ const plans: Plan[] = [
     bestFor: 'Solo operators & freelancers'
   },
   {
-    name: 'Studio (The Sweet Spot)',
+    name: 'Studio',
     price: '$89/mo',
     clientSpaces: '15 spaces',
     staffSeats: '3 seats included',
