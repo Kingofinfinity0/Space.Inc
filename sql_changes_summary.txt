@@ -1,0 +1,8 @@
+Backend Invitation System Hardening & Share Link Implementation:
+- Dropped legacy invitation/membership functions.
+- Updated create_space to return share_link_token.
+- Implemented Share Link RPCs: get_share_link, rotate_share_link, update_share_link_config, disable_share_link, enable_share_link, get_share_link_by_token, join_via_share_link.
+- Refined accept_invitation and join_via_share_link for dual-table sync.
+- Updated has_space_role to map roles between member_role and user_role.
+- Implemented cleanup_expired_invitations.
+- Hardened RLS policies for all invitation-related tables.
