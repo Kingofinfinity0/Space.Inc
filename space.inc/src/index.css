@@ -2,22 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@font-face {
-  font-family: "Geist Sans";
-  src: url("./assets/fonts/Geist-Variable.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Geist Sans";
-  src: url("./assets/fonts/Geist-Italic[wght].woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: italic;
-  font-display: swap;
-}
-
 :root {
   --color-accent-green: #10A37F;
   --color-accent-green-strong: #087A5E;
@@ -153,9 +137,9 @@
   --shadow-card-inset: inset 0 1px 0 rgba(255,255,255,0.72);
   --shadow-sheet: var(--shadow-lg);
   --radius: var(--radius-md);
-  --font-body: "Geist Sans", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Geist Sans", "Segoe UI", system-ui, sans-serif;
-  --font-numeric: "Geist Sans", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-numeric: "Inter", "Segoe UI", system-ui, sans-serif;
   --font-size-micro: 10px;
   --font-size-meta: 11px;
   --font-size-xs: 12px;
@@ -1103,6 +1087,65 @@ html.dark .database-row:hover {
 .overview-dashboard .database-row,
 .overview-dashboard .overview-tile {
   border-radius: var(--radius-none);
+}
+
+.overview-dashboard {
+  --radius-card: 14px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --space-stack-tight: var(--space-1);
+  --space-stack-sm: var(--space-2);
+  --space-stack-md: var(--space-3);
+  --space-stack-lg: var(--space-4);
+  --space-stack-xl: var(--space-6);
+  --space-gap-sm: var(--space-2);
+  --space-gap-md: var(--space-3);
+  --space-gap-lg: var(--space-4);
+  --line-height-body: 1.35;
+  --line-height-snug: 1.2;
+  --line-height-tight: 1.12;
+}
+
+.overview-dashboard .glass-surface,
+.overview-dashboard .ui-panel,
+.overview-dashboard .ui-muted-panel,
+.overview-dashboard .database-row,
+.overview-dashboard .overview-tile {
+  border-radius: 12px;
+}
+
+.overview-dashboard .space-dashboard-panel-header {
+  min-height: 40px;
+  padding-inline: 12px;
+}
+
+.overview-dashboard .space-dashboard-panel-title {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.overview-dashboard .space-dashboard-panel-subtitle {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.overview-dashboard .space-dashboard-list-row {
+  min-height: 36px;
+}
+
+.overview-dashboard .space-dashboard-list-name {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.overview-dashboard .space-dashboard-meta-pill {
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.overview-dashboard .dashboard-number {
+  font-size: 1.125rem;
+  line-height: 1;
 }
 
 .soft-divider {

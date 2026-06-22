@@ -78,14 +78,14 @@ export default function LoginPage() {
                             />
                             <button
                                 type="button"
-                                className="relative z-10 rounded-[11px] px-3 py-2 text-sm font-semibold text-[#0D0D0D]"
+                                className="relative z-10 rounded-[11px] bg-black px-3 py-2 text-sm font-semibold text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] transition-colors hover:bg-[#111113]"
                             >
                                 Sign in
                             </button>
                             <button
                                 type="button"
                                 onClick={goToSignup}
-                                className="relative z-10 rounded-[11px] px-3 py-2 text-sm font-semibold text-[#6E6E80] transition-colors duration-500 ease-[cubic-bezier(0.2,0.86,0.24,1)] hover:text-[#0D0D0D]"
+                                className="relative z-10 rounded-[11px] bg-black px-3 py-2 text-sm font-semibold text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] transition-colors duration-500 ease-[cubic-bezier(0.2,0.86,0.24,1)] hover:bg-[#111113]"
                             >
                                 Sign up
                             </button>
